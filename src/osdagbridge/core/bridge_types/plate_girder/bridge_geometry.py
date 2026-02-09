@@ -290,9 +290,9 @@ class CrossSectionLayout:
 
         # --- Carriageway + median logic ---
         if self.median_width > 0.0:
-            add("carriageway_left", self.carriageway_width / 2.0)
+            add("carriageway_left", self.carriageway_width)
             add("median", self.median_width)
-            add("carriageway_right", self.carriageway_width / 2.0)
+            add("carriageway_right", self.carriageway_width)
         else:
             add("carriageway", self.carriageway_width)
         
@@ -301,6 +301,10 @@ class CrossSectionLayout:
         if self.no_of_footpaths >= 2:
             add("footpath_right", self.footpath_width)
             add("railing_right", self.railing_width)
+
+        for c in self._components:
+            print(c.name, c.z_start, c.z_end)
+
 
         self.total_width = z
 

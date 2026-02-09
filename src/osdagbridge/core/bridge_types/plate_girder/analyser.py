@@ -4,6 +4,7 @@ import openseespy.opensees as ops
 from osdagbridge.core.utils.codes.irc6_2017 import *
 from osdagbridge.core.utils.common import *
 from osdagbridge.core.bridge_types.plate_girder.bridge_geometry import *
+import warnings
 
 
 class BridgeGrillageModel:
@@ -111,11 +112,11 @@ class BridgeGrillageModel:
         # Create cross-section layout (UI inputs)
         # -------------------------------------------------
         self.layout = CrossSectionLayout(
-            carriageway_width=7.5,        # TODO: get from UI
+            carriageway_width=10.0,        # TODO: get from UI
             crash_barrier_width=0.45,      # TODO: get from UI
             footpath_width=1.50,           # TODO: get from UI
             railing_width=0.30,            # TODO: get from UI
-            median_width=1.20,             # TODO: get from UI
+            median_width=0.0,             # TODO: get from UI
             no_of_footpaths=2,             # TODO: get from UI
         )
 
@@ -126,6 +127,7 @@ class BridgeGrillageModel:
             span=self.L,
             width=self.layout.total_width
         )
+        print(f"Bridge width from layout: {self.layout.total_width} m")
 
         self.layout.validate_against_bridge(self.bridge_geometry.width)
 
@@ -152,6 +154,7 @@ class BridgeGrillageModel:
             num_trans_grid=self.n_t,
             edge_beam_dist=self.edge_dist,
             ext_to_int_dist=self.ext_to_int_dist,
+            mesh_type="Oblique"  # ('Ortho' or 'Oblique')
         )
 
         # Assign members
@@ -351,6 +354,11 @@ class BridgeGrillageModel:
         if model is None:
             raise ValueError("Model is not available. Create model before adding loads.")
 
+        # If there is no footpath component in the layout, skip creating footpath load
+        if not self.layout.has_component("footpath_left") or not self.layout.has_component("footpath_right"):
+            warnings.warn("No footpath component in layout; skipping footpath load creation")
+            self.footpath_load_case = None
+            return None
         # -------------------------------------------------
         # Load magnitude (UDL over area)
         # -------------------------------------------------
@@ -415,6 +423,11 @@ class BridgeGrillageModel:
         if model is None:
             raise ValueError("Model is not available. Create model before adding loads.")
 
+        # If there is no crash barrier component in the layout, skip creating crash barrier load
+        if not self.layout.has_component("crash_barrier_left") or not self.layout.has_component("crash_barrier_right"):
+            warnings.warn("No crash barrier component in layout; skipping crash barrier load creation")
+            self.crash_barrier_load_case = None
+            return None
         # -------------------------------------------------
         # Load magnitude (UDL along length)
         # -------------------------------------------------
@@ -471,6 +484,12 @@ class BridgeGrillageModel:
         model = model or self.model
         if model is None:
             raise ValueError("Model is not available. Create model before adding loads.")
+        
+        # If there is no railing component in the layout, skip creating railing load
+        if not self.layout.has_component("railing_left") or not self.layout.has_component("railing_right"):
+            warnings.warn("No railing component in layout; skipping railing load creation")
+            self.railing_load_case = None
+            return None
 
         # -------------------------------------------------
         # Load magnitude (UDL along length)
@@ -532,6 +551,12 @@ class BridgeGrillageModel:
         # Load magnitude (UDL along length)
         # -------------------------------------------------
         median_udl = 4.00 * kN / m   # <-- update as per IRC / project data
+
+        # If there is no median component in the layout, skip creating median load
+        if not self.layout.has_component("median"):
+            warnings.warn("No median component in layout; skipping median load creation")
+            self.median_load_case = None
+            return None
 
         # -------------------------------------------------
         # Get geometry from load manager
@@ -626,8 +651,73 @@ class BridgeGrillageModel:
                     z = cw_right.z_start + (i + 0.5) * lane_width
                     z_coords.append(z)
                     x_coords.append(x_coord)
+        print("x_coords:", x_coords)
+        print("z_coords:", z_coords)
 
         return x_coords, z_coords
+
+    def vehicle_combination(self, carriageway_width=None):
+        """
+        Generate all ordered vehicle placement sequences for design lanes determined
+        from `carriageway_width` using `IRC6_2017.table_6`.
+
+        - 'ClassA' occupies 1 lane
+        - 'Class70R' occupies 2 lanes
+
+        Example (3 lanes) ->
+            ['ClassA','ClassA','ClassA'], ['ClassA','Class70R'], ['Class70R','ClassA']
+
+        Parameters
+        ----------
+        carriageway_width : float, optional
+            Carriageway width in metres. If omitted, attempts to read from the
+            instance `self.layout` (single or split carriageway).
+
+        Returns
+        -------
+        list of lists
+            Each inner list is an ordered sequence of vehicle types that fills
+            the design lanes exactly.
+        """
+        # Determine carriageway width: prefer provided parameter, else attempt to read from layout
+        # if carriageway_width is None:
+        #     cw = None
+        #     if getattr(self, 'layout', None) and self.layout.has_component('carriageway'):
+        #         cw = self.layout.get_component('carriageway').width
+        #     else:
+        #         left = 0.0
+        #         right = 0.0
+        #         if getattr(self, 'layout', None) and self.layout.has_component('carriageway_left'):
+        #             left = self.layout.get_component('carriageway_left').width
+        #         if getattr(self, 'layout', None) and self.layout.has_component('carriageway_right'):
+        #             right = self.layout.get_component('carriageway_right').width
+        #         if left + right > 0.0:
+        #             cw = left + right
+        #     if cw is None:
+        #         raise ValueError("carriageway_width must be provided or layout with carriageway must exist")
+        #     carriageway_width = cw
+
+        lanes = IRC6_2017.table_6(carriageway_width)
+
+        sequences = []
+
+        def _build(remaining_lanes, current_seq):
+            if remaining_lanes == 0:
+                sequences.append(list(current_seq))
+                return
+            # place ClassA (1 lane)
+            current_seq.append("ClassA")
+            _build(remaining_lanes - 1, current_seq)
+            current_seq.pop()
+            # place Class70R (2 lanes) if space
+            if remaining_lanes >= 2:
+                current_seq.append("Class70R")
+                _build(remaining_lanes - 2, current_seq)
+                current_seq.pop()
+
+        _build(lanes, [])
+        print("Vehicle placement sequences:", sequences)
+        return sequences
 
     def add_vehicle_load_with_moving_path(
         self,
@@ -725,9 +815,16 @@ class BridgeGrillageModel:
         # Analysis
         model.analyze()
 
-        results = model.get_results(load_case=['girder self weight', 'Deck slab load', 'Wearing course self weight', 'Footpath load', 'Crash barrier load', 'Railing load', 'Median load'])
+        # results = model.get_results(load_case=['girder self weight', 'Deck slab load', 'Wearing course self weight', 'Footpath load', 'Crash barrier load', 'Railing load', 'Median load'])
+        results = model.get_results()
         print("results")
         print(results) 
+        
+        forces_table = results.forces
+        Fy = forces_table.sel(Component = "Vy_i")
+        print(Fy)
+        # df = Fy.to_pandas()
+        # df.to_excel("Fy_results1.xlsx")
 
         girder_results = model.get_results(load_case=[ 'girder self weight'])
         print("girder_sw_results") 
@@ -812,5 +909,7 @@ if __name__ == "__main__":
     bridge.create_crash_barrier_load()
     bridge.create_railing_load()
     bridge.create_median_load()
+    bridge.vehicle_lane_coordinates(x_coord=5.0)
+    bridge.vehicle_combination(carriageway_width=6.0)
     bridge.analyze()
-    bridge.plot()
+    # bridge.plot()
