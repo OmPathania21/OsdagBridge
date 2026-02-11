@@ -146,19 +146,107 @@ class TopViewCADWidget(QWidget):
         self.setMinimumSize(400, 300)
     
     def zoom_in(self):
+        """Zoom in while keeping view centered"""
+        # Store old center position before zoom
+        old_center = self._get_scroll_center()
+        
+        # Apply zoom
         self.zoom_level *= 1.1
         self._update_widget_size()
         self.update()
-    
+        
+        # Restore center position after zoom
+        self._set_scroll_center(old_center, 1.1)
+
     def zoom_out(self):
+        """Zoom out while keeping view centered"""
+        # Store old center position before zoom
+        old_center = self._get_scroll_center()
+        
+        # Apply zoom
         self.zoom_level /= 1.1
         self._update_widget_size()
         self.update()
-    
+        
+        # Restore center position after zoom
+        self._set_scroll_center(old_center, 1/1.1)
+
     def zoom_reset(self):
+        """Reset zoom to 1.0 while keeping view centered"""
+        # Store old center position before zoom
+        old_center = self._get_scroll_center()
+        zoom_ratio = 1.0 / self.zoom_level
+        
+        # Apply zoom
         self.zoom_level = 1.0
         self._update_widget_size()
         self.update()
+        
+        # Restore center position after zoom
+        self._set_scroll_center(old_center, zoom_ratio)
+
+    def _get_scroll_center(self):
+        """Get the current center point of the visible viewport in widget coordinates"""
+        if not self.scroll_area:
+            return (0.5, 0.5)  # Default to center
+        
+        h_scrollbar = self.scroll_area.horizontalScrollBar()
+        v_scrollbar = self.scroll_area.verticalScrollBar()
+        viewport = self.scroll_area.viewport()
+        
+        # Get current scroll position
+        h_value = h_scrollbar.value()
+        v_value = v_scrollbar.value()
+        
+        # Get viewport dimensions
+        viewport_width = viewport.width()
+        viewport_height = viewport.height()
+        
+        # Calculate center point in widget coordinates
+        center_x = h_value + viewport_width / 2
+        center_y = v_value + viewport_height / 2
+        
+        # Get widget dimensions
+        widget_width = self.width()
+        widget_height = self.height()
+        
+        # Return normalized center position (0.0 to 1.0)
+        if widget_width > 0 and widget_height > 0:
+            return (center_x / widget_width, center_y / widget_height)
+        else:
+            return (0.5, 0.5)
+
+    def _set_scroll_center(self, old_center, zoom_ratio):
+        """Set scroll position to keep the same center point visible after zoom"""
+        if not self.scroll_area:
+            return
+        
+        h_scrollbar = self.scroll_area.horizontalScrollBar()
+        v_scrollbar = self.scroll_area.verticalScrollBar()
+        viewport = self.scroll_area.viewport()
+        
+        # Get new widget dimensions after zoom
+        new_width = self.width()
+        new_height = self.height()
+        
+        # Calculate new center position in pixels
+        new_center_x = old_center[0] * new_width
+        new_center_y = old_center[1] * new_height
+        
+        # Calculate new scroll positions to center on the same point
+        viewport_width = viewport.width()
+        viewport_height = viewport.height()
+        
+        new_h_value = int(new_center_x - viewport_width / 2)
+        new_v_value = int(new_center_y - viewport_height / 2)
+        
+        # Clamp to valid range
+        new_h_value = max(0, min(new_h_value, h_scrollbar.maximum()))
+        new_v_value = max(0, min(new_v_value, v_scrollbar.maximum()))
+        
+        # Apply new scroll positions
+        h_scrollbar.setValue(new_h_value)
+        v_scrollbar.setValue(new_v_value)
     
     def _update_widget_size(self):
         """Update widget size based on zoom level for proper scrolling"""
@@ -177,42 +265,64 @@ class TopViewCADWidget(QWidget):
         self._position_zoom_buttons()
     
     def _position_zoom_buttons(self):
-        """Position zoom buttons fixed in viewport"""
+        """Position zoom buttons fixed in viewport - improved version"""
         if not hasattr(self, 'zoom_in_btn'):
             return
-            
+                
         # Get scroll area if not already set
         if self.scroll_area is None:
             parent = self.parent()
             while parent:
                 if isinstance(parent, QScrollArea):
                     self.scroll_area = parent
-                    # Connect to scroll events
-                    self.scroll_area.horizontalScrollBar().valueChanged.connect(self._position_zoom_buttons)
-                    self.scroll_area.verticalScrollBar().valueChanged.connect(self._position_zoom_buttons)
+                    # Install event filter on viewport
+                    if self.scroll_area.viewport():
+                        self.scroll_area.viewport().installEventFilter(self)
                     break
                 parent = parent.parent()
         
-        if self.scroll_area:
-            # Get viewport dimensions and scroll position
-            viewport = self.scroll_area.viewport()
-            scroll_x = self.scroll_area.horizontalScrollBar().value()
-            scroll_y = self.scroll_area.verticalScrollBar().value()
-            
-            # Position buttons at top-right of visible viewport (with safety margin)
-            button_margin = 10
-            x = max(button_margin, min(scroll_x + viewport.width() - 60, self.width() - 60))
-            y = scroll_y + 10
-            
-            self.zoom_in_btn.move(x, y)
-            self.zoom_out_btn.move(x, y + 30)
-            self.zoom_reset_btn.move(x - 25, y + 60)
-            
-            # Ensure buttons are visible on top
-            self.zoom_in_btn.raise_()
-            self.zoom_out_btn.raise_()
-            self.zoom_reset_btn.raise_()
+        if not self.scroll_area:
+            return
         
+        # Get viewport
+        viewport = self.scroll_area.viewport()
+        if not viewport or viewport.width() == 0:
+            return
+        
+        # Re-parent buttons to viewport if needed
+        if self.zoom_in_btn.parent() != viewport:
+            self.zoom_in_btn.setParent(viewport)
+            self.zoom_out_btn.setParent(viewport)
+            self.zoom_reset_btn.setParent(viewport)
+        
+        # Position buttons at top-right of viewport
+        button_margin = 10
+        button_width = 50
+        
+        x = viewport.width() - button_width - button_margin
+        y = button_margin
+        
+        self.zoom_in_btn.move(int(x + 10), int(y))
+        self.zoom_out_btn.move(int(x + 10), int(y + 30))
+        self.zoom_reset_btn.move(int(x), int(y + 60))
+        
+        # Ensure buttons are visible on top
+        self.zoom_in_btn.show()
+        self.zoom_out_btn.show()
+        self.zoom_reset_btn.show()
+        self.zoom_in_btn.raise_()
+        self.zoom_out_btn.raise_()
+        self.zoom_reset_btn.raise_()
+
+
+    def eventFilter(self, obj, event):
+        """Filter events to catch viewport resize"""
+        if obj == (self.scroll_area.viewport() if self.scroll_area else None):
+            if event.type() == event.Type.Resize:
+                # Viewport resized - reposition buttons
+                self._position_zoom_buttons()
+        return super().eventFilter(obj, event)
+
     def update_params(self, params):
         self.params.update(params)
         self.update()
@@ -241,6 +351,7 @@ class TopViewCADWidget(QWidget):
         painter.fillRect(self.rect(), QColor(255, 255, 255))
         
         self.draw_top_view(painter)
+        
     def draw_text_with_background(self, painter, x, y, text,
                               bg_color=QColor(255, 255, 255, 230), 
                               text_color=QColor(0, 0, 0), font_size=9, bold=False):
@@ -660,8 +771,8 @@ class TopViewCADWidget(QWidget):
         width_scale = available_height / max(total_model_width, 1.0)
         scale = min(span_scale, width_scale)  # zoom_level already applied to width/height
 
-        center_x = self.width() * 0.55
-        center_y = height / 2 - 20
+        center_x = self.width() / 2
+        center_y = self.height() / 2
 
         # FIX: Negate the skew angle
         skew_rad = math.radians(-self.params['skew_angle'])  # CHANGED: Added negative sign

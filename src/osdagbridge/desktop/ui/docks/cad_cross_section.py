@@ -6,7 +6,7 @@ Author: Arushi
 
 import math
 from PySide6.QtWidgets import QWidget, QPushButton, QScrollArea
-from PySide6.QtCore import Qt, QRectF, QPointF
+from PySide6.QtCore import Qt, QRectF, QPointF, QTimer
 from PySide6.QtGui import QPainter, QPen, QColor, QFont, QBrush, QPolygonF
 from PySide6.QtGui import QPixmap
 import random
@@ -101,7 +101,7 @@ class CrossSectionCADWidget(QWidget):
         
         # Track scroll area for fixed button positioning
         self.scroll_area = None
-        
+
     def setup_zoom_controls(self):
         """Create zoom controls inside the widget"""
         self.zoom_in_btn = QPushButton("+", self)
@@ -160,34 +160,180 @@ class CrossSectionCADWidget(QWidget):
         # Set minimum size for visibility
         self.setMinimumSize(400, 300)
     
+    def _position_zoom_buttons(self):
+        """Lock zoom buttons to fixed viewport position - improved version"""
+        if not hasattr(self, 'zoom_in_btn'):
+            return
+
+        # Find scroll area once
+        if self.scroll_area is None:
+            parent = self.parent()
+            while parent:
+                if isinstance(parent, QScrollArea):
+                    self.scroll_area = parent
+                    # Install event filter on viewport to catch resize events
+                    if self.scroll_area.viewport():
+                        self.scroll_area.viewport().installEventFilter(self)
+                    break
+                parent = parent.parent()
+
+        # Return early if scroll area not found yet
+        if not self.scroll_area:
+            return
+
+        viewport = self.scroll_area.viewport()
+        
+        # Check if viewport is valid
+        if not viewport or viewport.width() == 0:
+            return
+        
+        # Re-parent buttons to viewport if not already
+        if self.zoom_in_btn.parent() != viewport:
+            self.zoom_in_btn.setParent(viewport)
+            self.zoom_out_btn.setParent(viewport)
+            self.zoom_reset_btn.setParent(viewport)
+
+        # Position in top-right corner of VIEWPORT
+        margin = 10
+        x = viewport.width() - 50
+        y = margin
+
+        self.zoom_in_btn.move(x + 10, y)
+        self.zoom_out_btn.move(x + 10, y + 30)
+        self.zoom_reset_btn.move(x, y + 60)
+
+        # Ensure buttons are visible and on top
+        self.zoom_in_btn.show()
+        self.zoom_out_btn.show()
+        self.zoom_reset_btn.show()
+        self.zoom_in_btn.raise_()
+        self.zoom_out_btn.raise_()
+        self.zoom_reset_btn.raise_()
+
+
+    def eventFilter(self, obj, event):
+        """Filter events to catch viewport resize"""
+        if obj == (self.scroll_area.viewport() if self.scroll_area else None):
+            if event.type() == event.Type.Resize:
+                # Viewport resized - reposition buttons
+                self._position_zoom_buttons()
+        return super().eventFilter(obj, event)
+
+
     def showEvent(self, event):
-        """Setup zoom controls on first show, but not if inside a scroll area with small size"""
+        """Setup zoom controls on first show"""
         super().showEvent(event)
         if not self._zoom_controls_setup:
             self._zoom_controls_setup = True
-            # Check if this is a preview (has scroll area parent and small scale_factor)
-            parent = self.parent()
-            is_preview = self.scale_factor < 1.0
-            # Only create zoom buttons if NOT a preview
+            # Check if this is a preview
+            is_preview = self.scale_factor < 1.0 if hasattr(self, 'scale_factor') else False
+            # Only show zoom buttons if NOT a preview
             if not is_preview and hasattr(self, 'zoom_in_btn'):
-                self.zoom_in_btn.show()
-                self.zoom_out_btn.show()
-                self.zoom_reset_btn.show()
+                # Position buttons immediately
+                self._position_zoom_buttons()
     
     def zoom_in(self):
+        """Zoom in while keeping view centered"""
+        # Store old center position before zoom
+        old_center = self._get_scroll_center()
+        
+        # Apply zoom
         self.zoom_level *= 1.1
         self._update_widget_size()
         self.update()
-    
+        
+        # Restore center position after zoom
+        self._set_scroll_center(old_center, 1.1)
+
     def zoom_out(self):
+        """Zoom out while keeping view centered"""
+        # Store old center position before zoom
+        old_center = self._get_scroll_center()
+        
+        # Apply zoom
         self.zoom_level /= 1.1
         self._update_widget_size()
         self.update()
-    
+        
+        # Restore center position after zoom
+        self._set_scroll_center(old_center, 1/1.1)
+
     def zoom_reset(self):
+        """Reset zoom to 1.0 while keeping view centered"""
+        # Store old center position before zoom
+        old_center = self._get_scroll_center()
+        zoom_ratio = 1.0 / self.zoom_level
+        
+        # Apply zoom
         self.zoom_level = 1.0
         self._update_widget_size()
         self.update()
+        
+        # Restore center position after zoom
+        self._set_scroll_center(old_center, zoom_ratio)
+
+    def _get_scroll_center(self):
+        """Get the current center point of the visible viewport in widget coordinates"""
+        if not self.scroll_area:
+            return (0.5, 0.5)  # Default to center
+        
+        h_scrollbar = self.scroll_area.horizontalScrollBar()
+        v_scrollbar = self.scroll_area.verticalScrollBar()
+        viewport = self.scroll_area.viewport()
+        
+        # Get current scroll position
+        h_value = h_scrollbar.value()
+        v_value = v_scrollbar.value()
+        
+        # Get viewport dimensions
+        viewport_width = viewport.width()
+        viewport_height = viewport.height()
+        
+        # Calculate center point in widget coordinates
+        center_x = h_value + viewport_width / 2
+        center_y = v_value + viewport_height / 2
+        
+        # Get widget dimensions
+        widget_width = self.width()
+        widget_height = self.height()
+        
+        # Return normalized center position (0.0 to 1.0)
+        if widget_width > 0 and widget_height > 0:
+            return (center_x / widget_width, center_y / widget_height)
+        else:
+            return (0.5, 0.5)
+
+    def _set_scroll_center(self, old_center, zoom_ratio):
+        """Set scroll position to keep the same center point visible after zoom"""
+        if not self.scroll_area:
+            return
+        
+        h_scrollbar = self.scroll_area.horizontalScrollBar()
+        v_scrollbar = self.scroll_area.verticalScrollBar()
+        viewport = self.scroll_area.viewport()
+        
+        # Get new widget dimensions after zoom
+        new_width = self.width()
+        new_height = self.height()
+        
+        # Calculate new center position in pixels
+        new_center_x = old_center[0] * new_width
+        new_center_y = old_center[1] * new_height
+        
+        # Calculate new scroll positions to center on the same point
+        viewport_width = viewport.width()
+        viewport_height = viewport.height()
+        
+        new_h_value = int(new_center_x - viewport_width / 2)
+        new_v_value = int(new_center_y - viewport_height / 2)
+        
+        # Clamp to valid range
+        new_h_value = max(0, min(new_h_value, h_scrollbar.maximum()))
+        new_v_value = max(0, min(new_v_value, v_scrollbar.maximum()))
+        
+        # Apply new scroll positions
+        h_scrollbar.setValue(new_h_value)
+        v_scrollbar.setValue(new_v_value)
     
     def _update_widget_size(self):
         """Update widget size based on zoom level for proper scrolling"""
@@ -205,43 +351,6 @@ class CrossSectionCADWidget(QWidget):
         super().resizeEvent(event)
         self._position_zoom_buttons()
     
-    def _position_zoom_buttons(self):
-        """Lock zoom buttons to fixed viewport position"""
-        if not hasattr(self, 'zoom_in_btn'):
-            return
-
-        # Find scroll area once
-        if self.scroll_area is None:
-            parent = self.parent()
-            while parent:
-                if isinstance(parent, QScrollArea):
-                    self.scroll_area = parent
-                    break
-                parent = parent.parent()
-
-        if not self.scroll_area:
-            return
-
-        if self.scroll_area:
-            viewport = self.scroll_area.viewport()
-            self.zoom_in_btn.setParent(viewport)
-            self.zoom_out_btn.setParent(viewport)
-            self.zoom_reset_btn.setParent(viewport)
-
-
-        margin = 10
-        x = viewport.width() - 50
-        y = margin
-
-        self.zoom_in_btn.move(x, y)
-        self.zoom_out_btn.move(x, y + 30)
-        self.zoom_reset_btn.move(x, y + 60)
-
-        self.zoom_in_btn.raise_()
-        self.zoom_out_btn.raise_()
-        self.zoom_reset_btn.raise_()
-
-        
     def update_params(self, params):
         self.params.update(params)
         self.update()
@@ -291,6 +400,10 @@ class CrossSectionCADWidget(QWidget):
             self.draw_text_with_background(painter, x, y, text, bg_color, text_color, font_size, True)
         
     def paintEvent(self, event):
+        # Position buttons on first paint if not done yet
+        if hasattr(self, 'zoom_in_btn') and not hasattr(self, '_buttons_positioned'):
+            self._position_zoom_buttons()
+            self._buttons_positioned = True
         # clear hover labels and zones at start of each paint
         self.hover_labels = []
         self.cross_section_hover_zones = []
@@ -737,10 +850,11 @@ class CrossSectionCADWidget(QWidget):
         MEDIAN_GREY = QColor(221, 221, 221) 
         CONCRETE_COLOR = QColor(225, 225, 225)
         
+        base_width = 800
+        base_height = 400
         
-        # Use base canvas dimensions scaled by zoom for proper scrolling
-        width = self.width()
-        height = self.height()
+        width = base_width * self.zoom_level
+        height = base_height * self.zoom_level
 
         fp_config = self.params.get('footpath_config', 'both')
         left_fp_width = self.params['footpath_width'] if fp_config in ['left', 'both'] else 0
@@ -761,8 +875,7 @@ class CrossSectionCADWidget(QWidget):
         DIM_OFFSET = 510 * scale
         DIM_OFFSET_SMALL = 588 * scale
 
-        CENTER_OFFSET_X = 80  # try 40–80 depending on look
-        center_x = width / 2 + CENTER_OFFSET_X
+        center_x = self.width() / 2
         # Position bridge in the center vertically
         total_bridge_height = (self.girder['depth'] * scale * self.girder_visual_scale['depth'] +
                               self.params['deck_thickness'] * scale +
@@ -771,7 +884,7 @@ class CrossSectionCADWidget(QWidget):
                               self.railing['height'] * scale)
         
         # Ensure proper positioning - use margin from top instead of centering for small heights
-        top_margin = 40
+        top_margin = 20
         if height < 300:  # For small heights (like Additional Inputs), position from top
             base_y = height - top_margin
         else:

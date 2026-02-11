@@ -11,6 +11,7 @@ from osdagbridge.desktop.ui.docks.input_dock import InputDock
 from osdagbridge.desktop.ui.docks.output_dock import OutputDock
 from osdagbridge.desktop.ui.docks.log_dock import LogDock
 from osdagbridge.desktop.ui.docks.cad_dual_view import BridgeDualCADWidget
+from osdagbridge.desktop.ui.dialogs.additional_inputs import AdditionalInputs
 
 from osdagbridge.core.bridge_types.plate_girder.ui_fields import FrontendData
 from osdagbridge.core.utils.common import *
@@ -20,7 +21,7 @@ class CustomWindow(QWidget):
         super().__init__()
         self.parent = parent
         self.backend = backend()
-        # >>> ADDED: one-time log splitter initialization flag
+        # one-time log splitter initialization flag
         self._log_splitter_initialized = False
 
         self.setWindowTitle(title)
@@ -176,8 +177,7 @@ class CustomWindow(QWidget):
 
         self.cad_log_splitter = QSplitter(Qt.Vertical)
         self.cad_log_splitter.setHandleWidth(4)
-        self.cad_log_splitter.setChildrenCollapsible(False)
-        
+        self.cad_log_splitter.setChildrenCollapsible(False)  
 
         # CAD widget
         self.cad_comp_widget = BridgeDualCADWidget(self)
@@ -203,7 +203,6 @@ class CustomWindow(QWidget):
 
         # --------------------------------------------------------------
 
-        
         # log text
         self.textEdit = self.logs_dock.log_display
 

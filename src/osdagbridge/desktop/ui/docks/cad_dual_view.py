@@ -39,37 +39,29 @@ class BridgeDualCADWidget(QWidget):
             }
         """)
         
-        # Create cross-section container with scroll area
-        self.cross_container = QWidget()
-        cross_layout = QVBoxLayout(self.cross_container)
-        cross_layout.setContentsMargins(0, 0, 0, 0)
-        
+        # Create cross-section scroll area
         self.cross_section_widget = CrossSectionCADWidget(self)
-        self.cross_section_widget.setMinimumSize(800, 600)
+        # self.cross_section_widget.setMinimumSize(800, 600)
+        
         self.cross_scroll = QScrollArea()
         self.cross_scroll.setWidget(self.cross_section_widget)
-        self.cross_scroll.setWidgetResizable(False)
+        self.cross_scroll.setWidgetResizable(True)
         self.cross_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.cross_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        cross_layout.addWidget(self.cross_scroll)
         
-        self.splitter.addWidget(self.cross_container)
+        self.splitter.addWidget(self.cross_scroll)
         
-        # Create top view container with scroll area
-        self.top_container = QWidget()
-        top_layout = QVBoxLayout(self.top_container)
-        top_layout.setContentsMargins(0, 0, 0, 0)
-        
+        # Create top view scroll area
         self.top_view_widget = TopViewCADWidget(self)
-        self.top_view_widget.setMinimumSize(800, 600)
+        # self.top_view_widget.setMinimumSize(800, 600)
+        
         self.top_scroll = QScrollArea()
         self.top_scroll.setWidget(self.top_view_widget)
-        self.top_scroll.setWidgetResizable(False)
+        self.top_scroll.setWidgetResizable(True)
         self.top_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.top_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
-        top_layout.addWidget(self.top_scroll)
         
-        self.splitter.addWidget(self.top_container)
+        self.splitter.addWidget(self.top_scroll)
         
         # Set equal sizes for both views
         self.splitter.setStretchFactor(0, 1)
@@ -81,26 +73,26 @@ class BridgeDualCADWidget(QWidget):
         """Set cross-section view visibility (called from template_page)"""
         self.cross_visible = visible
         if self.cross_visible:
-            self.cross_container.show()
+            self.cross_scroll.show()
             if not self.top_visible:
                 self.splitter.setSizes([self.height(), 0])
             else:
                 self.splitter.setSizes([self.height()//2, self.height()//2])
         else:
-            self.cross_container.hide()
+            self.cross_scroll.hide()
             self.splitter.setSizes([0, self.height()])
     
     def set_top_view_visible(self, visible):
         """Set top view visibility (called from template_page)"""
         self.top_visible = visible
         if self.top_visible:
-            self.top_container.show()
+            self.top_scroll.show()
             if not self.cross_visible:
                 self.splitter.setSizes([0, self.height()])
             else:
                 self.splitter.setSizes([self.height()//2, self.height()//2])
         else:
-            self.top_container.hide()
+            self.top_scroll.hide()
             self.splitter.setSizes([self.height(), 0])
     
     # Cross-section zoom methods
