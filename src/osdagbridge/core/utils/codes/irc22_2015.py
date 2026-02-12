@@ -321,7 +321,7 @@ class IRC22_2014:
             "section_class": section_class,
             "clause": "IRC 22:2014 - 603 (Web Classification)"
         }
-
+    
     
     @staticmethod
     def cl_602_table2_i_outstanding_compression_flange(
@@ -389,10 +389,8 @@ class IRC22_2014:
         Positive Moment Resistance of Composite Beam
         """
 
+        # Step 1: Effective width restriction
         beff_used = beff
-        beff_compact_limit = None
-        beff_flange_limit = None
-        beff_web_limit = None
 
         if not is_compact:
 
@@ -411,6 +409,7 @@ class IRC22_2014:
                     f"Allowed: {KEY_SECTION_FABRICATION}"
                 )
 
+            # Flange compact check (IS800 reference)
             IS800_2007.Table2_i(
                 width=bf,
                 thickness=tf,
@@ -420,6 +419,7 @@ class IRC22_2014:
 
             beff_flange_limit = flange_compact_ratio * tf
 
+            # Web compact check (IS800 reference)
             IS800_2007.Table2_iii(
                 depth=ds,
                 thickness=tw,
@@ -433,16 +433,30 @@ class IRC22_2014:
             beff_compact_limit = min(beff_flange_limit, beff_web_limit)
             beff_used = min(beff, beff_compact_limit)
 
-            return {
-                "beff_input": beff,
-                "beff_used": round(beff_used, 3),
-                "beff_compact_limit": round(beff_compact_limit, 3),
-                "beff_flange_limit": round(beff_flange_limit, 3),
-                "beff_web_limit": round(beff_web_limit, 3),
-            }
+        # Step 2: Positive Moment Capacity
+        # Full shear interaction assumption
+
+        # Concrete compression force (N)
+        C = 0.36 * fck * beff_used * dc
+
+        # Steel tension force (N)
+        T = Af * fy
+
+        # Governing force
+        F = min(C, T)
+
+        # Positive moment (Nmm)
+        Mp_Nmm = F * dc
+        Mp_kNm = Mp_Nmm / 1e6
+
+        return {
+            "beff_used_mm": round(beff_used, 3),
+            "Mp_kNm": round(Mp_kNm, 3),
+            "governing_force": "concrete" if C < T else "steel",
+            "clause": "IRC 22:2014 - 603.3.1 Positive Moment Capacity"
+        }
 
 
-# result = IRC22_2014.cl_603_3_3_1_buckling_resistance_moment(section_class="compact",Zp=6.5e6,Ze=5.8e6,fy=345,Iy=8.2e8,It=2.5e5,Iw=3.1e11,LLT=6000,section_type="rolled")
     @staticmethod
     def cl_603_3_3_1_buckling_resistance_moment(
         section_class,                 # plastic / compact / semi-compact
