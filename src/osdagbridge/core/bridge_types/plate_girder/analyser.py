@@ -600,33 +600,52 @@ class BridgeGrillageModel:
     #   Live Load
     # ============================================================
 
-    def vehicle_lane_coordinates(self, x_coord):
+    def vehicle_lane_coordinates(self):
         """
-        Calculates x_coord and z_coord for vehicle placement
-        as per IRC:6-2017 Table 6.
+        Calculates vehicle-to-coordinate mappings for all combinations
+        as per IRC:6-2017 Table 6 and Table 6A.
+
+        Returns vehicle placement for each case where:
+        - ClassA occupies 1 lane
+        - Class70R occupies 2 lanes
 
         z -> transverse direction
         x -> longitudinal direction
 
+        Parameters
+        ----------
+        carriageway_width : float, optional
+            Carriageway width in metres. If omitted, reads from self.layout.
 
+        Returns
+        -------
+        list of dict
+            Each dict represents a vehicle combination case with structure:
+            {
+                'case_num': int,
+                'combinations': {
+                    'ClassA': [[x_coord, z_coord], ...],
+                    'Class70R': [[x_coord, z_coord], ...]
+                }
+            }
         """
-
+        x_coord = 0.0  # Assuming vehicles start at the beginning of the bridge (x=0)
         layout = self.layout
 
-        x_coords = []
-        z_coords = []
+        # Get lane coordinates
+        lane_coords = []  # [(x, z), (x, z), ...]
 
         # ---------- Single carriageway ----------
         if layout.has_component("carriageway"):
             cw = layout.get_component("carriageway")
+            carriageway_width = cw.width
 
             n_lanes = IRC6_2017.table_6(cw.width)
             lane_width = cw.width / n_lanes
 
             for i in range(n_lanes):
                 z = cw.z_start + (i + 0.5) * lane_width
-                z_coords.append(z)
-                x_coords.append(x_coord)
+                lane_coords.append((x_coord, z))
 
         # ---------- Split carriageway (with median) ----------
         else:
@@ -638,8 +657,7 @@ class BridgeGrillageModel:
 
                 for i in range(n_lanes):
                     z = cw_left.z_start + (i + 0.5) * lane_width
-                    z_coords.append(z)
-                    x_coords.append(x_coord)
+                    lane_coords.append((x_coord, z))
 
             if layout.has_component("carriageway_right"):
                 cw_right = layout.get_component("carriageway_right")
@@ -649,12 +667,264 @@ class BridgeGrillageModel:
 
                 for i in range(n_lanes):
                     z = cw_right.z_start + (i + 0.5) * lane_width
-                    z_coords.append(z)
-                    x_coords.append(x_coord)
-        print("x_coords:", x_coords)
-        print("z_coords:", z_coords)
+                    lane_coords.append((x_coord, z))
 
-        return x_coords, z_coords
+        if carriageway_width is None:
+            raise ValueError("carriageway_width must be provided or derivable from layout")
+
+        # Get vehicle combinations from Table 6A
+        table_6a_result = IRC6_2017.table_6A(carriageway_width)
+        vehicle_combinations = table_6a_result.get("vehicle_combinations", [])
+
+        # Map each combination to coordinates
+        result_cases = []
+
+        for case_num, combo in enumerate(vehicle_combinations, start=1):
+            case_data = {
+                'case_num': case_num,
+                'combinations': {}
+            }
+
+            lane_index = 0
+
+            # Process ClassA vehicles (each occupies 1 lane)
+            if 'ClassA' in combo:
+                n_a = combo['ClassA']
+                class_a_coords = []
+                for _ in range(n_a):
+                    if lane_index < len(lane_coords):
+                        class_a_coords.append(list(lane_coords[lane_index]))
+                        lane_index += 1
+                if class_a_coords:
+                    case_data['combinations']['ClassA'] = class_a_coords
+
+            # Process Class70R vehicles (each occupies 2 lanes)
+            if 'Class70R' in combo:
+                n_70r = combo['Class70R']
+                class_70r_coords = []
+                for _ in range(n_70r):
+                    if lane_index + 1 < len(lane_coords):
+                        # Class70R spans 2 lanes, take center of the two lanes
+                        z1 = lane_coords[lane_index][1]
+                        z2 = lane_coords[lane_index + 1][1]
+                        z_center = (z1 + z2) / 2
+                        class_70r_coords.append([lane_coords[lane_index][0], z_center])
+                        lane_index += 2
+                if class_70r_coords:
+                    case_data['combinations']['Class70R'] = class_70r_coords
+
+            result_cases.append(case_data)
+
+        print(f"Vehicle lane coordinate cases: {result_cases}")
+        return result_cases
+
+    def create_vehicle_load_cases(self, model=None):
+        """
+        Creates vehicle load cases based on vehicle_lane_coordinates().
+        Each vehicle in each case gets its own load case.
+
+        Naming format:
+            Case{n} ClassA L1
+            Case{n} Class70R L1
+        """
+
+        model = model or self.model
+        if model is None:
+            raise ValueError("Model is not available. Create model first.")
+
+        span = self.L
+        vehicle_cases = self.vehicle_lane_coordinates()
+
+        all_vehicle_load_cases = []
+
+        for case in vehicle_cases:
+
+            case_num = case["case_num"]
+            combinations = case["combinations"]
+
+            for vehicle_type, coord_list in combinations.items():
+
+                for lane_index, (x_coord, z_coord) in enumerate(coord_list, start=1):
+
+                    # ---------------------------------------
+                    # Create vehicle
+                    # ---------------------------------------
+                    vehicle_generator = og.create_load_model(
+                        model_type=vehicle_type.upper()
+                    )
+                    vehicle = vehicle_generator.create()
+
+                    vehicle.set_global_coord(
+                        og.Point(x_coord, 0.0, z_coord)
+                    )
+
+                    # ---------------------------------------
+                    # Create load case
+                    # ---------------------------------------
+                    load_case_name = f"Case{case_num} {vehicle_type} L{lane_index}"
+
+                    lc = og.create_load_case(name=load_case_name)
+                    lc.add_load(vehicle)
+
+                    model.add_load_case(lc)
+
+                    all_vehicle_load_cases.append(lc)
+
+                    print(f"Created load case: {load_case_name}")
+
+        self.vehicle_load_cases_list = all_vehicle_load_cases
+
+        return all_vehicle_load_cases
+    
+
+    def add_vehicle_load_cases_from_combinations(self,model=None):
+        """
+        Create vehicle load cases using coordinates from vehicle_lane_coordinates().
+
+        - Creates empty moving load list
+        - Uses global coordinates from vehicle combinations
+        - Applies lane factors (alf)
+        - Applies dynamic load allowance (dla)
+        """
+
+        model = model or self.model
+        if model is None:
+            raise ValueError("Model not created yet.")
+
+        vehicle_cases = self.vehicle_lane_coordinates()
+        
+        alf = [1.0, 0.8, 0.4]
+        dla = 1.3
+        # -------------------------------------------------
+        # Empty lists
+        # -------------------------------------------------
+        self.vehicle_load_cases_list = []
+        self.vehicle_moving_loads = []
+
+        for case in vehicle_cases:
+
+            case_num = case["case_num"]
+            combinations = case["combinations"]
+
+            for vehicle_type, coord_list in combinations.items():
+
+                for i, (x_coord, z_coord) in enumerate(coord_list):
+
+                    # -----------------------------
+                    # Create load case name
+                    # -----------------------------
+                    lc_name = f"Case{case_num} {vehicle_type} L{i+1}"
+                    lc = og.create_load_case(name=lc_name)
+
+                    # -----------------------------
+                    # Lane factor
+                    # -----------------------------
+                    if alf is None:
+                        lane_factor = 1.0
+                    else:
+                        lane_factor = alf[i] if i < len(alf) else 1.0
+
+                    # -----------------------------
+                    # Create vehicle model
+                    # -----------------------------
+                    vehicle_generator = og.create_load_model(
+                        model_type=vehicle_type.upper()
+                    )
+
+                    vehicle = vehicle_generator.create()
+
+                    # -----------------------------
+                    # Set global coordinates
+                    # (from vehicle_lane_coordinates)
+                    # -----------------------------
+                    vehicle.set_global_coord(
+                        og.Point(x_coord, 0.0, z_coord)
+                    )
+
+                    # -----------------------------
+                    # Add to load case
+                    # -----------------------------
+                    lc.add_load(
+                        load_obj=vehicle,
+                        load_factor=lane_factor
+                    )
+
+                    # -----------------------------
+                    # Add load case to model
+                    # -----------------------------
+                    model.add_load_case(
+                        lc,
+                        load_factor=dla
+                    )
+
+                    # -----------------------------
+                    # Store references
+                    # -----------------------------
+                    self.vehicle_load_cases_list.append(lc)
+                    self.vehicle_moving_loads.append(vehicle)
+
+                    print(
+                        f"Created {lc_name} at x={x_coord}, z={z_coord}"
+                    )
+
+        return self.vehicle_load_cases_list
+
+    def create_moving_vehicle_load_cases(
+        self,
+        model=None,
+        start_offset=-25.0,
+        span=None,
+    ):
+        """
+        Creates moving load cases corresponding to
+        previously created static vehicle load cases.
+        """
+
+        model = model or self.model
+        if model is None:
+            raise ValueError("Model not created yet.")
+
+        if not hasattr(self, "vehicle_moving_loads") or not self.vehicle_moving_loads:
+            raise ValueError("No vehicle loads found. Create vehicle load cases first.")
+
+        span = span or self.L
+
+        # -------------------------------------------------
+        # Create moving path
+        # -------------------------------------------------
+        start = og.create_point(x=start_offset, y=0, z=0)
+        end = og.Point(span, 0, 0)
+
+        moving_path = og.create_moving_path(
+            start_point=start,
+            end_point=end
+        )
+
+        # -------------------------------------------------
+        # Create moving load cases
+        # -------------------------------------------------
+        self.moving_load_cases_list = []
+
+        for i, vehicle in enumerate(self.vehicle_moving_loads):
+
+            # Use static load case name
+            static_lc_name = self.vehicle_load_cases_list[i].name
+
+            moving_name = f"Moving {static_lc_name}"
+
+            moving_load = og.create_moving_load(name=moving_name)
+
+            moving_load.set_path(moving_path)
+            moving_load.add_load(vehicle)
+
+            model.add_load_case(moving_load)
+
+            self.moving_load_cases_list.append(moving_load)
+
+            print(f"Created moving load case: {moving_name}")
+
+        return self.moving_load_cases_list
+
 
     def vehicle_combination(self, carriageway_width=None):
         """
@@ -821,10 +1091,10 @@ class BridgeGrillageModel:
         print(results) 
         
         forces_table = results.forces
-        Fy = forces_table.sel(Component = "Vy_i")
+        Fy = forces_table.sel(Component = "Mz_i")
         print(Fy)
-        # df = Fy.to_pandas()
-        # df.to_excel("Fy_results1.xlsx")
+        df = Fy.to_pandas()
+        df.to_excel("Mz_results_moving1.xlsx")
 
         girder_results = model.get_results(load_case=[ 'girder self weight'])
         print("girder_sw_results") 
@@ -909,7 +1179,10 @@ if __name__ == "__main__":
     bridge.create_crash_barrier_load()
     bridge.create_railing_load()
     bridge.create_median_load()
-    bridge.vehicle_lane_coordinates(x_coord=5.0)
-    bridge.vehicle_combination(carriageway_width=6.0)
+    bridge.vehicle_lane_coordinates()
+    # bridge.vehicle_combination(carriageway_width=6.0)
+    bridge.create_vehicle_load_cases()
+    bridge.add_vehicle_load_cases_from_combinations()
+    bridge.create_moving_vehicle_load_cases()
     bridge.analyze()
     # bridge.plot()
