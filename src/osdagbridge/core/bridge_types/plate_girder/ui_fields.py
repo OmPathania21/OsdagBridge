@@ -1,5 +1,6 @@
 from osdagbridge.core.utils.common import *
 
+
 class FrontendData:
     """Backend for Highway Bridge Design"""
     
@@ -37,21 +38,18 @@ class FrontendData:
         t1 = (KEY_MODULE, KEY_DISP_FINPLATE, TYPE_MODULE, None, True, 'No Validator')
         options_list.append(t1)
 
-        # Type of Structure section
         t2 = (None, DISP_TITLE_STRUCTURE, TYPE_TITLE, None, True, 'No Validator')
         options_list.append(t2)
 
         t3 = (KEY_STRUCTURE_TYPE, KEY_DISP_STRUCTURE_TYPE, TYPE_COMBOBOX, VALUES_STRUCTURE_TYPE, True, 'No Validator')
         options_list.append(t3)
 
-        # Project Location section
         t4 = (None, DISP_TITLE_PROJECT, TYPE_TITLE, None, True, 'No Validator')
         options_list.append(t4)
 
         t5 = (KEY_PROJECT_LOCATION, KEY_DISP_PROJECT_LOCATION, TYPE_COMBOBOX, VALUES_PROJECT_LOCATION, True, 'No Validator')
         options_list.append(t5)
 
-        # Geometric Details section
         t6 = (None, DISP_TITLE_GEOMETRIC, TYPE_TITLE, None, True, 'No Validator')
         options_list.append(t6)
 
@@ -67,7 +65,6 @@ class FrontendData:
         t10 = (KEY_SKEW_ANGLE, KEY_DISP_SKEW_ANGLE, TYPE_TEXTBOX, None, True, 'Double Validator')
         options_list.append(t10)
 
-        # Material Inputs section
         t11 = (None, DISP_TITLE_MATERIAL, TYPE_TITLE, None, True, 'No Validator')
         options_list.append(t11)
 
@@ -81,7 +78,7 @@ class FrontendData:
         options_list.append(t14)
 
         return options_list
-    
+
     def set_osdaglogger(self, key):
         """Logger setup"""
         print("Logger set up (mock)")
@@ -93,4 +90,3 @@ class FrontendData:
     def func_for_validation(self, design_inputs):
         """Validation Function"""
         return None
-
