@@ -4,6 +4,7 @@ import openseespy.opensees as ops
 from osdagbridge.core.utils.codes.irc6_2017 import *
 from osdagbridge.core.utils.common import *
 from osdagbridge.core.bridge_types.plate_girder.bridge_geometry import *
+from osdagbridge.core.bridge_types.plate_girder.load_placement import LoadPlacementManager
 import warnings
 from osdagbridge.core.bridge_types.plate_girder.analysis_results import PlateGirderAnalysisResults
 
