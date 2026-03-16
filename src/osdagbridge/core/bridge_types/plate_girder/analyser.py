@@ -6,7 +6,113 @@ from osdagbridge.core.utils.common import *
 from osdagbridge.core.bridge_types.plate_girder.bridge_geometry import *
 from osdagbridge.core.bridge_types.plate_girder.load_placement import LoadPlacementManager
 import warnings
+from dataclasses import dataclass
 from osdagbridge.core.bridge_types.plate_girder.analysis_results import PlateGirderAnalysisResults
+
+
+@dataclass
+class SectionProperties:
+    """
+    Holds cross-section properties for a single grillage member.
+
+    Attributes
+    ----------
+    A : float
+        Cross-sectional area (m^2).
+    J : float
+        Torsional constant (m^3).
+    Iz : float
+        Second moment of area about z-axis (m^4).
+    Iy : float
+        Second moment of area about y-axis (m^4).
+    Az : float
+        Shear area in z-direction (m^2).
+    Ay : float
+        Shear area in y-direction (m^2).
+    """
+    A: float
+    J: float
+    Iz: float
+    Iy: float
+    Az: float
+    Ay: float
+
+
+@dataclass
+class MaterialProperties:
+    """
+    Holds custom material properties for a grillage member.
+
+    Attributes
+    ----------
+    material : str
+        Material type string (e.g. "steel", "concrete").
+    E : float
+        Elastic modulus (Pa).
+    v : float
+        Poisson's ratio.
+    rho : float
+        Density (kN/m^3).
+    Fy : float, optional
+        Yield strength (Pa). Required for steel.
+    E0 : float, optional
+        Initial elastic modulus (Pa). Required for steel.
+    b : float, optional
+        Strain-hardening ratio. Required for steel.
+    """
+    material: str
+    E: float
+    v: float
+    rho: float
+    Fy: float = None
+    E0: float = None
+    b: float = None
+
+
+@dataclass
+class GrillageGeometry:
+    """
+    Holds grillage geometry and cross-section layout parameters.
+
+    Attributes
+    ----------
+    L : float
+        Bridge span length (m).
+    n_l : int
+        Number of longitudinal grid lines.
+    n_t : int
+        Number of transverse grid lines.
+    edge_dist : float
+        Edge beam distance / overhang (m). Use 0 for no overhang.
+    ext_to_int_dist : float
+        Distance from exterior to interior beam (m).
+    angle : float
+        Skew angle in degrees. Use 0 for a right bridge.
+    carriageway_width : float
+        Width of the carriageway (m).
+    crash_barrier_width : float
+        Width of each crash barrier (m).
+    footpath_width : float
+        Width of each footpath (m).
+    railing_width : float
+        Width of each railing (m).
+    median_width : float
+        Width of the median (m). Use 0 if no median.
+    no_of_footpaths : int
+        Number of footpaths.
+    """
+    L: float
+    n_l: int
+    n_t: int
+    edge_dist: float
+    ext_to_int_dist: float
+    angle: float
+    carriageway_width: float
+    crash_barrier_width: float
+    footpath_width: float
+    railing_width: float
+    median_width: float
+    no_of_footpaths: int
 
 
 class BridgeGrillageModel:
@@ -14,77 +120,31 @@ class BridgeGrillageModel:
     def __init__(self):
 
         # -------------------- MATERIALS --------------------
-        self.concrete = og.create_material(
-            material="concrete", code="AS5100-2017", grade="65MPa"
-        )
-
-        self.concrete_custom = og.create_material(
-            material="concrete", E=50 * GPa, v=0.3, rho=24 * kN / m ** 3
-        )
+        # Materials are set via create_material()
+        self.steel_custom = None
 
         # -------------------- SECTIONS --------------------
-        self.edge_longitudinal_section = og.create_section(
-            A=0.934 * m ** 2,
-            J=0.1857 * m ** 3,
-            Iz=0.3478 * m ** 4,
-            Iy=0.213602 * m ** 4,
-            Az=0.444795 * m ** 2,
-            Ay=0.258704 * m ** 2,
-        )
-
-        self.longitudinal_section = og.create_section(
-            A=1.025 * m ** 2,
-            J=0.1878 * m ** 3,
-            Iz=0.3694 * m ** 4,
-            Iy=0.3634 * m ** 4,
-            Az=0.4979 * m ** 2,
-            Ay=0.309 * m ** 2,
-        )
-
-        self.transverse_section = og.create_section(
-            A=0.504 * m ** 2,
-            J=5.22303e-3 * m ** 3,
-            Iy=0.32928 * m ** 4,
-            Iz=1.3608e-3 * m ** 4,
-            Ay=0.42 * m ** 2,
-            Az=0.42 * m ** 2,
-            unit_width=True,
-        )
-
-        self.end_transverse_section = og.create_section(
-            A=0.504 / 2 * m ** 2,
-            J=2.5012e-3 * m ** 3,
-            Iy=0.04116 * m ** 4,
-            Iz=0.6804e-3 * m ** 4,
-            Ay=0.21 * m ** 2,
-            Az=0.21 * m ** 2,
-        )
+        # Sections are set via create_sections()
+        self.edge_longitudinal_section = None
+        self.longitudinal_section = None
+        self.transverse_section = None
+        self.end_transverse_section = None
 
         # -------------------- GRILLAGE MEMBERS --------------------
-        self.longitudinal_beam = og.create_member(
-            section=self.longitudinal_section, material=self.concrete
-        )
-
-        self.edge_longitudinal_beam = og.create_member(
-            section=self.edge_longitudinal_section, material=self.concrete
-        )
-
-        self.transverse_slab = og.create_member(
-            section=self.transverse_section, material=self.concrete
-        )
-
-        self.end_transverse_slab = og.create_member(
-            section=self.end_transverse_section, material=self.concrete
-        )
+        # Members are set via create_material() once sections and material are ready
+        self.longitudinal_beam = None
+        self.edge_longitudinal_beam = None
+        self.transverse_slab = None
+        self.end_transverse_slab = None
 
         # -------------------- GEOMETRY --------------------
-        self.L = 33.5 * m
-        # self.w = 11.565 * m
-        self.n_l = 7
-        self.n_t = 11
-        self.edge_dist = 0 * m
-        self.ext_to_int_dist = 2.2775 * m
-        self.angle = 0
+        # Geometry is set via set_geometry()
+        self.L = None
+        self.n_l = None
+        self.n_t = None
+        self.edge_dist = None
+        self.ext_to_int_dist = None
+        self.angle = None
 
         # placeholder for model
         self.model = None
@@ -103,32 +163,142 @@ class BridgeGrillageModel:
         self.load_manager = None
 
     # ============================================================
-    #   CREATE THE GRILLAGE MODEL
+    #   SET GEOMETRY
     # ============================================================
-    def create_model(self):
+    def set_geometry(self, geometry: GrillageGeometry):
+        """
+        Sets grillage geometry and builds the cross-section layout and bridge
+        geometry from user-supplied GrillageGeometry.
+
+        Parameters
+        ----------
+        geometry : GrillageGeometry
+            Geometry parameters supplied by the user.
+        """
+        self.L = geometry.L
+        self.n_l = geometry.n_l
+        self.n_t = geometry.n_t
+        self.edge_dist = geometry.edge_dist
+        self.ext_to_int_dist = geometry.ext_to_int_dist
+        self.angle = geometry.angle
 
         # -------------------------------------------------
-        # Create cross-section layout (UI inputs)
+        # Cross-section layout
         # -------------------------------------------------
         self.layout = CrossSectionLayout(
-            carriageway_width=10.0,  # TODO: get from UI
-            crash_barrier_width=0.45,  # TODO: get from UI
-            footpath_width=1.50,  # TODO: get from UI
-            railing_width=0.30,  # TODO: get from UI
-            median_width=0.0,  # TODO: get from UI
-            no_of_footpaths=2,  # TODO: get from UI
+            carriageway_width=geometry.carriageway_width,
+            crash_barrier_width=geometry.crash_barrier_width,
+            footpath_width=geometry.footpath_width,
+            railing_width=geometry.railing_width,
+            median_width=geometry.median_width,
+            no_of_footpaths=geometry.no_of_footpaths,
         )
 
         # -------------------------------------------------
-        # Bridge geometry (width from layout)
+        # Bridge geometry (width derived from layout)
         # -------------------------------------------------
         self.bridge_geometry = BridgeGeometry(
             span=self.L,
-            width=self.layout.total_width
+            width=self.layout.total_width,
         )
         print(f"Bridge width from layout: {self.layout.total_width} m")
 
         self.layout.validate_against_bridge(self.bridge_geometry.width)
+
+    # ============================================================
+    #   CREATE SECTIONS
+    # ============================================================
+    def create_sections(self,
+                        longitudinal: SectionProperties,
+                        edge_longitudinal: SectionProperties,
+                        transverse: SectionProperties,
+                        end_transverse: SectionProperties):
+        """
+        Creates all four grillage sections from user-supplied SectionProperties.
+
+        Parameters
+        ----------
+        longitudinal : SectionProperties
+            Properties for the interior longitudinal beam.
+        edge_longitudinal : SectionProperties
+            Properties for the edge longitudinal beam.
+        transverse : SectionProperties
+            Properties for the transverse slab (unit_width=True).
+        end_transverse : SectionProperties
+            Properties for the end transverse slab.
+        """
+        self.longitudinal_section = og.create_section(
+            A=longitudinal.A,
+            J=longitudinal.J,
+            Iz=longitudinal.Iz,
+            Iy=longitudinal.Iy,
+            Az=longitudinal.Az,
+            Ay=longitudinal.Ay,
+        )
+
+        self.edge_longitudinal_section = og.create_section(
+            A=edge_longitudinal.A,
+            J=edge_longitudinal.J,
+            Iz=edge_longitudinal.Iz,
+            Iy=edge_longitudinal.Iy,
+            Az=edge_longitudinal.Az,
+            Ay=edge_longitudinal.Ay,
+        )
+
+        self.transverse_section = og.create_section(
+            A=transverse.A,
+            J=transverse.J,
+            Iy=transverse.Iy,
+            Iz=transverse.Iz,
+            Ay=transverse.Ay,
+            Az=transverse.Az,
+            unit_width=True,
+        )
+
+        self.end_transverse_section = og.create_section(
+            A=end_transverse.A,
+            J=end_transverse.J,
+            Iy=end_transverse.Iy,
+            Iz=end_transverse.Iz,
+            Ay=end_transverse.Ay,
+            Az=end_transverse.Az,
+        )
+
+    # ============================================================
+    #   CREATE MATERIAL
+    # ============================================================
+    def create_material(self, props: MaterialProperties):
+        """
+        Creates a custom material and assigns it to all grillage members.
+
+        Parameters
+        ----------
+        props : MaterialProperties
+            Material properties supplied by the user.
+        """
+        self.steel_custom = og.create_material(
+            material=props.material, E=props.E, v=props.v, rho=props.rho,
+            Fy=props.Fy, E0=props.E0, b=props.b
+        )
+
+        # Re-assign members now that material is defined
+        self.longitudinal_beam = og.create_member(
+            section=self.longitudinal_section, material=self.steel_custom
+        )
+        self.edge_longitudinal_beam = og.create_member(
+            section=self.edge_longitudinal_section, material=self.steel_custom
+        )
+        self.transverse_slab = og.create_member(
+            section=self.transverse_section, material=self.steel_custom
+        )
+        self.end_transverse_slab = og.create_member(
+            section=self.end_transverse_section, material=self.steel_custom
+        )
+
+    # ============================================================
+    #   CREATE THE GRILLAGE MODEL
+    # ============================================================
+    def create_model(self):
 
         # -------------------------------------------------
         # Load placement manager
@@ -1148,6 +1318,70 @@ class BridgeGrillageModel:
 # ============================================================
 if __name__ == "__main__":
     bridge = BridgeGrillageModel()
+
+    # --- Test geometry values (replace with UI inputs later) ---
+    bridge.set_geometry(GrillageGeometry(
+        L=33.5 * m,
+        n_l=7,
+        n_t=11,
+        edge_dist=0 * m,
+        ext_to_int_dist=2.2775 * m,
+        angle=0,
+        carriageway_width=10.0 * m,
+        crash_barrier_width=0.45 * m,
+        footpath_width=1.50 * m,
+        railing_width=0.30 * m,
+        median_width=0.0 * m,
+        no_of_footpaths=2,
+    ))
+
+    # --- Test section values (replace with UI inputs later) ---
+    bridge.create_sections(
+        longitudinal=SectionProperties(
+            A=1.025 * m ** 2,
+            J=0.1878 * m ** 3,
+            Iz=0.3694 * m ** 4,
+            Iy=0.3634 * m ** 4,
+            Az=0.4979 * m ** 2,
+            Ay=0.309 * m ** 2,
+        ),
+        edge_longitudinal=SectionProperties(
+            A=0.934 * m ** 2,
+            J=0.1857 * m ** 3,
+            Iz=0.3478 * m ** 4,
+            Iy=0.213602 * m ** 4,
+            Az=0.444795 * m ** 2,
+            Ay=0.258704 * m ** 2,
+        ),
+        transverse=SectionProperties(
+            A=0.504 * m ** 2,
+            J=5.22303e-3 * m ** 3,
+            Iz=1.3608e-3 * m ** 4,
+            Iy=0.32928 * m ** 4,
+            Az=0.42 * m ** 2,
+            Ay=0.42 * m ** 2,
+        ),
+        end_transverse=SectionProperties(
+            A=0.504 / 2 * m ** 2,
+            J=2.5012e-3 * m ** 3,
+            Iz=0.6804e-3 * m ** 4,
+            Iy=0.04116 * m ** 4,
+            Az=0.21 * m ** 2,
+            Ay=0.21 * m ** 2,
+        ),
+    )
+
+    # --- Test material values (replace with UI inputs later) ---
+    bridge.create_material(MaterialProperties(
+        material="steel",
+        E=200 * GPa,
+        v=0.3,
+        rho=78.5 * kN / m ** 3,
+        Fy=250 * MPa,
+        E0=200 * GPa,
+        b=0.01,
+    ))
+
     bridge.create_model()
     # bridge.plot_model()
     # bridge.add_dead_loads()
@@ -1176,4 +1410,3 @@ if __name__ == "__main__":
 
     result_handler.run_interactive_viewer()
     # result_handler.print_moving_load_trace()
-
