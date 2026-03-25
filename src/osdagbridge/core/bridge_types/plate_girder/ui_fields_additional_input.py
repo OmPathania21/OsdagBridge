@@ -27,7 +27,7 @@ from osdagbridge.core.utils.common import (
     VALUES_WEB_TYPE,
     VALUES_RAILING_TYPE,
     VALUES_WEARING_COAT_MATERIAL,
-    VALUES_YES_NO,
+    VALUES_NO_YES,
     STIFFENER_DETAILS_DEFAULTS,
 )
 
@@ -1724,7 +1724,7 @@ STIFFENER_DETAILS_SCHEMA = {
             "id": "intermediate_stiffener",
             "label": "Intermediate Stiffener:",
             "type": "combo",
-            "choices": VALUES_YES_NO,
+            "choices": VALUES_NO_YES,
             "bind": "intermediate_combo",
         },
         {
