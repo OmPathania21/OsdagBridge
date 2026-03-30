@@ -78,7 +78,8 @@ class IRC6_2017:
                 front_gap + axle_dist1 + axle_dist2 + gap_bogie,
                 front_gap + axle_dist1 + axle_dist2 + gap_bogie + bogie_axle_dist1,
                 front_gap + axle_dist1 + axle_dist2 + gap_bogie + bogie_axle_dist1 + bogie_axle_dist2,
-                front_gap + axle_dist1 + axle_dist2 + gap_bogie + bogie_axle_dist1 + bogie_axle_dist2 + rear_gap,
+                front_gap + axle_dist1 + axle_dist2 + gap_bogie + bogie_axle_dist1 + bogie_axle_dist2 + bogie_axle_dist1,
+                front_gap + axle_dist1 + axle_dist2 + gap_bogie + bogie_axle_dist1 + bogie_axle_dist2 + bogie_axle_dist1 + rear_gap,
                 ]
             
         # Transverse position of each wheel
@@ -169,6 +170,7 @@ class IRC6_2017:
             front_gap + axle_dist1 + axle_dist2 + axle_dist3 + gap_bogie,
             front_gap + axle_dist1 + axle_dist2 + axle_dist3 + gap_bogie + bogie_axle_dist,
             front_gap + axle_dist1 + axle_dist2 + axle_dist3 + gap_bogie + bogie_axle_dist + bogie_axle_dist,
+            front_gap + axle_dist1 + axle_dist2 + axle_dist3 + gap_bogie + bogie_axle_dist + bogie_axle_dist + bogie_axle_dist,
             front_gap + axle_dist1 + axle_dist2 + axle_dist3 + gap_bogie + bogie_axle_dist + bogie_axle_dist + bogie_axle_dist + rear_gap,
             ]
         # Transverse position of each wheel
