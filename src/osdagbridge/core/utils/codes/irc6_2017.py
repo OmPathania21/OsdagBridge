@@ -67,8 +67,8 @@ class IRC6_2017:
         # Mapping to the 7 longitudinal positions in `load_positions_x`.
         # Values provided by user (converted to kN):
         # [8, 12, 12, 17, 17, 17, 17]
-        wheel_loads = [8 * kN, 12 * kN, 12 * kN, 17 * kN,
-                      17 * kN, 17 * kN, 17 * kN]
+        wheel_loads = [8 * t, 12 * t, 12 * t, 17 * t,
+                      17 * t, 17 * t, 17 * t]
 
         # Define longitudinal positions of each axle
         load_positions_x = [
@@ -106,14 +106,14 @@ class IRC6_2017:
         Returns a dictionary with keys:
             'x' - list of longitudinal load positions vertex(m)
             'z' - list of transverse load positions vertex(m)
-            'wheel_loads' - list of wheel loads (kN)
+            'wheel_loads' - list of wheel loads (t)
         """
         # Define units
         start_vertex_x = 0.0 * m
         end_vertex_x = 4.570 * m
 
-        # Define track loads (kN/m2) 
-        track_loads_udl = 4.32 * kN / m2 
+        # Define track loads (t/m) 
+        track_loads_udl = 7.66 * t / m 
 
         # Define longitudinal positions of track vertices
         load_positions_x = [
@@ -157,8 +157,8 @@ class IRC6_2017:
        # Mapping to the 8 longitudinal positions in `load_positions_x`.
        # Values provided by user (converted to kN):
        # [2.7, 2.7, 11.4, 11.4, 6.8, 6.8, 6.8, 6.8]
-        wheel_loads = [2.7 * kN, 2.7 * kN, 11.4 * kN, 11.4 * kN,
-                      6.8 * kN, 6.8 * kN, 6.8 * kN, 6.8 * kN]
+        wheel_loads = [2.7 * t, 2.7 * t, 11.4 * t, 11.4 * t,
+                      6.8 * t, 6.8 * t, 6.8 * t, 6.8 * t]
 
         # Define longitudinal positions of each axle
         load_positions_x = [
@@ -363,18 +363,18 @@ class IRC6_2017:
         Returns a dictionary with keys:
             'x' - list of longitudinal load positions (m)
             'z' - list of transverse load positions (m)
-            'wheel_loads' - list of wheel loads (kN)
+            'wheel_loads' - list of wheel loads (t)
         """
         # Define units
         axle_dist1= 4.50 * m
         axle_dist2= 1.40 * m
    
 
-        # Define wheel loads (kN) for each longitudinal axle position
+        # Define wheel loads (t) for each longitudinal axle position
         # Mapping to the 3 longitudinal positions in `load_positions_x`.
-        # Values provided by user (converted to kN):
+        # Values provided by user (converted to t):
         # [12, 14, 14]
-        wheel_loads = [12 * kN, 14 * kN, 14 * kN]
+        wheel_loads = [12 * t, 14 * t, 14 * t]
 
         # Define longitudinal positions of each axle
         load_positions_x = [
@@ -826,15 +826,15 @@ class IRC6_2017:
         """
         Returns braking force as per IRC:6-2017 Clause 211.2.
         Returns:
-            float: Braking force in kN (rounded to 3 decimal places)
+            float: Braking force in t (rounded to 3 decimal places)
         """
         for lane in range(1, design_lanes + 1):
             if lane == 1 or lane == 2:
                 wheel_load = IRC6_2017.cl_204_1_ClassA_vehicle()['wheel_loads']
-                braking_force_1 = 0.20 * sum(wheel_load)  # kN
+                braking_force_1 = 0.20 * sum(wheel_load)  # t
             if lane > 2:
                 wheel_load = IRC6_2017.cl_204_1_Class70R_vehicle_wheel()['wheel_loads']
-                braking_force_2 = 0.05 * sum(wheel_load)  # kN
+                braking_force_2 = 0.05 * sum(wheel_load)  # t
             
             total_braking_force = braking_force_1 + braking_force_2
         return round(total_braking_force, 3)
