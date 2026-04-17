@@ -30,7 +30,10 @@ from PySide6.QtGui import QIcon
 
 from osdagbridge.core.utils.common import (
     TYPE_TITLE, TYPE_BUTTON, TYPE_COMBOBOX, TYPE_PERCENT_BAR, TYPE_RADIO_GRID,
-    TYPE_CHECKBOX, TYPE_CHECKBOX_ROW, TYPE_CHECKBOX_GRID, TYPE_ONLY_BUTTON
+    TYPE_CHECKBOX, TYPE_CHECKBOX_ROW, TYPE_CHECKBOX_GRID, TYPE_ONLY_BUTTON,
+    KEY_UTIL_FLEXURE, KEY_UTIL_SHEAR, KEY_UTIL_INTERACTION, KEY_UTIL_LTB,
+    KEY_UTIL_LONG_TRANS_SHEAR, KEY_UTIL_FATIGUE, KEY_UTIL_STRESS_LIMITATION,
+    KEY_UTIL_DEFLECTION_CRACK,
 )
 from osdagbridge.desktop.ui.utils.custom_buttons import DockCustomButton
 from osdagbridge.desktop.ui.docks.dock_utils import apply_field_style
@@ -571,6 +574,21 @@ class OutputDock(QWidget):
             self.parent.update_docking_icons(output_is_active=self.width() > 0)
 
     # ── Action handlers (called by name from schema) ──────────────────────────
+
+    def refresh_utilization(self):
+        """Read utilization ratios from backend and update all PercentBarWidgets."""
+        if not self.backend or not hasattr(self.backend, "_frontend"):
+            return
+        frontend = self.backend._frontend
+        for key in (
+            KEY_UTIL_FLEXURE, KEY_UTIL_SHEAR, KEY_UTIL_INTERACTION,
+            KEY_UTIL_LTB, KEY_UTIL_LONG_TRANS_SHEAR, KEY_UTIL_FATIGUE,
+            KEY_UTIL_STRESS_LIMITATION, KEY_UTIL_DEFLECTION_CRACK,
+        ):
+            value = frontend.get_output_value(key, 0.0)
+            bar = self._w(key)
+            if bar is not None:
+                bar.set_value(float(value))
 
     def open_steel_design(self):
         from osdagbridge.desktop.ui.dialogs.steel_design import SteelDesign

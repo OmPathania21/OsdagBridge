@@ -1594,7 +1594,7 @@ def run_design_check(
     print(f"  PIPELINE COMPLETE - Overall: {engine.overall_status()}")
     print("=" * 60)
 
-    return report_text
+    return report_text, engine
 
 
 # ======================================================================

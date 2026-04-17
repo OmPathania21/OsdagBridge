@@ -525,6 +525,7 @@ class CustomWindow(QWidget):
             # Collect all the values from input Dock and pass to backend
             self.backend.set_input(self.input_dict)
             self.backend.design()
+            self.output_dock.refresh_utilization()
 
             # Lock the input dock after design is triggered
             if self.input_dock and not self.input_dock.is_locked:
