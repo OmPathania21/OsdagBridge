@@ -441,6 +441,7 @@ class ToolBarWidget(QWidget):
         super().__init__(parent)
 
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setFixedHeight(30)
 
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -469,7 +470,7 @@ class ToolBarWidget(QWidget):
         self.layout.setContentsMargins(5, 0, 5, 0)
         self.layout.setSpacing(6)
 
-        icon_size = QSize(29, 29)
+        icon_size = QSize(20, 20)
 
         # Button style with subtle hover
         button_qss = """
@@ -488,7 +489,7 @@ class ToolBarWidget(QWidget):
             btn.setIcon(QIcon(icon_path))
             btn.setIconSize(icon_size)
             btn.setToolTip(tooltip)
-            btn.setFixedSize(32, 32)
+            btn.setFixedSize(24, 24)
             btn.setCursor(QCursor(Qt.PointingHandCursor))
             btn.setStyleSheet(button_qss)
             btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
@@ -498,10 +499,11 @@ class ToolBarWidget(QWidget):
             sep = QFrame()
             sep.setFrameShape(QFrame.VLine)
             sep.setFrameShadow(QFrame.Plain)
-            sep.setFixedHeight(32)
+            sep.setFixedHeight(24)
             sep.setStyleSheet("""
                 QFrame {
                     color: #999999;
+                    margin: 0px;
                     margin-left: 10px;
                     margin-right: 10px;
                 }
@@ -551,6 +553,7 @@ class ToolBarWidget(QWidget):
                 border-radius: 4px;
                 padding-right: 10px; /* space for BOTH buttons */
                 background: #f8f8f8;
+                margin: 0px;
             }
 
             QSpinBox:hover {

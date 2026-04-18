@@ -431,6 +431,20 @@ class CustomWindow(QWidget):
         
         # Initial CAD update to sync with starting UI values (e.g., footpath=None)
         self.update_cad_from_inputs()
+
+        # Update tool bar visibility based on view rules
+        self._update_tool_bar_visibility()
+
+    #-------View-Rules-of-Tool-bar-START----------------------------------------
+
+    def _update_tool_bar_visibility(self):
+        """Show/hide tool bar buttons based on rules defined here"""
+        if self.cad_3d_view_active or self.plots_view_active:
+            self.tool_bar.setVisible(True)
+        else:
+            self.tool_bar.setVisible(False)
+
+    #-------View-Rules-of-Tool-bar-END----------------------------------------
     
     #-------Common-Design-Save-Additional-Inputs-Functionality-START-------
 
@@ -756,6 +770,9 @@ class CustomWindow(QWidget):
             self.cad_log_splitter.setSizes([0, view_h, 0, log_h])
         else:  # plots
             self.cad_log_splitter.setSizes([0, 0, view_h, log_h])
+        
+        # Update tool bar visibility based on view rules
+        self._update_tool_bar_visibility()
         
     def _position_log_dock(self):
         """Position log dock at bottom of central widget as overlay (max 1/5 height)"""
