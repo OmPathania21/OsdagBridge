@@ -186,8 +186,9 @@ Usage
 
 Visual behaviour
 ----------------
-  value < 100  →  green fill, proportional width, "XX%" text to the right
-  value >= 100 →  red   fill, full  width,         "XX%" text to the right
+  value < 100  →  green fill, proportional width (scale 0–150), "XX%" text to the right
+  value >= 100 →  red   fill, proportional width (scale 0–150), "XX%" text to the right
+  value >= 150 →  red   fill, full width
 """
 
 # -- Colours -------------------------------------------------------------------
@@ -225,7 +226,7 @@ class _BarPainter(QWidget):
         radius = h / 2.0
 
         exceeded   = self._value >= 100.0
-        fill_ratio = 1.0 if exceeded else self._value / 100.0
+        fill_ratio = min(self._value / 150.0, 1.0)
         fill_w     = w * fill_ratio
 
         painter.setPen(Qt.NoPen)
