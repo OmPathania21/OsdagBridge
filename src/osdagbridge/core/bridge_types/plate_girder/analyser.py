@@ -511,8 +511,9 @@ class BridgeGrillageModel:
         if model is None:
             raise ValueError("Model is not available. Create model before adding loads.")
 
-        # If there is no footpath component in the layout, skip creating footpath load
-        if not self.layout.has_component("footpath_left") or not self.layout.has_component("footpath_right"):
+        # If neither footpath side exists, skip load creation entirely
+        sides_present = [s for s in ("left", "right") if self.layout.has_component(f"footpath_{s}")]
+        if not sides_present:
             warnings.warn("No footpath component in layout; skipping footpath load creation")
             self.footpath_load_case = None
             return None
@@ -527,11 +528,19 @@ class BridgeGrillageModel:
         DL_footpath = og.create_load_case(name="Footpath load")
 
         # -------------------------------------------------
-        # Left & Right footpaths
+        # Only sides that exist in the layout
         # -------------------------------------------------
-        for side in ("left", "right"):
+        for side in sides_present:
             # geometry from load manager
             geom = self.load_manager.footpath_load(side)
+
+            print(
+                f"[Footpath {side}] patch corners: "
+                f"p1(x={geom.p1.x:.3f}, z={geom.p1.z:.3f})  "
+                f"p2(x={geom.p2.x:.3f}, z={geom.p2.z:.3f})  "
+                f"p3(x={geom.p3.x:.3f}, z={geom.p3.z:.3f})  "
+                f"p4(x={geom.p4.x:.3f}, z={geom.p4.z:.3f})"
+            )
 
             # convert geometry → ospgrillage vertices
             p1 = og.create_load_vertex(
@@ -610,6 +619,12 @@ class BridgeGrillageModel:
             # geometry from load manager
             geom = self.load_manager.crash_barrier_load(side)
 
+            print(
+                f"[Crash barrier {side}] line load: "
+                f"start(x={geom.start.x:.3f}, z={geom.start.z:.3f})  "
+                f"end(x={geom.end.x:.3f}, z={geom.end.z:.3f})"
+            )
+
             # convert geometry → ospgrillage vertices
             p1 = og.create_load_vertex(
                 x=geom.start.x, z=geom.start.z, p=barrier_load
@@ -657,8 +672,9 @@ class BridgeGrillageModel:
         if model is None:
             raise ValueError("Model is not available. Create model before adding loads.")
 
-        # If there is no railing component in the layout, skip creating railing load
-        if not self.layout.has_component("railing_left") or not self.layout.has_component("railing_right"):
+        # If neither railing side exists, skip load creation entirely
+        railing_sides_present = [s for s in ("left", "right") if self.layout.has_component(f"railing_{s}")]
+        if not railing_sides_present:
             warnings.warn("No railing component in layout; skipping railing load creation")
             self.railing_load_case = None
             return None
@@ -674,11 +690,17 @@ class BridgeGrillageModel:
         DL_railing = og.create_load_case(name="Railing load")
 
         # -------------------------------------------------
-        # Left & Right railings
+        # Only sides that exist in the layout
         # -------------------------------------------------
-        for side in ("left", "right"):
+        for side in railing_sides_present:
             # geometry from load manager
             geom = self.load_manager.railing_load(side)
+
+            print(
+                f"[Railing {side}] line load: "
+                f"start(x={geom.start.x:.3f}, z={geom.start.z:.3f})  "
+                f"end(x={geom.end.x:.3f}, z={geom.end.z:.3f})"
+            )
 
             # convert geometry → ospgrillage vertices
             p1 = og.create_load_vertex(
@@ -742,6 +764,12 @@ class BridgeGrillageModel:
         # Get geometry from load manager
         # -------------------------------------------------
         geom = self.load_manager.median_line_load()
+
+        print(
+            f"[Median] line load: "
+            f"start(x={geom.start.x:.3f}, z={geom.start.z:.3f})  "
+            f"end(x={geom.end.x:.3f}, z={geom.end.z:.3f})"
+        )
 
         # -------------------------------------------------
         # Convert geometry → ospgrillage vertices
