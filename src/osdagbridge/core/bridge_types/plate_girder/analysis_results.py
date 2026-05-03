@@ -1198,17 +1198,111 @@ class PlateGirderAnalysisResults:
         """Internal helper to build Internal Force DataFrame for a girder's elements."""
         g_map, _ = self.build_girders(verbose=False)
         if girder_name not in g_map: return pd.DataFrame()
-        
+
         elements = g_map[girder_name]["elements"]
         rows = []
         unit = "kN" if "V" in component else "kNm"
-        
+
         for eid in elements:
             try:
                 val = float(self.ds.sel(Loadcase=load_case, Element=eid, Component=component)["forces"]) / 1000
                 rows.append({"Element": str(eid), f"{component} ({unit})": round(val, 3)})
             except Exception: pass
         return pd.DataFrame(rows)
+
+    def _get_displacements_df(self, load_case: str, girder_name: str, component: str) -> pd.DataFrame:
+        """
+        Build per-node displacement DataFrame for a girder and load case.
+
+        Parameters
+        ----------
+        load_case : str
+            Load case name as stored in the dataset Loadcase coordinate.
+        girder_name : str
+            Girder identifier, e.g. ``"G1"``.
+        component : str
+            Displacement component — ospgrillage stores these as ``"dx"``,
+            ``"dy"``, ``"dz"`` (translational) in the ``displacements``
+            DataArray.
+
+        Returns
+        -------
+        pd.DataFrame
+            Columns: ``Node`` (int), ``<component>`` (float, mm).
+            Rows are sorted by node X-coordinate so the array aligns with
+            the longitudinal axis used by GirderGraphEngine.
+            Empty DataFrame on any failure.
+        """
+        g_map, _ = self.build_girders(verbose=False)
+        if girder_name not in g_map:
+            return pd.DataFrame()
+
+        node_path = g_map[girder_name]["path"]
+
+        # Build node → X-coord map for sorting
+        nodes_coords, _, _ = self.build_grillage_connectivity()
+
+        disp_da = self.ds.get("displacements")
+        if disp_da is None:
+            return pd.DataFrame()
+
+        # ospgrillage stores static displacements (from ops.nodeDisp) under the
+        # single-letter components "x", "y", "z". The "dx"/"dy"/"dz" slots hold
+        # nodal velocity (ops.nodeVel) which is NaN for a static analysis.
+        # Map the graph-engine convention ("dy") to the live dataset key ("y").
+        _DISP_COMPONENT_MAP = {"dx": "x", "dy": "y", "dz": "z"}
+        ds_component = _DISP_COMPONENT_MAP.get(component, component)
+
+        rows = []
+        for nid in node_path:
+            try:
+                val_m = float(
+                    disp_da.sel(
+                        Loadcase=load_case, Node=nid, Component=ds_component
+                    )
+                )
+                x_coord = nodes_coords[nid][0] if nid in nodes_coords else 0.0
+                rows.append({"Node": nid, "_x": x_coord, component: round(val_m * 1000, 6)})
+            except Exception:
+                pass
+
+        if not rows:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(rows).sort_values("_x").drop(columns="_x").reset_index(drop=True)
+        return df
+
+    def _get_node_coords_df(self, girder_name: str) -> pd.DataFrame:
+        """
+        Build per-node coordinate DataFrame for a girder.
+
+        Parameters
+        ----------
+        girder_name : str
+            Girder identifier, e.g. ``"G1"``.
+
+        Returns
+        -------
+        pd.DataFrame
+            Columns: ``Node`` (int), ``X (m)``, ``Y (m)``, ``Z (m)``.
+            Rows are sorted by X-coordinate (longitudinal axis).
+            Empty DataFrame if the girder is not found.
+        """
+        nodes_coords, _, _ = self.build_grillage_connectivity()
+        g_map, _ = self.build_girders(verbose=False)
+        if girder_name not in g_map:
+            return pd.DataFrame()
+
+        rows = []
+        for nid in g_map[girder_name]["path"]:
+            if nid in nodes_coords:
+                x, y, z = nodes_coords[nid]
+                rows.append({"Node": nid, "X (m)": round(x, 6), "Y (m)": round(y, 6), "Z (m)": round(z, 6)})
+
+        if not rows:
+            return pd.DataFrame()
+
+        return pd.DataFrame(rows).sort_values("X (m)").reset_index(drop=True)
 
     def _get_girder_sw_df(self, girder_map, nodes):
         """Internal helper to build the Girder Self weight DataFrame."""
