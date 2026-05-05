@@ -322,7 +322,7 @@ class BridgeGrillageModel:
         end_beam = L
         A_girder_m2 = self.longitudinal_props.A
         beam_mag = girder_self_weight_kN_m(A_girder_m2, STEEL_UNIT_WEIGHT_kN_m3) * kN / m  # N/m
-
+        print(f"Self weight line load magnitude: {beam_mag:.2f} N/m")
         DL_self_weight = og.create_load_case(name="girder self weight")
 
         # iterate through all grillage transverse positions (except extreme edges)
@@ -381,6 +381,7 @@ class BridgeGrillageModel:
         # Load magnitude (UDL over area): t × ρ_concrete  [kN/m²]
         # -------------------------------------------------
         deck_mag = slab_dead_load_kN_m2(slab_thickness_m, rho_c) * kN / m**2  # N/m²
+        print(f"Deck slab load magnitude: {deck_mag:.2f} N/m²")
 
         # -------------------------------------------------
         # Get geometry from load manager
@@ -458,7 +459,7 @@ class BridgeGrillageModel:
             )
         overlay_kw = {} if density_kN_m3 is None else {"density_kN_m3": density_kN_m3}
         overlay_mag = wearing_course_dead_load_kN_m2(thickness_m, **overlay_kw) * kN / m**2  # N/m²
-
+        print(f"Wearing course load magnitude: {overlay_mag:.2f} N/m²")
         # --------------------------------
         # Get geometry from geometry module
         # --------------------------------
@@ -521,6 +522,7 @@ class BridgeGrillageModel:
         # Load magnitude — IRC 6:2017 Cl.206.1 (footway load)
         # -------------------------------------------------
         footpath_mag = footpath_dead_load_kN_m2() * kN / m**2  # N/m²
+        print(f"Footpath load magnitude: {footpath_mag:.2f} N/m²")
 
         # -------------------------------------------------
         # Create load case
@@ -597,25 +599,27 @@ class BridgeGrillageModel:
         if model is None:
             raise ValueError("Model is not available. Create model before adding loads.")
 
-        # If there is no crash barrier component in the layout, skip creating crash barrier load
-        if not self.layout.has_component("crash_barrier_left") or not self.layout.has_component("crash_barrier_right"):
+        # If neither crash barrier side exists, skip load creation entirely
+        sides_present = [s for s in ("left", "right") if self.layout.has_component(f"crash_barrier_{s}")]
+        if not sides_present:
             warnings.warn("No crash barrier component in layout; skipping crash barrier load creation")
             self.crash_barrier_load_case = None
             return None
+
         # -------------------------------------------------
         # Load magnitude — from input or IRC 5:2015 default (crash_barrier.geometry)
         # -------------------------------------------------
         barrier_load = crash_barrier_dead_load_kN_m(barrier_load_kN_per_m) * kN / m
-
+        print(f"Crash barrier line load magnitude: {barrier_load:.2f} N/m")
         # -------------------------------------------------
         # Create load case
         # -------------------------------------------------
         DL_barrier = og.create_load_case(name="Crash barrier load")
 
         # -------------------------------------------------
-        # Left & Right barriers
+        # Only sides that exist in the layout
         # -------------------------------------------------
-        for side in ("left", "right"):
+        for side in sides_present:
             # geometry from load manager
             geom = self.load_manager.crash_barrier_load(side)
 
@@ -683,6 +687,7 @@ class BridgeGrillageModel:
         # Load magnitude — from user input or IRC 6:2017 Cl.206.5 default (railing.geometry)
         # -------------------------------------------------
         railing_udl = railing_dead_load_kN_m(railing_load_kN_per_m) * kN / m  # N/m
+        print(f"Railing line load magnitude: {railing_udl:.2f} N/m")
 
         # -------------------------------------------------
         # Create load case
@@ -753,6 +758,7 @@ class BridgeGrillageModel:
         # Load magnitude — from input or default (median.geometry)
         # -------------------------------------------------
         median_udl = median_dead_load_kN_m(median_load_kN_per_m) * kN / m
+        print(f"Median line load magnitude: {median_udl:.2f} N/m")
 
         # If there is no median component in the layout, skip creating median load
         if not self.layout.has_component("median"):
@@ -802,6 +808,53 @@ class BridgeGrillageModel:
         self.median_load_case = DL_median
 
         return DL_median
+
+    # ============================================================
+    #   Dead Load Combination
+    # ============================================================
+
+    def create_dead_load_combination(self, model=None, load_factor=1.0):
+        """
+        Creates a single ``"DL"`` load case by adding all individual dead-load
+        sub-case loads into it.
+
+        Must be called after all individual dead-load methods have been invoked.
+        Sub-cases that were skipped (returned ``None``) are automatically excluded.
+        """
+        model = model or self.model
+        if model is None:
+            raise ValueError("Model is not available. Create model before adding loads.")
+
+        _DL_ATTRS = [
+            "self_weight_load_case",
+            "deck_load_case",
+            "overlay_load_case",
+            "footpath_load_case",
+            "crash_barrier_load_case",
+            "railing_load_case",
+            "median_load_case",
+        ]
+
+        DL_combined = og.create_load_case(name=f"{load_factor} DL")
+        added = False
+
+        for attr in _DL_ATTRS:
+            lc = getattr(self, attr, None)
+            if lc is not None:
+                for entry in lc.load_groups:
+                    DL_combined.add_load(entry["load"])
+                added = True
+
+        if not added:
+            warnings.warn(
+                "create_dead_load_combination: no dead-load sub-cases found. "
+                "Call the individual dead-load creation methods first."
+            )
+            return None
+
+        model.add_load_case(DL_combined, load_factor=load_factor)
+        self.dead_load_combination = DL_combined
+        return DL_combined
 
     # ============================================================
     #   Live Load
@@ -1235,17 +1288,7 @@ class BridgeGrillageModel:
 
         model.analyze()
 
-        # Get ALL loadcases
         results = model.get_results()
-
-        # ✅ DEBUG: Show all detected loadcases
-        # print(results.coords["Loadcase"].values)
-
-        # print("Results dataset:")
-        # print(results)
-
-        self.dataset = results
-
         return results
 
     def plot(self, model=None):
@@ -1383,6 +1426,7 @@ if __name__ == "__main__":
     bridge.create_crash_barrier_load()
     bridge.create_railing_load()
     bridge.create_median_load()
+    bridge.create_dead_load_combination()
     bridge.vehicle_lane_coordinates()
     bridge.create_vehicle_load_cases()
     bridge.add_vehicle_load_cases_from_combinations()

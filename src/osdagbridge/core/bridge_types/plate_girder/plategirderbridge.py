@@ -191,17 +191,17 @@ class PlateGirderBridge:
         sp = self.section_props
         sr = self.sizing_result
         print(
-            f"\n{'─'*60}\n"
-            f"  PLATE GIRDER BRIDGE — DESIGN SUMMARY\n"
-            f"{'─'*60}\n"
+            f"\n{'-'*60}\n"
+            f"  PLATE GIRDER BRIDGE - DESIGN SUMMARY\n"
+            f"{'-'*60}\n"
             f"  Span                  : {parsed['span']:.1f} m\n"
             f"  Overall width         : {sr.overall_width:.3f} m\n"
             f"  No. of girders        : {sr.no_of_girders}\n"
             f"  Girder spacing        : {sr.girder_spacing * 1e3:.1f} mm\n"
             f"  Deck overhang         : {sr.deck_overhang * 1e3:.1f} mm\n"
-            f"{'─'*60}\n"
+            f"{'-'*60}\n"
             f"  GIRDER CROSS-SECTION (all dimensions in mm)\n"
-            f"{'─'*60}\n"
+            f"{'-'*60}\n"
             f"  Total depth      D    : {sp['D']     * 1e3:.1f}\n"
             f"  Web depth        d_w  : {sp['d_web'] * 1e3:.1f}\n"
             f"  Web thickness    t_w  : {sp['t_w']   * 1e3:.1f}\n"
@@ -209,14 +209,14 @@ class PlateGirderBridge:
             f"  Top flange thk   T_ft : {sp['t_f_top'] * 1e3:.1f}\n"
             f"  Bot flange width B_fb : {sp.get('B_bot',   sp['B_top'])   * 1e3:.1f}\n"
             f"  Bot flange thk   T_fb : {sp.get('t_f_bot', sp['t_f_top']) * 1e3:.1f}\n"
-            f"{'─'*60}\n"
+            f"{'-'*60}\n"
             f"  SECTION PROPERTIES (SI units)\n"
-            f"{'─'*60}\n"
-            f"  Area   A  : {sp['Area']:.6f} m²\n"
-            f"  I_z       : {sp['I_z']:.6f} m⁴\n"
-            f"  I_y       : {sp['I_y']:.6f} m⁴\n"
-            f"  I_t (J)   : {sp['I_t']:.6f} m³\n"
-            f"{'─'*60}\n"
+            f"{'-'*60}\n"
+            f"  Area   A  : {sp['Area']:.6f} m^2\n"
+            f"  I_z       : {sp['I_z']:.6f} m^4\n"
+            f"  I_y       : {sp['I_y']:.6f} m^4\n"
+            f"  I_t (J)   : {sp['I_t']:.6f} m^3\n"
+            f"{'-'*60}\n"
         )
 
         self._run_dcr_checks(dataset)
@@ -488,6 +488,8 @@ class PlateGirderBridge:
           4. Footpath               — patch load on footpath strips (skipped if none)
           5. Crash barrier          — line load at each barrier centreline (skipped if none)
           6. Railing                — line load at each railing centreline (skipped if none)
+          7. Median                 — line load at median centreline (skipped if none)
+          8. DL combination         — combines all above into a single "DL" load case
 
         Must be called after setup_grillage() has built and registered the model.
         """
@@ -498,13 +500,15 @@ class PlateGirderBridge:
         barrier_load_kN_m = crash_barrier_load_from_inputs(self.additional_inputs)
         railing_load_kN_m = railing_load_from_inputs(self.additional_inputs)
 
-        m = self.grillage_model
-        m.create_self_weight_load()
-        m.create_deck_load(slab_thickness_m=deck_t_m)
-        m.create_wearing_course_load(thickness_m=wc_t_m, density_kN_m3=wc_rho)
-        m.create_footpath_load()
-        m.create_crash_barrier_load(barrier_load_kN_per_m=barrier_load_kN_m)
-        m.create_railing_load(railing_load_kN_per_m=railing_load_kN_m)
+        model = self.grillage_model
+        model.create_self_weight_load()
+        model.create_deck_load(slab_thickness_m=deck_t_m)
+        model.create_wearing_course_load(thickness_m=wc_t_m, density_kN_m3=wc_rho)
+        model.create_footpath_load()
+        model.create_crash_barrier_load(barrier_load_kN_per_m=barrier_load_kN_m)
+        model.create_railing_load(railing_load_kN_per_m=railing_load_kN_m)
+        model.create_median_load()
+        model.create_dead_load_combination(load_factor=1.0)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Live loads — vehicle and moving loads applied after the grillage model
@@ -518,9 +522,9 @@ class PlateGirderBridge:
 
         Must be called after setup_grillage() has built and registered the model.
         """
-        m = self.grillage_model
-        m.add_vehicle_load_cases_from_combinations()
-        m.create_moving_vehicle_load_cases()
+        model = self.grillage_model
+        model.add_vehicle_load_cases_from_combinations()
+        model.create_moving_vehicle_load_cases()
 
     def vehicle_lane_coordinates(self) -> list:
         """
