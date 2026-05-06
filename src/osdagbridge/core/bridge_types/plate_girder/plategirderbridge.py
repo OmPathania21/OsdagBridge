@@ -677,17 +677,21 @@ class PlateGirderBridge:
             print_report=True,
         )
 
-        dcr_by_id: dict[int, float] = {c.check_id: c.dcr for c in engine.checks}
-        self._frontend.set_output_value(KEY_UTIL_FLEXURE,          dcr_by_id.get(1, 0.0) * 100)
-        self._frontend.set_output_value(KEY_UTIL_SHEAR,            dcr_by_id.get(2, 0.0) * 100)
-        self._frontend.set_output_value(KEY_UTIL_INTERACTION,      dcr_by_id.get(3, 0.0) * 100)
-        self._frontend.set_output_value(KEY_UTIL_LTB,              dcr_by_id.get(4, 0.0) * 100)
-        defl_dcr = max(dcr_by_id.get(5, 0.0), dcr_by_id.get(6, 0.0))
+        dcr_by_id: dict[int, float] = {}
+        for c in engine.checks:
+            dcr_by_id[c.check_id] = max(dcr_by_id.get(c.check_id, 0.0), c.dcr)
+        self._frontend.set_output_value(KEY_UTIL_FLEXURE,          dcr_by_id.get(1,  0.0) * 100)
+        self._frontend.set_output_value(KEY_UTIL_SHEAR,            dcr_by_id.get(2,  0.0) * 100)
+        self._frontend.set_output_value(KEY_UTIL_INTERACTION,      dcr_by_id.get(3,  0.0) * 100)
+        self._frontend.set_output_value(KEY_UTIL_LTB,              dcr_by_id.get(5,  0.0) * 100)
+        defl_dcr = max(dcr_by_id.get(13, 0.0), dcr_by_id.get(14, 0.0), dcr_by_id.get(15, 0.0))
         self._frontend.set_output_value(KEY_UTIL_DEFLECTION_CRACK,  defl_dcr * 100)
-        fatigue_dcr = max(dcr_by_id.get(7, 0.0), dcr_by_id.get(8, 0.0))
+        fatigue_dcr = max(dcr_by_id.get(8, 0.0), dcr_by_id.get(9, 0.0))
         self._frontend.set_output_value(KEY_UTIL_FATIGUE,           fatigue_dcr * 100)
-        self._frontend.set_output_value(KEY_UTIL_LONG_TRANS_SHEAR,  0.0)
-        self._frontend.set_output_value(KEY_UTIL_STRESS_LIMITATION, 0.0)
+        trans_shear_dcr = max(dcr_by_id.get(16, 0.0), dcr_by_id.get(17, 0.0))
+        self._frontend.set_output_value(KEY_UTIL_LONG_TRANS_SHEAR,  trans_shear_dcr * 100)
+        stress_dcr = max(dcr_by_id.get(10, 0.0), dcr_by_id.get(11, 0.0), dcr_by_id.get(12, 0.0))
+        self._frontend.set_output_value(KEY_UTIL_STRESS_LIMITATION, stress_dcr * 100)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Plotting

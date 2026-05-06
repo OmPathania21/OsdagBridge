@@ -561,7 +561,7 @@ class IRC22_2014:
         Ze,                             # mm3
         fy,                             # MPa
         gamma_mo=GAMMA_M0_STEEL,
-        support="KEY_DISP_SUPPORT1",
+        support="Simply Supported",
 
         Iy=None,                        # mm4
         It=None,                        # mm4
@@ -609,10 +609,11 @@ class IRC22_2014:
         # ------------------ Step 2: βb ------------------
         if section_class in ["plastic", "compact"]:
             beta_b = 1.0
-        elif section_class in ["semi-compact"]:
+        elif section_class in ["semi-compact", "slender"]:
+            # Slender webs are common in plate girders; IS 800 Cl.8.2.1.2 limits Md to Ze*fy/γm0
             beta_b = Ze / Zp
         else:
-            raise ValueError("Buckling check not applicable for slender sections")
+            raise ValueError(f"Unrecognised section_class '{section_class}'")
 
         # ------------------ Step 3: αLT ------------------
         alpha_LT = 0.21 if section_type == "rolled" else 0.49
@@ -863,6 +864,7 @@ class IRC22_2014:
         if V_kN <= 0.6 * Vd_kN:
             return {
                 "Md_kNm": round(Md_kNm, 3),
+                "Mfd_kNm": round(Mfd_kNm, 3),
                 "Mdv_kNm": round(Md_kNm, 3),
                 "beta": 0.0,
                 "is_reduction_required": False,
@@ -2090,15 +2092,15 @@ class IRC22_2014:
         """
 
 
-        # Convert units where required
-        VL = VL_kN  #  kN/m
-        L = L_mm / 1000.0  # convert mm to metres
+        # IRC 22:2015 Cl.606.10 formula uses L in mm → result is N/mm ≡ kN/m
+        VL = VL_kN  # kN/m (= N/mm)
+        L = L_mm    # mm (do NOT convert to metres; coefficient 0.632 is calibrated for mm)
         Ast = Ast_cm2_per_m  # cm2/m as required by clause
 
-        # Capacity 1 
+        # Capacity 1
         Vcap1 = 0.632 * L * math.sqrt(fck)
 
-        # Capacity 2 
+        # Capacity 2
         Vcap2 = 0.232 * L * math.sqrt(fck) + 0.1 * Ast * fyk * n_layers * 1e-3
         # Note: 0.1 * Ast * fyk gives kN since Ast in cm2 and fyk MPa
 

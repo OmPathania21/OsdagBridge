@@ -617,6 +617,33 @@ class DemandExtractor:
             except (KeyError, ValueError):
                 pass
 
+        # ------------------------------------------------------------------
+        # (5) SLS moment and shear — max live load values (service, unfactored)
+        # ------------------------------------------------------------------
+        M_sls_mz = 0.0
+        V_sls_vy = 0.0
+        for lc in all_live_lcs:
+            try:
+                mz = _as_float(
+                    ds.sel(Loadcase=lc, Element=element_ids,
+                           Component=["Mz_i", "Mz_j"])["forces"].values
+                )
+                vy = _as_float(
+                    ds.sel(Loadcase=lc, Element=element_ids,
+                           Component=["Vy_i", "Vy_j"])["forces"].values
+                )
+                mz_finite = mz[~np.isnan(mz)]
+                vy_finite = vy[~np.isnan(vy)]
+                if mz_finite.size:
+                    M_sls_mz = max(M_sls_mz, float(np.abs(mz_finite).max()))
+                if vy_finite.size:
+                    V_sls_vy = max(V_sls_vy, float(np.abs(vy_finite).max()))
+            except KeyError:
+                continue
+
+        M_sls_kNm = M_sls_mz / 1000.0
+        V_sls_kN  = V_sls_vy / 1000.0
+
         return DemandEnvelope(
             Mu_kNm=round(Mu_kNm, 2),
             Vu_kN=round(Vu_kN, 2),
@@ -631,6 +658,8 @@ class DemandExtractor:
             location="critical element",
             member=member_name,
             source="grillage_analysis",
+            M_sls_kNm=round(M_sls_kNm, 2),
+            V_sls_kN=round(V_sls_kN, 2),
         )
         
     @staticmethod
