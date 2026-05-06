@@ -504,7 +504,7 @@ class DemandExtractor:
             M_const_kNm = 0.0
         else:
             # IRC 6:2017 Table B.2 — ULS partial factor for dead load (adding, basic combination).
-            gamma_dl = IRC6_2017.table_B2(load_type="dead_load", effect="adding", combination="basic")
+            gamma_dl = IRC6_2017.table_B2(load_type="dead_load", qualifier="adding", combination="basic")
             M_const_kNm = (construction_mz * gamma_dl) / 1000.0
 
         # ------------------------------------------------------------------
@@ -636,8 +636,8 @@ class DemandExtractor:
         vehicle_class: str = KEY_VEHICLE[0],            # default Class 70R(W)
     ) -> DemandEnvelope:
         # IRC 6:2017 Table B.2 (ULS basic) — γDL = 1.35, γLL(leading) = 1.50.
-        gamma_dl = IRC6_2017.table_B2(load_type="dead_load", effect="adding", combination="basic")
-        gamma_ll = IRC6_2017.table_B2(load_type="live_load", load_category="leading", combination="basic")
+        gamma_dl = IRC6_2017.table_B2(load_type="dead_load", qualifier="adding", combination="basic")
+        gamma_ll = IRC6_2017.table_B2(load_type="live_load", qualifier="leading", combination="basic")
         # IRC 6:2017 Cl.208.2 / 208.3 — impact factor by vehicle class.
         if vehicle_class in (KEY_VEHICLE[0], KEY_VEHICLE[1]):       # Class 70R(W) / 70R(T)
             impact = 1.0 + IRC6_2017.cl_208_3_impact_factor(span_m)
@@ -1502,8 +1502,8 @@ def _example_demands(config: BridgeConfig) -> DemandEnvelope:
     V_dead_kN = w_dead_total * L_m / 2.0
 
     # IRC 6:2017 Table B.2 (ULS basic) — partial safety factors.
-    gamma_dl = IRC6_2017.table_B2(load_type="dead_load", effect="adding", combination="basic")
-    gamma_ll = IRC6_2017.table_B2(load_type="live_load", load_category="leading", combination="basic")
+    gamma_dl = IRC6_2017.table_B2(load_type="dead_load", qualifier="adding", combination="basic")
+    gamma_ll = IRC6_2017.table_B2(load_type="live_load", qualifier="leading", combination="basic")
     # IRC 6:2017 Cl.208.3 — impact factor for Class 70R(W) wheel loading.
     impact_fraction = IRC6_2017.cl_208_3_impact_factor(L_m)
     impact_multiplier = 1.0 + impact_fraction
