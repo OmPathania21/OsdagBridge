@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import math
+import sys
+
+if sys.stdout.encoding and sys.stdout.encoding.lower() not in ('utf-8', 'utf-16'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, List, Optional, Any
