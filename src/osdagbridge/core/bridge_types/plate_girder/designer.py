@@ -568,9 +568,10 @@ class DemandExtractor:
 
         # Apply composite stiffness correction to post-composite loads (SDL + live).
         # IRC 22:2015 Cl.604.3.2: deflection limits checked at SLS after composite action.
+        # Construction deflection (girder SW + wet concrete) is compensated by pre-camber
+        # and must NOT be added to the service deflection check (L/600 total).
         delta_live_mm  = delta_live_m / stiffness_ratio * 1000.0
-        delta_total_mm = (delta_construction_m
-                          + (delta_sdl_m + delta_live_m) / stiffness_ratio) * 1000.0
+        delta_total_mm = (delta_sdl_m + delta_live_m) / stiffness_ratio * 1000.0
 
         # ------------------------------------------------------------------
         # (4) Fatigue ranges from moving-load envelope
@@ -593,8 +594,10 @@ class DemandExtractor:
                 mz_all = np.concatenate([mz_i, mz_j])
                 mz_all = mz_all[~np.isnan(mz_all)]
                 if mz_all.size:
-                    # Nm → Nmm : ×1000   ;   σ = M/Ze
-                    mz_range_Nmm = (mz_all.max() - mz_all.min()) * 1000.0
+                    # Nm → Nmm : ×1000  ;  σ = M/Ze
+                    # Use max absolute value (not max−min): Mz_i and Mz_j carry
+                    # opposite signs by beam equilibrium, so max−min doubles the range.
+                    mz_range_Nmm = float(np.abs(mz_all).max()) * 1000.0
                     stress_range_MPa = float(mz_range_Nmm / Ze_steel_mm3)
             except (KeyError, ValueError):
                 pass
@@ -612,7 +615,8 @@ class DemandExtractor:
                 vy_all = np.concatenate([vy_i, vy_j])
                 vy_all = vy_all[~np.isnan(vy_all)]
                 if vy_all.size:
-                    vy_range_N = vy_all.max() - vy_all.min()
+                    # Same sign-convention fix: use max absolute value.
+                    vy_range_N = float(np.abs(vy_all).max())
                     shear_range_MPa = float(vy_range_N / Aw_mm2)
             except (KeyError, ValueError):
                 pass
