@@ -630,6 +630,47 @@ class BridgeConfigurationSolver:
             }
 
 
+def composite_section_properties(
+    beff_mm: float,
+    ds_mm: float,
+    h_haunch_mm: float,
+    A_steel_mm2: float,
+    Iz_steel_mm4: float,
+    y_cg_from_bot_mm: float,
+    D_steel_mm: float,
+    n: float,
+) -> dict:
+    """
+    Transformed composite section properties for a steel-concrete composite girder.
+
+    Concrete area is converted to equivalent steel area by dividing by n = Es/Ecm.
+    All dimensions in mm; coordinate origin at bottom of steel section (upward +ve).
+
+    Returns I_comp_mm4, composite NA depths, section moduli, and transformed area.
+    """
+    Ac_trans  = beff_mm * ds_mm / n
+    y_steel   = y_cg_from_bot_mm
+    y_slab    = D_steel_mm + h_haunch_mm + ds_mm / 2.0
+    A_total   = A_steel_mm2 + Ac_trans
+    y_comp_bot = (A_steel_mm2 * y_steel + Ac_trans * y_slab) / A_total
+    I_steel   = Iz_steel_mm4 + A_steel_mm2 * (y_comp_bot - y_steel) ** 2
+    I_conc    = beff_mm * ds_mm ** 3 / (12.0 * n) + Ac_trans * (y_comp_bot - y_slab) ** 2
+    I_comp    = I_steel + I_conc
+    total_depth = D_steel_mm + h_haunch_mm + ds_mm
+    y_top     = total_depth - y_comp_bot
+    y_bot     = y_comp_bot
+    return {
+        "n"                  : round(n, 3),
+        "Ac_trans_mm2"       : round(Ac_trans, 1),
+        "y_comp_from_bot_mm" : round(y_comp_bot, 3),
+        "y_top_mm"           : round(y_top, 3),
+        "y_bot_mm"           : round(y_bot, 3),
+        "I_comp_mm4"         : round(I_comp, 0),
+        "S_top_mm3"          : round(I_comp / y_top, 0),
+        "S_bot_mm3"          : round(I_comp / y_bot, 0),
+    }
+
+
 # Legacy function for backward compatibility
 def preliminary_sizing(dto):
     """Legacy stub - use BridgeConfigurationSolver instead."""

@@ -1699,22 +1699,17 @@ class IRC22_2014:
     def cl_606_4_1_longitudinal_shear_and_spacing(
         V_kN,              # Vertical shear at section (kN)
         beff_mm,           # Effective slab width (mm)
-        xu_mm,             # NA depth from top concrete (mm) -> from IRC22 603.3.1
+        xu_mm,             # elastic composite NA depth from top of slab (mm)
         t_slab_mm,         # slab thickness (mm)
 
-        Qu_kN,             # stud design capacity (kN) -> from IRC22 606.3.1 
+        Qu_kN,             # stud design capacity (kN) -> from IRC22 606.3.1
 
-        # Material 
-        Es_MPa=E_STEEL_MPA,      # MPa (as per IRC 22 clause 604.3)
-        Ecm_MPa=None,      # MPa secant modulus of concrete (can be taken from IRC22 Table III.1)
+        # Material
+        Es_MPa=E_STEEL_MPA,  # MPa (as per IRC 22 clause 604.3)
+        Ecm_MPa=None,        # MPa secant modulus of concrete (IRC22 Table III.1)
 
-        # Steel section inputs
-        As_mm2=0.0,        # steel area (mm2) (from software/user)
-        Is_mm4=0.0,        # steel second moment of area (mm4) (from software/user)
-        ys_mm=None,        # CG distance from top of section to steel CG (mm)
-        D_mm=None,         # total depth of girder (mm) - needed only if ys_mm not given
-
-        Ic_mm4=None,       # composite inertia if already known (optional)
+        Ic_mm4=None,         # composite second moment of area (mm4) — required;
+                             # compute via composite_section_properties() in initial_sizing.py
         studs_per_section=2
     ):
         """
@@ -1723,13 +1718,9 @@ class IRC22_2014:
 
         Longitudinal Shear and Spacing of Shear Connectors (ULS)
 
-        Notes / Corrections:
-        - Ecm is used instead of Ec. (Ecm may be taken from IRC 22 Table III.1)
-        - xu is obtained from IRC 22 Clause 603.3.1 (neutral axis depth)
-        - Composite inertia must include steel inertia Is_mm4 (previously missing)
-        - Qu must come from Clause 606.3.1, not assumed 100 kN
-        - ys_mm is CG distance steel to top of section;
-        default assumption: ys = D/2 + t_slab (if ys not given)
+        Ic_mm4 must be supplied by the caller — use composite_section_properties()
+        from initial_sizing.py (IRC 22:2015 Cl.604.3).
+        Qu must come from Clause 606.3.1.
         """
 
         if Ecm_MPa is None:
@@ -1741,12 +1732,6 @@ class IRC22_2014:
         # Convert kN to N
         V_N = V_kN * 1e3
         Qu_N = Qu_kN * 1e3
-
-        # Default ys if not provided
-        if ys_mm is None:
-            if D_mm is None:
-                raise ValueError("Provide either ys_mm OR D_mm (for default ys = D/2 + t_slab)")
-            ys_mm = (D_mm / 2.0) + t_slab_mm
 
         # Modular ratio (n)
         n = Es_MPa / Ecm_MPa
@@ -1760,15 +1745,12 @@ class IRC22_2014:
         # Distance from NA to centroid of concrete compression block
         Y = xu_mm - (t_eff / 2.0)
 
-        # Composite inertia calculation (if not supplied)
         if Ic_mm4 is None:
-            # Steel inertia about composite NA
-            I_steel = Is_mm4 + As_mm2 * (ys_mm - xu_mm) ** 2
-
-            # Concrete inertia about composite NA (steel-side: divide by n)
-            I_conc = (beff_mm * (t_eff ** 3) / (12.0 * n)) + Aec * (Y ** 2)
-
-            Ic_mm4 = I_steel + I_conc
+            raise ValueError(
+                "Ic_mm4 must be provided. Compute it using "
+                "composite_section_properties() from initial_sizing.py "
+                "(IRC 22:2015 Cl.604.3)."
+            )
 
         # Longitudinal shear per unit length (N/mm)
         VL_N_per_mm = V_N * (Aec * Y) / Ic_mm4

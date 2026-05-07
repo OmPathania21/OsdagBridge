@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 
 from osdagbridge.core.bridge_types.plate_girder.analysis_results import PlateGirderAnalysisResults
+from osdagbridge.core.bridge_types.plate_girder.initial_sizing import composite_section_properties
 from osdagbridge.core.utils.codes.irc22_2015 import IRC22_2014
 from osdagbridge.core.utils.codes.irc6_2017 import IRC6_2017
 from osdagbridge.core.utils.codes.keyfile import (
@@ -753,7 +754,9 @@ class CapacityResults:
     Qr_kN: float = 0.0                                  # Cl.606.3.2 — fatigue stud capacity
     stud_spacing_full_shear_mm: float = 0.0             # Cl.606.4.1.1 — SL2 (full shear)
     stud_spacing_fatigue_mm: float = 0.0                # Cl.606.4.2 — SR (SLS fatigue)
-    stud_spacing_governing_mm: float = 0.0              # min(SL1, SL2, SR)
+    stud_spacing_governing_mm: float = 0.0              # min(SL1, SL2, SR) — required limit
+    stud_spacing_provided_mm: float = 0.0               # actual provided (user input or = governing)
+    stud_spacing_user_provided: bool = False            # True when user explicitly gave a spacing
     stud_detailing_ok: bool = True                      # Cl.606.6 — all detailing checks pass
     source: str = "built-in"
     details: Dict[str, dict] = field(default_factory=dict)
@@ -1003,49 +1006,33 @@ class IRC22CapacityCalculator:
 
     # IRC 22:2015 Cl.604.3 — short-term and long-term composite section properties.
     # These are needed for SLS stress calculations (Cl.604.3.1) and stud spacing (Cl.606.4.1).
-    def compute_composite_section_props(self, beff_mm: float) -> dict:  
+    def compute_composite_section_props(self, beff_mm: float) -> dict:
         """
         Compute transformed composite second moment of area, neutral-axis depths, and
         section moduli for both short-term (n = Es/Ecm) and long-term (2n = Es/(0.5*Ecm))
         modular ratios per IRC 22:2015 Cl.604.3.
 
+        Delegates the geometry to composite_section_properties() from initial_sizing.py.
         Coordinate system: all y-distances measured from BOTTOM of steel section (upward +ve).
         """
         sec, mat, slab = self.sec, self.mat, self.slab
         mod = IRC22_2014.cl_604_3_modular_ratio(Ecm=mat.Ecm, Kc=0.5)
-        n_short = mod["m_short_term"]       # Es/Ecm  ≥ 7.5
-        n_long  = mod["m_long_term"]        # Es/(0.5*Ecm) ≥ 15.0
-        ds       = slab.thickness
-        h_haunch = slab.haunch_depth
-
-        def _props(n: float) -> dict:
-            Ac_trans   = beff_mm * ds / n                                # transformed slab area (steel-side)
-            y_steel    = sec.y_cg_from_bot                               # steel CG from bottom of steel
-            y_slab     = sec.D + h_haunch + ds / 2.0                    # slab CG from bottom of steel
-            A_total    = sec.A_steel + Ac_trans
-            y_comp_bot = (sec.A_steel * y_steel + Ac_trans * y_slab) / A_total  # composite NA from bot steel
-            I_steel    = sec.Iz_steel + sec.A_steel * (y_comp_bot - y_steel) ** 2
-            I_conc     = beff_mm * ds ** 3 / (12.0 * n) + Ac_trans * (y_comp_bot - y_slab) ** 2
-            I_comp     = I_steel + I_conc
-            total_depth = sec.D + h_haunch + ds
-            y_top      = total_depth - y_comp_bot    # distance from top of slab to composite NA
-            y_bot      = y_comp_bot                   # distance from composite NA to bottom of steel
-            return {
-                "n"                    : round(n, 3),
-                "Ac_trans_mm2"         : round(Ac_trans, 1),
-                "y_comp_from_bot_mm"   : round(y_comp_bot, 3),
-                "y_top_mm"             : round(y_top, 3),
-                "y_bot_mm"             : round(y_bot, 3),
-                "I_comp_mm4"           : round(I_comp, 0),
-                "S_top_mm3"            : round(I_comp / y_top, 0),
-                "S_bot_mm3"            : round(I_comp / y_bot, 0),
-            }
+        n_short = mod["m_short_term"]   # Es/Ecm  ≥ 7.5
+        n_long  = mod["m_long_term"]    # Es/(0.5*Ecm) ≥ 15.0
 
         return {
-            "short_term" : _props(n_short),
-            "long_term"  : _props(n_long),
-            "clause"     : mod["clause"],
-            "source"     : "IRC22_2014",
+            "short_term" : composite_section_properties(
+                beff_mm=beff_mm, ds_mm=slab.thickness, h_haunch_mm=slab.haunch_depth,
+                A_steel_mm2=sec.A_steel, Iz_steel_mm4=sec.Iz_steel,
+                y_cg_from_bot_mm=sec.y_cg_from_bot, D_steel_mm=sec.D, n=n_short,
+            ),
+            "long_term"  : composite_section_properties(
+                beff_mm=beff_mm, ds_mm=slab.thickness, h_haunch_mm=slab.haunch_depth,
+                A_steel_mm2=sec.A_steel, Iz_steel_mm4=sec.Iz_steel,
+                y_cg_from_bot_mm=sec.y_cg_from_bot, D_steel_mm=sec.D, n=n_long,
+            ),
+            "clause" : mod["clause"],
+            "source" : "IRC22_2014",
         }
 
     # IRC 22:2015 Cl.604.3.1 — actual SLS stresses from service moment.
@@ -1327,28 +1314,20 @@ class IRC22CapacityCalculator:
 
     # IRC 22:2015 Cl.606.4.1 — required headed-stud spacing at ULS (longitudinal shear).
     def compute_stud_spacing(self, Vu_kN: float, beff_mm: float,
-                              xu_mm: float, Qu_kN: float) -> dict:
-        sec, mat, slab = self.sec, self.mat, self.slab
-        ds, h_haunch = slab.thickness, slab.haunch_depth
+                              xu_mm: float, Qu_kN: float,
+                              Ic_mm4: float = None) -> dict:
+        mat, slab = self.mat, self.slab
         n_studs = self.studs.n_per_section
-
-        # ys_mm: distance from the top of the composite section (top of slab) down to steel CG.
-        # Steel CG from bottom of steel = y_cg_from_bot.
-        # Total composite depth = ds + h_haunch + sec.D  (measured from bottom of steel upward).
-        # Distance from top of composite section to steel CG = total depth − y_cg_from_bot.
-        ys_mm = ds + h_haunch + (sec.D - sec.y_cg_from_bot)
 
         res = IRC22_2014.cl_606_4_1_longitudinal_shear_and_spacing(
             V_kN=Vu_kN,
             beff_mm=beff_mm,
             xu_mm=xu_mm,
-            t_slab_mm=ds,
+            t_slab_mm=slab.thickness,
             Qu_kN=Qu_kN,
             Es_MPa=mat.Es,
             Ecm_MPa=mat.Ecm,
-            As_mm2=sec.A_steel,
-            Is_mm4=sec.Iz_steel,
-            ys_mm=ys_mm,
+            Ic_mm4=Ic_mm4,
             studs_per_section=n_studs,
         )
         return {
@@ -1570,22 +1549,24 @@ class IRC22CapacityCalculator:
         results.Qu_kN = stud_cap["Qu_kN"]
         results.details["stud_capacity"] = stud_cap
 
-        # 12. Stud spacing (ULS)
-        if Vu_kN > 0 and results.xu_mm > 0:
-            stud_sp = self.compute_stud_spacing(
-                Vu_kN, results.beff_mm, results.xu_mm, results.Qu_kN
-            )
-            results.stud_spacing_mm = stud_sp["spacing_mm"]
-            results.VL_N_per_mm = stud_sp["VL_N_per_mm"]
-            results.details["stud_spacing"] = stud_sp
-
-        # 13. Composite section properties (Cl.604.3)
+        # 12. Composite section properties (Cl.604.3) — computed before stud spacing so that
+        # the elastic I_comp can be passed to cl_606_4_1 instead of recomputing it there.
         comp_props = self.compute_composite_section_props(results.beff_mm)
         short = comp_props["short_term"]
         results.I_comp_short_mm4 = short["I_comp_mm4"]
         results.y_top_comp_mm    = short["y_top_mm"]
         results.y_bot_comp_mm    = short["y_bot_mm"]
         results.details["composite_section_props"] = comp_props
+
+        # 13. Stud spacing (ULS) — passes pre-computed I_comp to avoid duplicate calculation.
+        if Vu_kN > 0 and results.xu_mm > 0:
+            stud_sp = self.compute_stud_spacing(
+                Vu_kN, results.beff_mm, results.xu_mm, results.Qu_kN,
+                Ic_mm4=results.I_comp_short_mm4,
+            )
+            results.stud_spacing_mm = stud_sp["spacing_mm"]
+            results.VL_N_per_mm = stud_sp["VL_N_per_mm"]
+            results.details["stud_spacing"] = stud_sp
 
         # 13b. Fatigue stud capacity (Cl.606.3.2).
         stud_fat_cap = self.compute_stud_fatigue_capacity()
@@ -1647,9 +1628,20 @@ class IRC22CapacityCalculator:
         stud_lim = self.compute_stud_spacing_limits(         
             provided_spacing_mm=provided_stud_spacing_mm
         )
-        results.stud_spacing_max_mm = stud_lim["max_spacing_mm"]  
-        results.stud_spacing_min_mm = stud_lim["min_spacing_mm"]  
+        results.stud_spacing_max_mm = stud_lim["max_spacing_mm"]
+        results.stud_spacing_min_mm = stud_lim["min_spacing_mm"]
         results.details["stud_spacing_limits"] = stud_lim
+
+        # Resolve provided spacing now that max_spacing is known.
+        # User-supplied spacing is used as-is.
+        # If not given, default = min(governing_required, max_spacing): geometry always governs
+        # when the loading demand allows wider spacing than the code geometric limit.
+        results.stud_spacing_user_provided = (provided_stud_spacing_mm is not None)
+        results.stud_spacing_provided_mm = (
+            provided_stud_spacing_mm if provided_stud_spacing_mm is not None
+            else min(results.stud_spacing_governing_mm, results.stud_spacing_max_mm)
+                 if results.stud_spacing_governing_mm > 0 else 0.0
+        )
 
         # 17. Transverse shear check (Cl.606.10).
         if results.VL_N_per_mm > 0:
@@ -1763,36 +1755,44 @@ class DCREngine:
                          note=f"λ_LT={c.lambda_LT:.4f}, χ_LT={c.chi_LT:.4f}")
 
         # ── CATEGORY 5: Resistance to Longitudinal & Transverse Shear ─────────
-        # 5a. ULS stud spacing (Cl.606.4.1): SL1 ≤ code geometric max.
-        if c.stud_spacing_mm > 0.0:
-            self._add_check(6, "Stud Spacing ULS (SL1)", "Cl.606.4.1",
-                             c.stud_spacing_mm, c.stud_spacing_max_mm, "mm",
-                             note=f"SL1={c.stud_spacing_mm:.0f} ≤ max={c.stud_spacing_max_mm:.0f} mm")
+        s_prov = c.stud_spacing_provided_mm
+        s_gov  = c.stud_spacing_governing_mm   # required governing spacing (min of SL1, SL2, SR)
 
-        # 5b. Full shear connection spacing (Cl.606.4.1.1): SL2 ≤ code geometric max.
-        if c.stud_spacing_full_shear_mm > 0.0:
-            self._add_check(6, "Stud Spacing Full-Shear (SL2)", "Cl.606.4.1.1",
-                             c.stud_spacing_full_shear_mm, c.stud_spacing_max_mm, "mm",
-                             note=f"SL2={c.stud_spacing_full_shear_mm:.0f} ≤ max={c.stud_spacing_max_mm:.0f} mm")
-
-        # 5c. Fatigue SLS stud spacing (Cl.606.4.2): SR ≤ code geometric max.
-        if c.stud_spacing_fatigue_mm > 0.0:
-            self._add_check(6, "Stud Spacing Fatigue (SR)", "Cl.606.4.2",
-                             c.stud_spacing_fatigue_mm, c.stud_spacing_max_mm, "mm",
-                             note=f"SR={c.stud_spacing_fatigue_mm:.0f} ≤ max={c.stud_spacing_max_mm:.0f} mm")
-
-        # 5d. Governing spacing upper limit (Cl.606.9): Sactual ≤ max.
-        if c.stud_spacing_governing_mm > 0.0:
-            self._add_check(7, "Stud Spacing Governing ≤ Max", "Cl.606.9",
-                             c.stud_spacing_governing_mm, c.stud_spacing_max_mm, "mm",
-                             note=(f"Sact=min(SL1,SL2,SR)={c.stud_spacing_governing_mm:.0f} mm, "
-                                   f"max={c.stud_spacing_max_mm:.0f} mm"))
-
-        # 5e. Governing spacing lower limit (Cl.606.9): Sactual ≥ min (75 mm).
-        if c.stud_spacing_governing_mm > 0.0:
-            self._add_check(7, "Stud Spacing Governing ≥ Min", "Cl.606.9",
-                             c.stud_spacing_min_mm, c.stud_spacing_governing_mm, "mm",
-                             note=f"min={c.stud_spacing_min_mm:.0f} ≤ Sact={c.stud_spacing_governing_mm:.0f} mm")
+        if c.stud_spacing_user_provided:
+            # User gave an actual spacing — verify it against every requirement.
+            # 5a. Provided ≤ SL1 (ULS).
+            if c.stud_spacing_mm > 0.0:
+                self._add_check(6, "Stud Spacing ULS (SL1)", "Cl.606.4.1",
+                                 s_prov, c.stud_spacing_mm, "mm",
+                                 note=f"Sprov={s_prov:.0f} ≤ SL1={c.stud_spacing_mm:.0f} mm")
+            # 5b. Provided ≤ SL2 (full shear).
+            if c.stud_spacing_full_shear_mm > 0.0:
+                self._add_check(6, "Stud Spacing Full-Shear (SL2)", "Cl.606.4.1.1",
+                                 s_prov, c.stud_spacing_full_shear_mm, "mm",
+                                 note=f"Sprov={s_prov:.0f} ≤ SL2={c.stud_spacing_full_shear_mm:.0f} mm")
+            # 5c. Provided ≤ SR (fatigue).
+            if c.stud_spacing_fatigue_mm > 0.0:
+                self._add_check(6, "Stud Spacing Fatigue (SR)", "Cl.606.4.2",
+                                 s_prov, c.stud_spacing_fatigue_mm, "mm",
+                                 note=f"Sprov={s_prov:.0f} ≤ SR={c.stud_spacing_fatigue_mm:.0f} mm")
+            # 5d. Provided ≤ geometric max (Cl.606.9).
+            self._add_check(7, "Stud Spacing ≤ Max (Cl.606.9)", "Cl.606.9",
+                             s_prov, c.stud_spacing_max_mm, "mm",
+                             note=f"Sprov={s_prov:.0f} ≤ max={c.stud_spacing_max_mm:.0f} mm")
+            # 5e. Provided ≥ geometric min (Cl.606.9).
+            self._add_check(7, "Stud Spacing ≥ Min (Cl.606.9)", "Cl.606.9",
+                             c.stud_spacing_min_mm, s_prov, "mm",
+                             note=f"min={c.stud_spacing_min_mm:.0f} ≤ Sprov={s_prov:.0f} mm")
+        elif s_gov > 0.0:
+            # No user spacing — check feasibility only.
+            # SL1/SL2/SR are upper bounds on spacing; max_spacing is also an upper bound.
+            # When s_gov > max_spacing, geometry governs and the design is fine (use max_spacing).
+            # The one meaningful check: the governing effective spacing ≥ min_spacing (75 mm).
+            s_eff = min(s_gov, c.stud_spacing_max_mm)
+            self._add_check(7, "Stud Spacing Feasibility (Cl.606.9)", "Cl.606.9",
+                             c.stud_spacing_min_mm, s_eff, "mm",
+                             note=(f"min={c.stud_spacing_min_mm:.0f} ≤ "
+                                   f"Seff=min(Sreq,max)={s_eff:.0f} mm"))
 
         # 5f. Stud detailing (Cl.606.6): demand=0 (all pass) or 1 (any fail).
         det = c.details.get("stud_detailing", {})
@@ -2201,49 +2201,20 @@ def _composite_stiffness_ratio(config: BridgeConfig) -> float:
     should deflect on the stiffer composite section.  Dividing bare-steel-model
     deflections by this ratio gives the physically correct SLS deflection.
 
-    Formula per IRC 22:2015 Cl.603.2.1 (effective width) and Cl.604.3 (modular
-    ratio).  Returns a value ≥ 1.0; if the composite section cannot be
-    computed (e.g. missing slab data) the ratio defaults to 1.0 (conservative).
+    Uses composite_section_properties() from initial_sizing so the formula lives
+    in one place.  Returns a value ≥ 1.0; defaults to 1.0 (conservative) on error.
     """
     try:
-        sec  = config.section   # mm
-        mat  = config.material
-        slab = config.slab      # mm
-        geo  = config.geometry  # m (span, beam_spacing)
-
-        # IRC 22:2015 Cl.604.3 — short-term modular ratio (Kc=1.0 for live loads);
-        # lower bound 7.5 as required by the clause.
-        n = mat.Es / mat.Ecm
-        n = max(n, 7.5)
-
-        # Effective width (inner beam, simply supported) — IRC 22:2015 Cl.603.2.1.
-        Lo_mm   = geo.span * 1000.0
-        B_mm    = geo.beam_spacing * 1000.0
-        beff_mm = min(Lo_mm / 4.0, B_mm)
-
-        t_slab   = slab.thickness      # mm
-        h_haunch = slab.haunch_depth   # mm
-
-        # Transformed concrete area (steel-equivalent).
-        Ac_trans = beff_mm * t_slab / n  # mm²
-
-        # Steel centroid and concrete slab centroid, both measured from bottom of steel.
-        y_steel = sec.y_cg_from_bot
-        y_conc  = sec.D + h_haunch + t_slab / 2.0
-
-        # Composite neutral axis from bottom of steel.
-        A_total   = sec.A_steel + Ac_trans
-        y_comp_na = (sec.A_steel * y_steel + Ac_trans * y_conc) / A_total
-
-        # Composite Iz about the composite NA (all expressed in steel terms).
-        I_steel_shifted = (sec.Iz_steel
-                           + sec.A_steel * (y_comp_na - y_steel) ** 2)
-        I_conc_trans    = (beff_mm * t_slab ** 3 / (12.0 * n)
-                           + Ac_trans * (y_comp_na - y_conc) ** 2)
-        I_composite = I_steel_shifted + I_conc_trans
-
-        ratio = I_composite / sec.Iz_steel
-        return max(ratio, 1.0)
+        sec, mat, slab, geo = config.section, config.material, config.slab, config.geometry
+        beff_mm = min(geo.span * 1000.0 / 4.0, geo.beam_spacing * 1000.0)
+        mod = IRC22_2014.cl_604_3_modular_ratio(Ecm=mat.Ecm, Kc=0.5)
+        props = composite_section_properties(
+            beff_mm=beff_mm, ds_mm=slab.thickness, h_haunch_mm=slab.haunch_depth,
+            A_steel_mm2=sec.A_steel, Iz_steel_mm4=sec.Iz_steel,
+            y_cg_from_bot_mm=sec.y_cg_from_bot, D_steel_mm=sec.D,
+            n=mod["m_short_term"],
+        )
+        return max(props["I_comp_mm4"] / sec.Iz_steel, 1.0)
 
     except Exception:
         return 1.0  # conservative fallback: no composite correction applied
