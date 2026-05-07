@@ -503,7 +503,7 @@ class PlateGirderBridge:
         model = self.grillage_model
         model.create_self_weight_load()
         model.create_deck_load(slab_thickness_m=deck_t_m)
-        model.create_wearing_course_load(thickness_m=wc_t_m, density_kN_m3=wc_rho)
+        model.create_wearing_course_load(thickness_m=wc_t_m, density_kN_m3=wc_rho, load_factor=1.0)
         model.create_footpath_load()
         model.create_crash_barrier_load(barrier_load_kN_per_m=barrier_load_kN_m)
         model.create_railing_load(railing_load_kN_per_m=railing_load_kN_m)
@@ -594,54 +594,6 @@ class PlateGirderBridge:
         return self.grillage_model.create_moving_vehicle_load_cases(
             start_offset=start_offset,
             span=span,
-        )
-
-    def add_vehicle_load_with_moving_path(
-        self,
-        vehicle_type: str = "CLASS70R",
-        load_case_name: str = "Class 70R",
-        x_coord: float = 0.0,
-        z_coord: float = 0.0,
-        spacing: float = 1.5,
-        span: float | None = None,
-        y_coord: float = 0.0,
-    ) -> dict:
-        """
-        Add a single vehicle (static + moving) at an explicit position.
-
-        Delegates to BridgeGrillageModel.add_vehicle_load_with_moving_path().
-
-        Parameters
-        ----------
-        vehicle_type : str
-            Load model type (e.g. ``'CLASS70R'``, ``'CLASSA'``).
-        load_case_name : str
-            Name given to the static load case.
-        x_coord : float
-            Initial longitudinal position (m) of the vehicle.
-        z_coord : float
-            Transverse position (m) of the vehicle.
-        spacing : float
-            Distance (m) behind bridge start for the moving path origin.
-        span : float, optional
-            Override the bridge span (m).
-        y_coord : float
-            Vertical coordinate (default 0.0).
-
-        Returns
-        -------
-        dict
-            Keys: ``'vehicle'``, ``'static_load_case'``,
-            ``'moving_load_case'``, ``'moving_path'``.
-        """
-        return self.grillage_model.add_vehicle_load_with_moving_path(
-            vehicle_type=vehicle_type,
-            load_case_name=load_case_name,
-            x_coord=x_coord,
-            z_coord=z_coord,
-            spacing=spacing,
-            span=span,
-            y_coord=y_coord,
         )
 
     def analyze(self):

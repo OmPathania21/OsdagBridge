@@ -74,7 +74,7 @@ class BridgeGrillageModel:
         self.model = None
 
         # placeholder for overlay load case created later
-        self.overlay_load_case = None
+        self.wearing_course_load = None
 
         # placeholder for self weight load case created later
         self.self_weight_load_case = None
@@ -430,7 +430,8 @@ class BridgeGrillageModel:
 
     def create_wearing_course_load(self, model=None, edge_clearance=0.0,
                                    thickness_m: float | None = None,
-                                   density_kN_m3: float | None = None):
+                                   density_kN_m3: float | None = None,
+                                   load_factor: float = 1.0):
         """Creates wearing course load (patch).
 
         The magnitude is computed as ``thickness × ρ``. Typical bituminous
@@ -446,7 +447,7 @@ class BridgeGrillageModel:
 
         If `model`, `L` or `w` are not provided they default to the
         instance values `self.model`, `self.L`, `self.w`.
-        The created load case is stored on `self.overlay_load_case`.
+        The created load case is stored on `self.wearing_course_load`.
         """
         model = model or self.model
         if model is None:
@@ -492,12 +493,12 @@ class BridgeGrillageModel:
             point4=p4,
         )
 
-        DL_overlay = og.create_load_case(name="Wearing course self weight")
+        DL_overlay = og.create_load_case(name=f"{load_factor} DW")
         DL_overlay.add_load(overlay)
-        model.add_load_case(DL_overlay)
+        model.add_load_case(DL_overlay, load_factor=load_factor)
 
         # store reference on the instance
-        self.overlay_load_case = DL_overlay
+        self.wearing_course_load = DL_overlay
 
         return DL_overlay
 
@@ -828,7 +829,6 @@ class BridgeGrillageModel:
         _DL_ATTRS = [
             "self_weight_load_case",
             "deck_load_case",
-            "overlay_load_case",
             "footpath_load_case",
             "crash_barrier_load_case",
             "railing_load_case",
@@ -1191,94 +1191,6 @@ class BridgeGrillageModel:
 
         return self.moving_load_cases_list
 
-
-    def add_vehicle_load_with_moving_path(
-            self,
-            model=None,
-            vehicle_type="CLASS70R",
-            load_case_name="Class 70R",
-            x_coord=0.0,
-            z_coord=0.0,
-            spacing=1.5,
-            span=None,
-            y_coord=0.0,
-    ):
-        """
-        Adds a vehicle load (static + moving) to the grillage model.
-
-        Parameters
-        ----------
-        model : ospgrillage.grillage.Grillage
-            Grillage model
-        vehicle_type : str
-            Load model type (e.g. 'M1600', 'CLASS70R')
-        load_case_name : str
-            Name of the static load case
-        x_coord : float
-            Initial longitudinal position of vehicle
-        z_coord : float
-            Transverse position of vehicle
-        spacing : float
-            Vehicle spacing for moving load start position
-        span : float
-            Bridge span length
-        y_coord : float, optional
-            Vertical coordinate (default = 0.0)
-
-        Returns
-        -------
-        dict
-            Dictionary containing:
-            - 'vehicle'
-            - 'static_load_case'
-            - 'moving_load_case'
-            - 'moving_path'
-        """
-        model = model or self.model
-        if model is None:
-            raise ValueError("Model is not available. Create model before adding loads.")
-
-        span = span or self.L
-
-        # -----------------------------
-        # Create vehicle
-        # -----------------------------
-        vehicle_generator = og.create_load_model(model_type=vehicle_type)
-        vehicle = vehicle_generator.create()
-
-        # Set global position
-        vehicle.set_global_coord(og.Point(x_coord, y_coord, z_coord))
-
-        # -----------------------------
-        # Static load case
-        # -----------------------------
-        static_lc = og.create_load_case(name=load_case_name)
-        static_lc.add_load(vehicle)
-        model.add_load_case(static_lc)
-
-        # -----------------------------
-        # Moving load path
-        # -----------------------------
-        start = og.create_point(x=-spacing, y=0, z=0)
-        end = og.Point(span, 0, 0)
-        path = og.create_moving_path(start_point=start, end_point=end)
-
-        # -----------------------------
-        # Moving load case
-        # -----------------------------
-        moving_lc_name = f"Moving {load_case_name}"
-        moving_lc = og.create_moving_load(name=moving_lc_name)
-        moving_lc.set_path(path)
-        moving_lc.add_load(vehicle)
-
-        model.add_load_case(moving_lc)
-
-        return {
-            "vehicle": vehicle,
-            "static_load_case": static_lc,
-            "moving_load_case": moving_lc,
-            "moving_path": path,
-        }
 
     def analyze(self, model=None):
 
