@@ -208,13 +208,14 @@ def _governing_vehicle(carriageway_width_m: float) -> str:
 def _max_wheel_load_kN(vehicle_class: str) -> float:
     """
     Maximum single wheel load (kN) for the governing vehicle per IRC 6:2017.
-    wheel_loads are per-axle totals; each axle splits equally between 2 wheels.
+    wheel_loads are per-axle totals stored in Newtons (IRC6 unit system uses
+    t = kN*g = 9810 N); divide by 2 for per-wheel and by 1000 to get kN.
     """
     if vehicle_class in (KEY_VEHICLE[0], KEY_VEHICLE[1]):  # Class 70R
         axle_loads = IRC6_2017.cl_204_1_Class70R_vehicle_wheel()["wheel_loads"]
     else:                                                   # Class A / B
         axle_loads = IRC6_2017.cl_204_1_ClassA_vehicle()["wheel_loads"]
-    return max(axle_loads) / 2.0      # per-wheel load (kN)
+    return max(axle_loads) / 2.0 / 1000.0   # N → kN, axle → per-wheel
 
 
 def _wheel_contact_width_m(vehicle_class: str) -> float:
@@ -317,6 +318,12 @@ def design_deck_slab(bridge) -> dict:
                      _min_steel_mm2(fctm, fy, d_bot_mm))
     dia_bot, spc_bot, As_bot = _pick_rebar(As_req_bot)
     d_bot_mm = deck_t_mm - cover_bot_mm - dia_bot / 2.0   # refined with actual bar
+    # Second pass — recheck with refined d to guard against d decreasing for larger bars
+    As_req_bot2 = max(_required_steel_mm2(M_ULS_bot_kNm, fy, d_bot_mm, fck),
+                      _min_steel_mm2(fctm, fy, d_bot_mm))
+    if As_req_bot2 > As_bot:
+        dia_bot, spc_bot, As_bot = _pick_rebar(As_req_bot2)
+        d_bot_mm = deck_t_mm - cover_bot_mm - dia_bot / 2.0
 
     # ── 8. design top (hogging) reinforcement ────────────────────────────────
     d_top_mm = deck_t_mm - cover_top_mm - 6.0
@@ -324,6 +331,11 @@ def design_deck_slab(bridge) -> dict:
                      _min_steel_mm2(fctm, fy, d_top_mm))
     dia_top, spc_top, As_top = _pick_rebar(As_req_top)
     d_top_mm = deck_t_mm - cover_top_mm - dia_top / 2.0
+    As_req_top2 = max(_required_steel_mm2(M_ULS_top_kNm, fy, d_top_mm, fck),
+                      _min_steel_mm2(fctm, fy, d_top_mm))
+    if As_req_top2 > As_top:
+        dia_top, spc_top, As_top = _pick_rebar(As_req_top2)
+        d_top_mm = deck_t_mm - cover_top_mm - dia_top / 2.0
 
     # ── 9. moment capacity check ─────────────────────────────────────────────
     Mu_bot = _moment_capacity_kNm(fy, As_bot, d_bot_mm, fck)
@@ -376,6 +388,12 @@ def design_deck_slab(bridge) -> dict:
                         _min_steel_mm2(fctm, fy, d_oh_mm))
         dia_oh, spc_oh, As_oh = _pick_rebar(As_req_oh)
         d_oh_mm = deck_t_mm - cover_top_mm - dia_oh / 2.0
+        # Second pass — recheck with refined d (larger bars reduce d below d_init)
+        As_req_oh2 = max(_required_steel_mm2(M_ULS_oh, fy, d_oh_mm, fck),
+                         _min_steel_mm2(fctm, fy, d_oh_mm))
+        if As_req_oh2 > As_oh:
+            dia_oh, spc_oh, As_oh = _pick_rebar(As_req_oh2)
+            d_oh_mm = deck_t_mm - cover_top_mm - dia_oh / 2.0
 
         Mu_oh = _moment_capacity_kNm(fy, As_oh, d_oh_mm, fck)
         oh_ok = Mu_oh >= M_ULS_oh
@@ -448,6 +466,16 @@ def design_deck_slab(bridge) -> dict:
         ]
     else:
         overhang_sls_lines = []
+
+    # ── utilization ratios (demand / capacity) ────────────────────────────────
+    ur_bot_uls = M_ULS_bot_kNm / Mu_bot if Mu_bot > 0 else 9.999
+    ur_top_uls = M_ULS_top_kNm / Mu_top if Mu_top > 0 else 9.999
+    ur_bot_sls_c = sc_bot["sigma_c"] / sc_bot["sc_lim"]
+    ur_bot_sls_s = sc_bot["sigma_s"] / sc_bot["ss_lim"]
+    ur_top_sls_c = sc_top["sigma_c"] / sc_top["sc_lim"]
+    ur_top_sls_s = sc_top["sigma_s"] / sc_top["ss_lim"]
+    ur_bot_crack = cw_bot["wk"] / cw_bot["wk_lim"]
+    ur_top_crack = cw_top["wk"] / cw_top["wk_lim"]
 
     sls_lines = [
         "",
@@ -556,6 +584,15 @@ def design_deck_slab(bridge) -> dict:
         "rebar_bottom_area"        : f"{As_bot:.0f}",
         # design check
         "deck_design_check"        : design_check_text,
+        # utilization ratios
+        "ur_bot_uls"   : round(ur_bot_uls, 3),
+        "ur_top_uls"   : round(ur_top_uls, 3),
+        "ur_bot_sls_c" : round(ur_bot_sls_c, 3),
+        "ur_bot_sls_s" : round(ur_bot_sls_s, 3),
+        "ur_top_sls_c" : round(ur_top_sls_c, 3),
+        "ur_top_sls_s" : round(ur_top_sls_s, 3),
+        "ur_bot_crack" : round(ur_bot_crack, 3),
+        "ur_top_crack" : round(ur_top_crack, 3),
     }
     if overhang_m > 0.01:
         result.update({
@@ -564,5 +601,9 @@ def design_deck_slab(bridge) -> dict:
             "rebar_overhang_spacing" : f"{spc_oh:.0f}",
             "rebar_overhang_cover"   : f"{cover_top_mm:.0f}",
             "rebar_overhang_area"    : f"{As_oh:.0f}",
+            "ur_oh_uls"   : round(M_ULS_oh / Mu_oh if Mu_oh > 0 else 9.999, 3),
+            "ur_oh_sls_c" : round(sc_oh["sigma_c"] / sc_oh["sc_lim"], 3),
+            "ur_oh_sls_s" : round(sc_oh["sigma_s"] / sc_oh["ss_lim"], 3),
+            "ur_oh_crack" : round(cw_oh["wk"] / cw_oh["wk_lim"], 3),
         })
     return result
