@@ -674,9 +674,19 @@ class PlateGirderBridge:
     # ─────────────────────────────────────────────────────────────────────────
 
     def get_results_dataset(self):
-        """Return the xarray Dataset of analysis results."""
+        """Return the xarray Dataset of analysis results.
+
+        After create_governing_ll_load_case() runs a second analysis pass, the
+        raw model.get_results() contains duplicate Loadcase entries.  The
+        deduplicated copy is cached on the grillage model and returned here so
+        that all downstream consumers (plot widgets, result handlers) always
+        see a clean, uniquely-indexed dataset.
+        """
         if self.grillage_model.model is None:
             return None
+        cached = getattr(self.grillage_model, '_deduplicated_results', None)
+        if cached is not None:
+            return cached
         return self.grillage_model.model.get_results()
 
     # ─────────────────────────────────────────────────────────────────────────

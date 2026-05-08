@@ -1256,6 +1256,9 @@ class BridgeGrillageModel:
         if len(unique_idx) < len(lc_vals):
             ds = ds.isel(Loadcase=unique_idx)
 
+        # Cache the clean dataset so get_results_dataset() returns it instead
+        # of calling model.get_results() which always has duplicates.
+        self._deduplicated_results = ds
         return ds
 
     def analyze(self, model=None):
