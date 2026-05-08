@@ -241,6 +241,29 @@ class FatigueConfig:
 
 
 @dataclass
+class StiffenerConfig:
+    # Stiffener inputs for IRC 24-2010 Cl.509.7 / IS 800:2007 Cl.8.7 checks.
+    # Set c_mm > 0 to enable intermediate stiffener checks; bs_R_kN > 0 for bearing stiffener checks.
+
+    # ── Intermediate transverse stiffener (Cl.509.7.2 / IS 800 Cl.8.7.2) ─────────────
+    c_mm: float = 0.0           # panel spacing between adjacent stiffeners (mm)
+    tq_mm: float = 0.0          # stiffener plate thickness (mm)
+    H_mm: float = 0.0           # outstanding leg height (mm)
+    n_sides: int = 1             # 1 = one-sided, 2 = two-sided
+    Iys_mm4: float = 0.0        # provided MI (mm⁴); 0 = auto-compute from flat-plate formula
+    V_kN: float = 0.0           # design shear at stiffener location (kN)
+    Vcr_kN: float = 0.0         # critical shear resistance at that location (kN)
+
+    # ── Bearing stiffener (Cl.509.7.3 / IS 800 Cl.8.7.3) ──────────────────────────────
+    bs_tq_mm: float = 0.0       # stiffener plate thickness (mm)
+    bs_H_mm: float = 0.0        # outstanding leg height (mm)
+    bs_n_plates: int = 2        # number of stiffener plates bearing on flange
+    bs_R_kN: float = 0.0        # design reaction / concentrated load (kN)
+    bs_b1_mm: float = 0.0       # stiff bearing length on flange (0 = auto via IS 800 Cl.8.7.1.3)
+    bs_Iys_mm4: float = 0.0     # provided MI (mm⁴) for bearing stiffener; 0 = auto-compute
+
+
+@dataclass
 class BridgeConfig:
     # Single aggregate input consumed by DemandExtractor / IRC22CapacityCalculator / DCREngine / Report.
     material: SteelProperties
@@ -249,6 +272,7 @@ class BridgeConfig:
     geometry: GeometryConfig
     studs: ShearStudConfig = field(default_factory=ShearStudConfig)
     fatigue: FatigueConfig = field(default_factory=FatigueConfig)
+    stiffener: Optional[StiffenerConfig] = None            # None = stiffener checks skipped
 
     @classmethod
     def from_plate_girder_bridge(cls, bridge: Any) -> "BridgeConfig":
@@ -760,6 +784,20 @@ class CapacityResults:
     stud_detailing_ok: bool = True                      # Cl.606.6 — all detailing checks pass
     source: str = "built-in"
     details: Dict[str, dict] = field(default_factory=dict)
+
+    # ── Intermediate stiffener (IRC 24-2010 Cl.509.7.2 / IS 800 Cl.8.7.2) ──────────
+    is_H_limit_mm: float = 0.0          # Cl.509.7.2.4 — limiting outstanding leg (14tqε / 20tqε)
+    is_Iys_min_mm4: float = 0.0         # Cl.509.7.2.4 — minimum required MI
+    is_Iys_prov_mm4: float = 0.0        # Cl.509.7.2.4 — provided MI
+    is_Fqd_kN: float = 0.0             # Cl.509.7.2.5 — stiffener design buckling resistance
+    is_Fq_kN: float = 0.0              # Cl.509.7.2.5 — demand = max((V − Vcr)/γm0, 0)
+
+    # ── Bearing stiffener (IRC 24-2010 Cl.509.7.3 / IS 800 Cl.8.7.3) ───────────────
+    bs_Fcdw_wb_kN: float = 0.0          # Cl.509.7.3.1 — web bearing zone buckling resistance
+    bs_Fcdw_lc_kN: float = 0.0          # Cl.509.7.3.2 — local crushing resistance
+    bs_Fpsd_kN: float = 0.0             # Cl.509.7.3.3 — bearing contact resistance
+    bs_Fcd_kN: float = 0.0             # Cl.509.7.2.5 — stiffener column buckling resistance
+    bs_R_kN: float = 0.0               # reaction demand
 
 
 class IRC22CapacityCalculator:
@@ -1467,6 +1505,245 @@ class IRC22CapacityCalculator:
             "source"                     : "IRC22_2014",
         }
 
+    # ==============================================================================
+    # STIFFENER CHECKS — IRC 24-2010 Cl.509.7 / IS 800:2007 Cl.8.7
+    # TODO: Move these functions to IS800_2007 when ready.
+    # ==============================================================================
+
+    def compute_intermediate_stiffener(self) -> dict:
+        """Intermediate transverse stiffener checks per IRC 24-2010 Cl.509.7.2 / IS 800 Cl.8.7.2.
+
+        Always computes geometry-based required dimensions (H_max, tq_req, c_req).
+        Runs verification checks only when c_mm / tq_mm / H_mm are all provided.
+        """
+        sec, mat = self.sec, self.mat
+        d    = sec.dw
+        tw   = sec.tw
+        fy   = mat.fy
+        E    = mat.Es
+        gm0  = mat.gamma_m0
+        eps  = math.sqrt(250.0 / fy)
+
+        # Physical outstand limit — stiffener must fit between web and flange edge (both sides)
+        H_max = (min(sec.bf_top, sec.bf_bot) - tw) / 2.0
+
+        # Minimum tq to satisfy the outstanding-leg limit at H_max
+        tq_req_1sided = H_max / (14.0 * eps) if eps > 0 else 0.0
+        tq_req_2sided = H_max / (20.0 * eps) if eps > 0 else 0.0
+
+        cfg = self.cfg.stiffener
+        full_check = cfg and cfg.c_mm > 0 and cfg.tq_mm > 0 and cfg.H_mm > 0
+
+        if not full_check:
+            # Design guidance: compute required spacing for the minimum viable plate
+            # Assume one-sided (conservative), tq = tq_req_1sided, H = H_max
+            tq_des  = tq_req_1sided
+            Iys_des = tq_des * H_max**3 / 3.0   # flat-plate one-sided, about face of web
+            # Minimum c such that Iys_min(c) ≤ Iys_des (from 1.5·d³·tw³/c² ≤ Iys_des)
+            c_req = (math.sqrt(1.5 * d**3 * tw**3 / Iys_des)
+                     if Iys_des > 0 else 0.0)
+            # If c_req/d ≥ √2 the simpler formula 0.75·d·tw³ governs and is always satisfiable
+            if c_req > 0 and (c_req / d) >= math.sqrt(2.0):
+                c_req = 0.0
+            return {
+                "design_guidance"    : True,
+                "H_max_mm"           : round(H_max, 1),
+                "tq_req_1sided_mm"   : round(tq_req_1sided, 2),
+                "tq_req_2sided_mm"   : round(tq_req_2sided, 2),
+                "c_req_min_mm"       : round(c_req, 1),
+                "Iys_at_Hmax_mm4"    : round(Iys_des, 1),
+            }
+
+        # ── Full verification ────────────────────────────────────────────────────────
+        c       = cfg.c_mm
+        tq      = cfg.tq_mm
+        H       = cfg.H_mm
+        n_sides = cfg.n_sides
+
+        # Cl.509.7.2.4 — outstanding leg limit
+        H_limit = (14.0 if n_sides == 1 else 20.0) * tq * eps
+        # Minimum tq needed for the provided H to satisfy the leg limit
+        tq_req_provided = H / ((14.0 if n_sides == 1 else 20.0) * eps)
+
+        # Cl.509.7.2.4 — minimum MI
+        if (c / d) < math.sqrt(2.0):
+            Iys_min     = 1.5 * d**3 * tw**3 / c**2
+            iys_formula = "1.5·d³·tw³/c²"
+        else:
+            Iys_min     = 0.75 * d * tw**3
+            iys_formula = "0.75·d·tw³"
+
+        # Provided MI — auto-compute from flat-plate formula when not explicitly given
+        if cfg.Iys_mm4 > 0:
+            Iys_prov = cfg.Iys_mm4
+        elif n_sides == 1:
+            Iys_prov = tq * H**3 / 3.0
+        else:
+            Iys_prov = 2.0 * (tq * H**3 / 12.0 + tq * H * (tw / 2.0 + H / 2.0)**2)
+
+        # Cl.509.7.2.5 — buckling check
+        h_w_strip = min(20.0 * tw, c / 2.0)
+        Aeff      = n_sides * H * tq + n_sides * h_w_strip * tw
+        Astiff    = n_sides * H * tq
+
+        rys  = math.sqrt(Iys_prov / Aeff) if Aeff > 0 else 0.0
+        KL   = 0.7 * d
+        KL_r = KL / rys if rys > 0 else 1e9
+
+        fcd    = IS800_2007.cl_7_1_2_1_design_compressisive_stress_plategirder(fy, gm0, KL_r, E)
+        Fqd_kN = fcd * Astiff / 1000.0
+        Fq_kN  = max((cfg.V_kN - cfg.Vcr_kN) / gm0, 0.0)
+
+        return {
+            "design_guidance"    : False,
+            "H_max_mm"           : round(H_max, 1),
+            "tq_req_1sided_mm"   : round(tq_req_1sided, 2),
+            "tq_req_2sided_mm"   : round(tq_req_2sided, 2),
+            "H_mm"               : H,
+            "H_limit_mm"         : round(H_limit, 3),
+            "H_limit_type"       : f"{'14' if n_sides == 1 else '20'}·tq·ε",
+            "tq_req_provided_mm" : round(tq_req_provided, 2),
+            "Iys_prov_mm4"       : round(Iys_prov, 3),
+            "Iys_min_mm4"        : round(Iys_min, 3),
+            "iys_formula"        : iys_formula,
+            "h_w_strip_mm"       : round(h_w_strip, 3),
+            "Aeff_mm2"           : round(Aeff, 3),
+            "Astiff_mm2"         : round(Astiff, 3),
+            "rys_mm"             : round(rys, 3),
+            "KL_mm"              : round(KL, 3),
+            "KL_r"               : round(KL_r, 3),
+            "alpha"              : 0.49,
+            "fcd_MPa"            : round(fcd, 3),
+            "Fqd_kN"             : round(Fqd_kN, 3),
+            "Fq_kN"              : round(Fq_kN, 3),
+        }
+
+    def compute_bearing_stiffener(self) -> dict:
+        """Bearing stiffener checks per IRC 24-2010 Cl.509.7.3 / IS 800 Cl.8.7.3.
+
+        Requires bs_R_kN > 0 (reaction known).
+        Runs full verification when bs_tq_mm and bs_H_mm are also provided;
+        otherwise returns design guidance (required tq) for the given R.
+        """
+        cfg = self.cfg.stiffener
+        if not cfg or cfg.bs_R_kN <= 0:
+            return {"skipped": True}
+
+        sec, mat = self.sec, self.mat
+        d    = sec.dw
+        tw   = sec.tw
+        fy   = mat.fy
+        E    = mat.Es
+        gm0  = mat.gamma_m0
+        eps  = math.sqrt(250.0 / fy)
+
+        R        = cfg.bs_R_kN
+        n_plates = cfg.bs_n_plates or 2
+
+        # Physical outstand limit (same formula as intermediate stiffener)
+        H_max = (min(sec.bf_top, sec.bf_bot) - tw) / 2.0
+
+        full_check = cfg.bs_tq_mm > 0 and cfg.bs_H_mm > 0
+
+        if not full_check:
+            # Design guidance: minimum tq from bearing contact check at H_max
+            fcd_y = fy / gm0
+            tq_req_bearing = (R * 1000.0 / (fcd_y * n_plates * H_max)
+                              if H_max > 0 and fcd_y > 0 else 0.0)
+            # Minimum tq for outstanding leg at H_max (one-sided limit, conservative)
+            tq_req_leg = H_max / (14.0 * eps) if eps > 0 else 0.0
+            tq_req = max(tq_req_bearing, tq_req_leg)
+            return {
+                "design_guidance"   : True,
+                "H_max_mm"          : round(H_max, 1),
+                "tq_req_bearing_mm" : round(tq_req_bearing, 2),
+                "tq_req_leg_mm"     : round(tq_req_leg, 2),
+                "tq_req_mm"         : round(tq_req, 2),
+                "n_plates"          : n_plates,
+                "R_kN"              : R,
+            }
+
+        # ── Full verification ────────────────────────────────────────────────────────
+        tq = cfg.bs_tq_mm
+        H  = cfg.bs_H_mm
+
+        # b1: stiff bearing length — user-provided or auto from IS 800 Cl.8.7.1.3
+        if cfg.bs_b1_mm > 0:
+            b1 = cfg.bs_b1_mm
+        else:
+            b1 = IS800_2007.cl_8_7_1_3_stiff_bearing_length(R, tw, sec.tf_top, 0.0, fy)
+
+        # Bearing stiffener MI — auto-compute (two-sided flat plates about CL of web) if not given
+        if cfg.bs_Iys_mm4 > 0:
+            Iys = cfg.bs_Iys_mm4
+        else:
+            Iys = 2.0 * (tq * H**3 / 12.0 + tq * H * (tw / 2.0 + H / 2.0)**2)
+
+        KL = 0.7 * d
+
+        # Cl.509.7.3.1 / IS 800 8.7.3.1 — Web buckling check
+        # Checks if the unstiffened web bearing zone can carry R (Euler stress, no imperfection reduction).
+        n1      = d / 2.0
+        A_wb    = (b1 + n1) * tw
+        rys_wb  = math.sqrt(Iys / A_wb) if A_wb > 0 else 0.0
+        KL_r_wb = KL / rys_wb if rys_wb > 0 else 1e9
+        fcc_wb  = (math.pi**2 * E) / KL_r_wb**2
+        Fcdw_wb_kN = fcc_wb * A_wb / 1000.0
+
+        # Cl.509.7.3.2 / IS 800 8.7.3.2 — Local crushing check
+        n2         = 2.5 * sec.tf_top
+        A_lc       = (b1 + n2) * tw
+        fcd_y      = fy / gm0
+        Fcdw_lc_kN = fcd_y * A_lc / 1000.0
+
+        # Cl.509.7.3.3 / IS 800 8.7.3.3 — Bearing contact check
+        Aq      = n_plates * H * tq
+        Fpsd_kN = fcd_y * Aq / 1000.0
+        # Minimum tq required for the bearing check to pass
+        tq_req_bearing = (R * 1000.0 / (fcd_y * n_plates * H) if H > 0 and fcd_y > 0 else 0.0)
+
+        # Cl.509.7.1.5 / 509.7.2.5 — Stiffener column buckling check
+        h_w_strip = 20.0 * tw
+        Aeff_bs   = 2 * H * tq + 2 * h_w_strip * tw
+        rys_bs    = math.sqrt(Iys / Aeff_bs) if Aeff_bs > 0 else 0.0
+        KL_r_bs   = KL / rys_bs if rys_bs > 0 else 1e9
+
+        fcd_bs = IS800_2007.cl_7_1_2_1_design_compressisive_stress_plategirder(fy, gm0, KL_r_bs, E)
+        Fcd_kN = fcd_bs * Aeff_bs / 1000.0
+
+        # Outstanding leg limit for the provided plate
+        H_limit_bs = 14.0 * tq * eps        # one-sided (conservative); bearing stiffeners are two-sided
+        tq_req_leg = H / (14.0 * eps) if eps > 0 else 0.0
+
+        return {
+            "design_guidance"   : False,
+            "H_max_mm"          : round(H_max, 1),
+            "tq_req_bearing_mm" : round(tq_req_bearing, 2),
+            "tq_req_leg_mm"     : round(tq_req_leg, 2),
+            "b1_mm"             : round(b1, 3),
+            "n1_mm"             : round(n1, 3),
+            "A_wb_mm2"          : round(A_wb, 3),
+            "rys_wb_mm"         : round(rys_wb, 3),
+            "KL_mm"             : round(KL, 3),
+            "fcc_wb_MPa"        : round(fcc_wb, 3),
+            "Fcdw_wb_kN"        : round(Fcdw_wb_kN, 3),
+            "n2_mm"             : round(n2, 3),
+            "A_lc_mm2"          : round(A_lc, 3),
+            "fcd_y_MPa"         : round(fcd_y, 3),
+            "Fcdw_lc_kN"        : round(Fcdw_lc_kN, 3),
+            "n_plates"          : n_plates,
+            "Aq_mm2"            : round(Aq, 3),
+            "Fpsd_kN"           : round(Fpsd_kN, 3),
+            "h_w_strip_mm"      : round(h_w_strip, 3),
+            "Aeff_bs_mm2"       : round(Aeff_bs, 3),
+            "rys_bs_mm"         : round(rys_bs, 3),
+            "KL_r_bs"           : round(KL_r_bs, 3),
+            "fcd_bs_MPa"        : round(fcd_bs, 3),
+            "H_limit_bs_mm"     : round(H_limit_bs, 3),
+            "Fcd_kN"            : round(Fcd_kN, 3),
+            "R_kN"              : R,
+        }
+
     # Orchestrator — runs every IRC 22:2015 clause computation into one CapacityResults.
     def compute_all(
         self,
@@ -1650,6 +1927,30 @@ class IRC22CapacityCalculator:
             results.Ast_required_cm2_per_m = trans_shear["min_Ast_required_cm2_per_m"]
             results.Ast_provided_cm2_per_m = trans_shear["Ast_provided_cm2_per_m"]
             results.details["transverse_shear"] = trans_shear
+
+        # 18. Intermediate stiffener checks (IRC 24-2010 Cl.509.7.2 / IS 800 Cl.8.7.2).
+        # Opt-in by setting cfg.stiffener to any StiffenerConfig. Runs guidance when c/tq/H not given.
+        if self.cfg.stiffener is not None:
+            is_res = self.compute_intermediate_stiffener()
+            results.details["intermediate_stiffener"] = is_res
+            if not is_res.get("skipped") and not is_res.get("design_guidance"):
+                results.is_H_limit_mm   = is_res["H_limit_mm"]
+                results.is_Iys_min_mm4  = is_res["Iys_min_mm4"]
+                results.is_Iys_prov_mm4 = is_res["Iys_prov_mm4"]
+                results.is_Fqd_kN       = is_res["Fqd_kN"]
+                results.is_Fq_kN        = is_res["Fq_kN"]
+
+        # 19. Bearing stiffener checks (IRC 24-2010 Cl.509.7.3 / IS 800 Cl.8.7.3).
+        # Requires bs_R_kN > 0. Runs guidance when tq/H not given.
+        if self.cfg.stiffener is not None and self.cfg.stiffener.bs_R_kN > 0:
+            bs_res = self.compute_bearing_stiffener()
+            results.details["bearing_stiffener"] = bs_res
+            if not bs_res.get("skipped") and not bs_res.get("design_guidance"):
+                results.bs_Fcdw_wb_kN = bs_res["Fcdw_wb_kN"]
+                results.bs_Fcdw_lc_kN = bs_res["Fcdw_lc_kN"]
+                results.bs_Fpsd_kN    = bs_res["Fpsd_kN"]
+                results.bs_Fcd_kN     = bs_res["Fcd_kN"]
+                results.bs_R_kN       = bs_res["R_kN"]
 
         return results
 
@@ -1852,7 +2153,7 @@ class DCREngine:
 
         # ── CATEGORY 5 (cont.): Transverse Shear (Cl.606.10)
         ts = c.details.get("transverse_shear", {})
-        if ts: 
+        if ts:
             self._add_check(16, "Transverse Shear (VL vs Vcap)", "Cl.606.10",
                             ts["VL_N_per_mm"], ts["governing_capacity_kN_per_m"], "kN/m",
                             note=f"L={ts['L_shear_plane_mm']:.0f} mm")
@@ -1861,6 +2162,74 @@ class DCREngine:
                             c.Ast_required_cm2_per_m, c.Ast_provided_cm2_per_m, "cm²/m",
                             note=(f"Ast_req={c.Ast_required_cm2_per_m:.3f}, "
                                   f"Ast_prov={c.Ast_provided_cm2_per_m:.3f} cm²/m"))
+
+        # ── IRC 24-2010 STIFFENER CHECKS (Cl.509.7 / IS 800 Cl.8.7) ─────────────────
+        # Intermediate transverse stiffener
+        is_det = c.details.get("intermediate_stiffener", {})
+        if is_det and not is_det.get("skipped"):
+            if is_det.get("design_guidance"):
+                # No dimensions provided — report required values as a single guidance row
+                _note = (f"H_max={(is_det['H_max_mm']):.0f} mm = (bf_min−tw)/2; "
+                         f"tq_req(1-sided)≥{is_det['tq_req_1sided_mm']:.1f} mm, "
+                         f"tq_req(2-sided)≥{is_det['tq_req_2sided_mm']:.1f} mm")
+                if is_det["c_req_min_mm"] > 0:
+                    _note += f"; c_req≥{is_det['c_req_min_mm']:.0f} mm (from Iys check)"
+                self._add_check(20, "Int.Stiff: Sizing Required", "Cl.509.7.2.4",
+                                 0.0, 1.0, "–", note=_note)
+            else:
+                # Full verification — three separate checks
+                # Cl.509.7.2.4 — outstanding leg: H ≤ H_limit
+                self._add_check(20, "Int.Stiff: Leg ≤ H_limit", "Cl.509.7.2.4",
+                                 is_det["H_mm"], is_det["H_limit_mm"], "mm",
+                                 note=(f"{is_det['H_limit_type']}; "
+                                       f"H_max={is_det['H_max_mm']:.0f} mm; "
+                                       f"tq_req≥{is_det['tq_req_provided_mm']:.1f} mm"))
+                # Cl.509.7.2.4 — MI: Iys_prov ≥ Iys_min
+                self._add_check(20, "Int.Stiff: Iys ≥ Iys_min", "Cl.509.7.2.4",
+                                 is_det["Iys_min_mm4"], is_det["Iys_prov_mm4"], "mm⁴",
+                                 note=f"min={is_det['iys_formula']}")
+                # Cl.509.7.2.5 — buckling (only when shear demand is positive)
+                if is_det["Fq_kN"] > 0:
+                    self._add_check(20, "Int.Stiff: Buckling Fqd≥Fq", "Cl.509.7.2.5",
+                                     is_det["Fq_kN"], is_det["Fqd_kN"], "kN",
+                                     note=(f"fcd={is_det['fcd_MPa']:.2f} MPa, α=0.49, "
+                                           f"KL/r={is_det['KL_r']:.2f}"))
+
+        # Bearing stiffener
+        bs_det = c.details.get("bearing_stiffener", {})
+        if bs_det and not bs_det.get("skipped"):
+            R = bs_det["R_kN"]
+            if bs_det.get("design_guidance"):
+                # No dimensions provided — report required tq as a single guidance row
+                self._add_check(21, "Brg.Stiff: Sizing Required", "Cl.509.7.3.3",
+                                 0.0, 1.0, "–",
+                                 note=(f"R={R:.1f} kN; H_max={bs_det['H_max_mm']:.0f} mm; "
+                                       f"tq_req(bearing)≥{bs_det['tq_req_bearing_mm']:.1f} mm, "
+                                       f"tq_req(leg)≥{bs_det['tq_req_leg_mm']:.1f} mm "
+                                       f"(n_plates={bs_det['n_plates']})"))
+            else:
+                # Full verification — four separate checks
+                # Cl.509.7.3.1 — web buckling (PASS = stiffener not needed; FAIL = stiffener needed)
+                self._add_check(21, "Brg.Stiff: Web Buckling", "Cl.509.7.3.1",
+                                 R, bs_det["Fcdw_wb_kN"], "kN",
+                                 note=(f"fcc={bs_det['fcc_wb_MPa']:.2f} MPa, "
+                                       f"A=(b1+n1)·tw={bs_det['A_wb_mm2']:.0f} mm²"))
+                # Cl.509.7.3.2 — local crushing
+                self._add_check(21, "Brg.Stiff: Local Crushing", "Cl.509.7.3.2",
+                                 R, bs_det["Fcdw_lc_kN"], "kN",
+                                 note=(f"fcd={bs_det['fcd_y_MPa']:.2f} MPa, "
+                                       f"A=(b1+n2)·tw={bs_det['A_lc_mm2']:.0f} mm²"))
+                # Cl.509.7.3.3 — bearing contact
+                self._add_check(21, "Brg.Stiff: Bearing Contact", "Cl.509.7.3.3",
+                                 R, bs_det["Fpsd_kN"], "kN",
+                                 note=(f"fyd={bs_det['fcd_y_MPa']:.2f} MPa, "
+                                       f"Aq={bs_det['Aq_mm2']:.0f} mm², "
+                                       f"tq_req≥{bs_det['tq_req_bearing_mm']:.1f} mm"))
+                # Cl.509.7.2.5 — stiffener column buckling
+                self._add_check(21, "Brg.Stiff: Column Buckling", "Cl.509.7.2.5",
+                                 R, bs_det["Fcd_kN"], "kN",
+                                 note=(f"fcd={bs_det['fcd_bs_MPa']:.2f} MPa, α=0.49, "
+                                       f"KL/r={bs_det['KL_r_bs']:.2f}"))
 
         return self.checks
 
@@ -2347,6 +2716,9 @@ def run_design_check(
         config = BridgeConfig.from_plate_girder_bridge(plate_girder_bridge)
     elif config is None:
         config = BridgeConfig.example_33m_bridge()
+    # Always run stiffener guidance even when no stiffener details are provided.
+    if config.stiffener is None:
+        config.stiffener = StiffenerConfig()
     print(f"  Config: {config.summary()}")
 
     # -- Step 2: Demand from Analyser --
@@ -2364,6 +2736,11 @@ def run_design_check(
     print(f"  shear_range     = {demand.shear_range_MPa:.3f} MPa")
     print(f"  Source: {demand.source}")
 
+    # For a simply-supported beam, max shear = end reaction → use as bearing stiffener load.
+    # Only set when the caller hasn't already supplied a reaction.
+    if config.stiffener.bs_R_kN <= 0.0 and demand.Vu_kN > 0.0:
+        config.stiffener.bs_R_kN = demand.Vu_kN
+
     # -- Step 3: IRC 22 Capacity --
     print("\n[Step 3/5] Computing IRC 22:2015 capacities ...")
     calculator = IRC22CapacityCalculator(config)
@@ -2378,6 +2755,70 @@ def run_design_check(
     print(f"  Vd    = {capacity.Vd_kN:,.2f} kN   (Cl.603.3.3.2)")
     print(f"  Mb    = {capacity.Mb_kNm:,.2f} kNm  (Cl.603.3.3.1)")
     print(f"  Qu    = {capacity.Qu_kN:.3f} kN/stud (Cl.606.3.1)")
+
+    # -- Stiffener detail printout --
+    is_det = capacity.details.get("intermediate_stiffener", {})
+    if is_det and not is_det.get("skipped"):
+        print("\n  [Stiffener] Intermediate transverse (Cl.509.7.2 / IS 800 Cl.8.7.2)")
+        print(f"    H_max (physical fit)   = {is_det['H_max_mm']:.1f} mm")
+        print(f"    tq_req (1-sided)       >= {is_det['tq_req_1sided_mm']:.2f} mm")
+        print(f"    tq_req (2-sided)       >= {is_det['tq_req_2sided_mm']:.2f} mm")
+        if is_det.get("design_guidance"):
+            c_req = is_det.get("c_req_min_mm", 0.0)
+            if c_req > 0:
+                print(f"    c_req (min spacing)    >= {c_req:.0f} mm  (from Iys check)")
+            else:
+                print(f"    c_req: simple formula (0.75·d·tw³) governs — any spacing OK")
+            print(f"    --> No dimensions provided; use above as sizing guide.")
+        else:
+            _pass = lambda d, c: "PASS" if c >= d else "FAIL"
+            print(f"    H provided             = {is_det['H_mm']:.1f} mm  "
+                  f"[limit {is_det['H_limit_mm']:.2f} mm = {is_det['H_limit_type']}]  "
+                  f"{_pass(is_det['H_mm'], is_det['H_limit_mm'])}")
+            print(f"    tq_req for H provided  >= {is_det['tq_req_provided_mm']:.2f} mm")
+            print(f"    Iys_prov               = {is_det['Iys_prov_mm4']:.0f} mm⁴  "
+                  f"[min {is_det['Iys_min_mm4']:.0f} mm⁴ = {is_det['iys_formula']}]  "
+                  f"{_pass(is_det['Iys_min_mm4'], is_det['Iys_prov_mm4'])}")
+            print(f"    Aeff = {is_det['Aeff_mm2']:.0f} mm²  "
+                  f"(Astiff={is_det['Astiff_mm2']:.0f} mm²  "
+                  f"rys={is_det['rys_mm']:.2f} mm  KL/r={is_det['KL_r']:.2f})")
+            print(f"    fcd = {is_det['fcd_MPa']:.2f} MPa  (α=0.49)  "
+                  f"Fqd={is_det['Fqd_kN']:.2f} kN  Fq={is_det['Fq_kN']:.2f} kN  "
+                  f"{_pass(is_det['Fq_kN'], is_det['Fqd_kN'])}")
+
+    bs_det = capacity.details.get("bearing_stiffener", {})
+    if bs_det and not bs_det.get("skipped"):
+        print("\n  [Stiffener] Bearing stiffener (Cl.509.7.3 / IS 800 Cl.8.7.3)")
+        print(f"    Reaction R             = {bs_det['R_kN']:.2f} kN")
+        print(f"    H_max (physical fit)   = {bs_det['H_max_mm']:.1f} mm")
+        print(f"    n_plates               = {bs_det['n_plates']}")
+        if bs_det.get("design_guidance"):
+            print(f"    tq_req (bearing)       >= {bs_det['tq_req_bearing_mm']:.2f} mm")
+            print(f"    tq_req (leg limit)     >= {bs_det['tq_req_leg_mm']:.2f} mm")
+            print(f"    tq_req (governing)     >= {bs_det['tq_req_mm']:.2f} mm")
+            print(f"    --> No plate dimensions provided; use above as sizing guide.")
+        else:
+            _pass = lambda d, c: "PASS" if c >= d else "FAIL"
+            print(f"    b1 (stiff bearing len) = {bs_det['b1_mm']:.1f} mm")
+            print(f"    Cl.509.7.3.1 Web Buckling:  "
+                  f"Fcdw_wb={bs_det['Fcdw_wb_kN']:.2f} kN  "
+                  f"(fcc={bs_det['fcc_wb_MPa']:.2f} MPa  A_wb={bs_det['A_wb_mm2']:.0f} mm²)  "
+                  f"{_pass(bs_det['R_kN'], bs_det['Fcdw_wb_kN'])}")
+            print(f"    Cl.509.7.3.2 Local Crushing: "
+                  f"Fcdw_lc={bs_det['Fcdw_lc_kN']:.2f} kN  "
+                  f"(fcd_y={bs_det['fcd_y_MPa']:.2f} MPa  A_lc={bs_det['A_lc_mm2']:.0f} mm²)  "
+                  f"{_pass(bs_det['R_kN'], bs_det['Fcdw_lc_kN'])}")
+            print(f"    Cl.509.7.3.3 Bearing Contact: "
+                  f"Fpsd={bs_det['Fpsd_kN']:.2f} kN  "
+                  f"(Aq={bs_det['Aq_mm2']:.0f} mm²  tq_req>={bs_det['tq_req_bearing_mm']:.2f} mm)  "
+                  f"{_pass(bs_det['R_kN'], bs_det['Fpsd_kN'])}")
+            print(f"    Cl.509.7.2.5 Column Buckling: "
+                  f"Fcd={bs_det['Fcd_kN']:.2f} kN  "
+                  f"(fcd={bs_det['fcd_bs_MPa']:.2f} MPa  KL/r={bs_det['KL_r_bs']:.2f}  "
+                  f"Aeff={bs_det['Aeff_bs_mm2']:.0f} mm²)  "
+                  f"{_pass(bs_det['R_kN'], bs_det['Fcd_kN'])}")
+            print(f"    H_limit (leg)          = {bs_det['H_limit_bs_mm']:.2f} mm  "
+                  f"tq_req (leg)>={bs_det['tq_req_leg_mm']:.2f} mm")
 
     # -- Step 4: DCR Engine --
     print("\n[Step 4/5] Running DCR checks ...")
