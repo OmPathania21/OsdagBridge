@@ -79,6 +79,10 @@ class BridgeGrillageModel:
         # placeholder for self weight load case created later
         self.self_weight_load_case = None
 
+        # -------------------- LIVE LOAD --------------------
+        self.vehicle_moving_loads_by_case: dict = {}  # {case_num: [vehicle, ...]}
+        self.vehicle_type_map: dict = {}              # {id(vehicle): vehicle_type_str}
+
         # self.geometry = GeometryDefinitions(self.L, self.w, self.model)
 
         # -------------------- GEOMETRY / LAYOUT --------------------
@@ -1009,34 +1013,24 @@ class BridgeGrillageModel:
             case_num = case["case_num"]
             combinations = case["combinations"]
 
-            for vehicle_type, coord_list in combinations.items():
+            # One load case for all vehicles in this case
+            vehicle_summary = " + ".join(
+                f"{len(coord_list)}x{vehicle_type}"
+                for vehicle_type, coord_list in combinations.items()
+            )
+            lc = og.create_load_case(name=f"Case{case_num} {vehicle_summary}")
 
+            for vehicle_type, coord_list in combinations.items():
                 for lane_index, (x_coord, z_coord) in enumerate(coord_list, start=1):
-                    # ---------------------------------------
-                    # Create vehicle
-                    # ---------------------------------------
                     vehicle_generator = og.create_load_model(
                         model_type=vehicle_type.upper()
                     )
                     vehicle = vehicle_generator.create()
-
-                    vehicle.set_global_coord(
-                        og.Point(x_coord, 0.0, z_coord)
-                    )
-
-                    # ---------------------------------------
-                    # Create load case
-                    # ---------------------------------------
-                    load_case_name = f"Case{case_num} {vehicle_type} L{lane_index}"
-
-                    lc = og.create_load_case(name=load_case_name)
+                    vehicle.set_global_coord(og.Point(x_coord, 0.0, z_coord))
                     lc.add_load(vehicle)
 
-                    model.add_load_case(lc)
-
-                    all_vehicle_load_cases.append(lc)
-
-                    # print(f"Created load case: {load_case_name}")
+            model.add_load_case(lc)
+            all_vehicle_load_cases.append(lc)
 
         self.vehicle_load_cases_list = all_vehicle_load_cases
 
@@ -1063,76 +1057,49 @@ class BridgeGrillageModel:
         # IRC 6:2017 Cl.208.3 — dynamic load allowance computed from actual span.
         dla = 1.0 + IRC6_2017.cl_208_3_impact_factor(self.L)
         # -------------------------------------------------
-        # Empty lists
+        # Reset stores
         # -------------------------------------------------
         self.vehicle_load_cases_list = []
-        self.vehicle_moving_loads = []
+        self.vehicle_moving_loads_by_case = {}
+        self.vehicle_type_map = {}
 
         for case in vehicle_cases:
 
             case_num = case["case_num"]
             combinations = case["combinations"]
 
-            for vehicle_type, coord_list in combinations.items():
+            # One load case for all vehicles in this case
+            vehicle_summary = " + ".join(
+                f"{len(coord_list)}x{vehicle_type}"
+                for vehicle_type, coord_list in combinations.items()
+            )
+            lc = og.create_load_case(name=f"Case{case_num} {vehicle_summary}")
+            self.vehicle_moving_loads_by_case[case_num] = []
 
+            for vehicle_type, coord_list in combinations.items():
                 for i, (x_coord, z_coord) in enumerate(coord_list):
 
-                    # -----------------------------
-                    # Create load case name
-                    # -----------------------------
-                    lc_name = f"Case{case_num} {vehicle_type} L{i + 1}"
-                    lc = og.create_load_case(name=lc_name)
+                    # Lane factor resets per vehicle type (alf indexed within coord_list)
+                    lane_factor = alf[i] if alf and i < len(alf) else 1.0
 
-                    # -----------------------------
-                    # Lane factor
-                    # -----------------------------
-                    if alf is None:
-                        lane_factor = 1.0
-                    else:
-                        lane_factor = alf[i] if i < len(alf) else 1.0
-
-                    # -----------------------------
-                    # Create vehicle model
-                    # -----------------------------
                     vehicle_generator = og.create_load_model(
                         model_type=vehicle_type.upper()
                     )
-
                     vehicle = vehicle_generator.create()
+                    vehicle.set_global_coord(og.Point(x_coord, 0.0, z_coord))
 
-                    # -----------------------------
-                    # Set global coordinates
-                    # (from vehicle_lane_coordinates)
-                    # -----------------------------
-                    vehicle.set_global_coord(
-                        og.Point(x_coord, 0.0, z_coord)
-                    )
+                    lc.add_load(load=vehicle, load_factor=lane_factor)
 
-                    # -----------------------------
-                    # Add to load case
-                    # -----------------------------
-                    lc.add_load(
-                        load=vehicle,
-                        load_factor=lane_factor
-                    )
+                    self.vehicle_moving_loads_by_case[case_num].append(vehicle)
+                    self.vehicle_type_map[id(vehicle)] = vehicle_type
 
-                    # -----------------------------
-                    # Add load case to model
-                    # -----------------------------
-                    model.add_load_case(
-                        lc,
-                        load_factor=dla
-                    )
+            model.add_load_case(lc, load_factor=dla)
+            self.vehicle_load_cases_list.append(lc)
 
-                    # -----------------------------
-                    # Store references
-                    # -----------------------------
-                    self.vehicle_load_cases_list.append(lc)
-                    self.vehicle_moving_loads.append(vehicle)
-
-                    # print(
-                    #     f"Created {lc_name} at x={x_coord}, z={z_coord}"
-                    # )
+        # Flat list kept for backward-compat guard checks
+        self.vehicle_moving_loads = [
+            v for vs in self.vehicle_moving_loads_by_case.values() for v in vs
+        ]
 
         return self.vehicle_load_cases_list
 
@@ -1151,8 +1118,8 @@ class BridgeGrillageModel:
         if model is None:
             raise ValueError("Model not created yet.")
 
-        if not hasattr(self, "vehicle_moving_loads") or not self.vehicle_moving_loads:
-            raise ValueError("No vehicle loads found. Create vehicle load cases first.")
+        if not getattr(self, "vehicle_moving_loads_by_case", None):
+            raise ValueError("No vehicle loads found. Call add_vehicle_load_cases_from_combinations() first.")
 
         span = span or self.L
 
@@ -1168,29 +1135,128 @@ class BridgeGrillageModel:
         )
 
         # -------------------------------------------------
-        # Create moving load cases
+        # One moving load case per IRC:6 case
         # -------------------------------------------------
         self.moving_load_cases_list = []
 
-        for i, vehicle in enumerate(self.vehicle_moving_loads):
-            # Use static load case name
-            static_lc_name = self.vehicle_load_cases_list[i].name
-
-            moving_name = f"Moving {static_lc_name}"
+        for case_num, vehicles in self.vehicle_moving_loads_by_case.items():
+            moving_name = f"Moving Case{case_num}"
 
             moving_load = og.create_moving_load(name=moving_name)
-
             moving_load.set_path(moving_path)
-            moving_load.add_load(vehicle)
+
+            for vehicle in vehicles:
+                moving_load.add_load(vehicle)
 
             model.add_load_case(moving_load)
-
             self.moving_load_cases_list.append(moving_load)
-
-            # print(f"Created moving load case: {moving_name}")
 
         return self.moving_load_cases_list
 
+
+    def create_governing_ll_load_case(self, dataset, model=None, load_factor: float = 1.0):
+        """
+        Identify the governing static vehicle load case (max |Mz_i|), create a
+        single ``"{load_factor} LL"`` load case from it, register it with the
+        given load_factor, and re-run the analysis.
+
+        Must be called after analyze() so the dataset is available.
+
+        Parameters
+        ----------
+        dataset : xarray.Dataset
+            Results from the initial analysis (returned by analyze()).
+        load_factor : float
+            ULS load factor applied to the governing LL case (default 1.0).
+
+        Returns
+        -------
+        xarray.Dataset
+            Updated results dataset that includes the new LL load case.
+        """
+        model = model or self.model
+        if model is None:
+            raise ValueError("Model is not available.")
+
+        all_lcs = list(dataset.coords["Loadcase"].values)
+        static_lcs = [lc for lc in all_lcs if str(lc).lower().startswith("case")]
+
+        if not static_lcs:
+            warnings.warn("No vehicle static load cases found; skipping LL creation.")
+            self.ll_load_case = None
+            return dataset
+
+        # Collect longitudinal girder elements only (exclude transverse slabs and edge beams)
+        girder_elements = []
+        for member_type in ("interior_main_beam", "exterior_main_beam_1", "exterior_main_beam_2"):
+            try:
+                girder_elements.extend(model.get_element(member=member_type, options="elements"))
+            except Exception:
+                pass
+        girder_elements = list(set(girder_elements))
+
+        # Find governing LC: max |Mz_i| on girder elements
+        governing_lc = None
+        governing_val = -1.0
+
+        for lc in static_lcs:
+            try:
+                if girder_elements:
+                    mz = dataset["forces"].sel(Loadcase=lc, Element=girder_elements, Component="Mz_i")
+                else:
+                    mz = dataset["forces"].sel(Loadcase=lc, Component="Mz_i")
+                val = float(abs(mz).max())
+                if val > governing_val:
+                    governing_val = val
+                    governing_lc = lc
+            except Exception:
+                continue
+
+        if governing_lc is None:
+            warnings.warn("Could not determine governing LL case; skipping LL creation.")
+            self.ll_load_case = None
+            return dataset
+
+        print(f"Governing LL: {governing_lc}  (max |Mz_i| = {governing_val / 1000:.2f} kNm)")
+
+        # Find the matching load case object from vehicle_load_cases_list
+        target_lc_obj = next(
+            (lc for lc in getattr(self, "vehicle_load_cases_list", [])
+             if lc.name == str(governing_lc)),
+            None,
+        )
+
+        if target_lc_obj is None:
+            warnings.warn(f"Load case object '{governing_lc}' not found; skipping LL creation.")
+            self.ll_load_case = None
+            return dataset
+
+        # Build LL load case from the governing case's loads
+        LL = og.create_load_case(name=f"{load_factor} LL")
+        for entry in target_lc_obj.load_groups:
+            LL.add_load(entry["load"])
+
+        model.add_load_case(LL, load_factor=load_factor)
+        self.ll_load_case = LL
+        self.governing_ll_name = str(governing_lc)
+
+        # Re-analyze to include LL in the results dataset.
+        # ospgrillage appends results for all load cases on each analyze() call,
+        # so deduplicate the Loadcase coordinate by keeping the first occurrence.
+        model.analyze()
+        ds = model.get_results()
+
+        lc_vals = ds.coords["Loadcase"].values
+        seen: set = set()
+        unique_idx = []
+        for i, val in enumerate(lc_vals):
+            if val not in seen:
+                seen.add(val)
+                unique_idx.append(i)
+        if len(unique_idx) < len(lc_vals):
+            ds = ds.isel(Loadcase=unique_idx)
+
+        return ds
 
     def analyze(self, model=None):
 

@@ -1379,9 +1379,10 @@ class PlateGirderAnalysisResults:
           - Splits each axle load equally into 2 wheel loads (L / R)
           - Falls back to raw point data for unrecognised vehicle types
         """
-        moving_data   = []
-        total_v_audit = 0.0
-        lc_name       = lc.name   # e.g. "Case1 Class70R L1" or "Case1 ClassA L1"
+        moving_data      = []
+        total_v_audit    = 0.0
+        lc_name          = lc.name   # e.g. "Case1" (new) or "Case1 ClassA L1" (legacy)
+        vehicle_type_map = getattr(self.bridge, 'vehicle_type_map', {})
 
         for lg in lc.load_groups:
             load_obj = lg["load"]
@@ -1395,14 +1396,23 @@ class PlateGirderAnalysisResults:
                 global_z = float(getattr(gc, 'z', 0.0))
 
             # ── 2. Detect vehicle type → fetch IRC6 local geometry ────────────
+            # New path: per-object lookup from analyser's vehicle_type_map
+            vehicle_type = vehicle_type_map.get(id(load_obj))
+            # Legacy fallback: detect from LC name (old per-vehicle LC format)
+            if vehicle_type is None:
+                if 'Class70R' in lc_name:
+                    vehicle_type = 'Class70R'
+                elif 'ClassA' in lc_name:
+                    vehicle_type = 'ClassA'
+
             irc_data = None
-            if 'Class70R' in lc_name:
+            if vehicle_type == 'Class70R':
                 try:
                     irc_data = IRC6_2017.cl_204_1_Class70R_vehicle_wheel()
                     irc_data['_type'] = 'Class70R(W)'
                 except Exception:
                     pass
-            elif 'ClassA' in lc_name:
+            elif vehicle_type == 'ClassA':
                 try:
                     irc_data = IRC6_2017.cl_204_1_ClassA_vehicle()
                     irc_data['_type'] = 'ClassA'

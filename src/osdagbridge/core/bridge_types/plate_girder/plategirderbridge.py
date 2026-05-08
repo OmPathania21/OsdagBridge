@@ -187,6 +187,7 @@ class PlateGirderBridge:
         self.add_dead_loads()
         self.add_live_loads()
         dataset = self.analyze()
+        dataset = self.create_governing_ll_load_case(dataset, load_factor=1.0)
 
         sp = self.section_props
         sr = self.sizing_result
@@ -614,8 +615,31 @@ class PlateGirderBridge:
             cases, indexed by Loadcase, Node/Element, and Component.
         """
         return self.grillage_model.analyze()
-        
-    
+
+    def create_governing_ll_load_case(self, dataset, load_factor: float = 1.0):
+        """
+        Identify the governing static vehicle load case, create a
+        ``"{load_factor} LL"`` load case from it, and re-analyze.
+
+        Must be called after analyze().
+
+        Parameters
+        ----------
+        dataset : xarray.Dataset
+            Results from the initial analysis.
+        load_factor : float
+            ULS load factor for the governing LL case (default 1.0).
+
+        Returns
+        -------
+        xarray.Dataset
+            Updated dataset including the LL load case.
+        """
+        return self.grillage_model.create_governing_ll_load_case(
+            dataset=dataset,
+            load_factor=load_factor,
+        )
+
     # ─────────────────────────────────────────────────────────────────────────
     # DCR checks
     # ─────────────────────────────────────────────────────────────────────────
