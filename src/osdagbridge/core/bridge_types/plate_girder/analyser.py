@@ -1103,15 +1103,39 @@ class BridgeGrillageModel:
 
         return self.vehicle_load_cases_list
 
+    @staticmethod
+    def _vehicle_length(vehicle_type: str) -> float:
+        """
+        Return the full axle-span length (m) for a vehicle type by reading the
+        last axle position from the IRC6_2017 local geometry.
+
+        Class70R last axle ≈ 15.12 m, ClassA last axle ≈ 20.30 m.
+        Falls back to 25.0 m for unknown types.
+        """
+        try:
+            if vehicle_type == 'Class70R':
+                data = IRC6_2017.cl_204_1_Class70R_vehicle_wheel()
+            elif vehicle_type == 'ClassA':
+                data = IRC6_2017.cl_204_1_ClassA_vehicle()
+            else:
+                return 25.0
+            return float(max(data['x']))
+        except Exception:
+            return 25.0
+
     def create_moving_vehicle_load_cases(
             self,
             model=None,
-            start_offset=-25.0,
             span=None,
     ):
         """
-        Creates moving load cases corresponding to
-        previously created static vehicle load cases.
+        Creates moving load cases corresponding to previously created static
+        vehicle load cases.
+
+        The traversal path for each case is computed from the IRC:6 vehicle
+        geometry:  start = -vehicle_length, end = span + vehicle_length
+        so the vehicle fully enters and exits the bridge.  Different cases
+        may have different vehicle types and therefore different path extents.
         """
 
         model = model or self.model
@@ -1124,24 +1148,23 @@ class BridgeGrillageModel:
         span = span or self.L
 
         # -------------------------------------------------
-        # Create moving path
-        # -------------------------------------------------
-        start = og.create_point(x=start_offset, y=0, z=0)
-        end = og.Point(span, 0, 0)
-
-        moving_path = og.create_moving_path(
-            start_point=start,
-            end_point=end
-        )
-
-        # -------------------------------------------------
         # One moving load case per IRC:6 case
         # -------------------------------------------------
         self.moving_load_cases_list = []
 
         for case_num, vehicles in self.vehicle_moving_loads_by_case.items():
-            moving_name = f"Moving Case{case_num}"
+            # Compute the longest vehicle length in this case
+            max_len = max(
+                (self._vehicle_length(self.vehicle_type_map.get(id(v), ''))
+                 for v in vehicles),
+                default=25.0,
+            )
 
+            start = og.create_point(x=-max_len, y=0, z=0)
+            end = og.Point(span + max_len, 0, 0)
+            moving_path = og.create_moving_path(start_point=start, end_point=end)
+
+            moving_name = f"Moving Case{case_num}"
             moving_load = og.create_moving_load(name=moving_name)
             moving_load.set_path(moving_path)
 

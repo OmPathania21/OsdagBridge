@@ -570,20 +570,19 @@ class PlateGirderBridge:
 
     def create_moving_vehicle_load_cases(
         self,
-        start_offset: float = -25.0,
         span: float | None = None,
     ) -> list:
         """
         Create moving load cases for all vehicles previously created by
         add_vehicle_load_cases_from_combinations().
 
+        The traversal path extents are derived from each vehicle's IRC:6
+        length: start = -vehicle_length, end = span + vehicle_length.
+
         Delegates to BridgeGrillageModel.create_moving_vehicle_load_cases().
 
         Parameters
         ----------
-        start_offset : float
-            Longitudinal offset (m) behind the bridge start where vehicles
-            begin traversal (default -25.0).
         span : float, optional
             Override the bridge span (m); defaults to the analysed span.
 
@@ -593,7 +592,6 @@ class PlateGirderBridge:
             All created moving load case objects.
         """
         return self.grillage_model.create_moving_vehicle_load_cases(
-            start_offset=start_offset,
             span=span,
         )
 
