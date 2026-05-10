@@ -186,8 +186,9 @@ class PlateGirderBridge:
         self.setup_grillage()
         self.add_dead_loads()
         self.add_live_loads()
+        self.add_wind_loads()
         dataset = self.analyze()
-        dataset = self.create_governing_ll_load_case(dataset, load_factor=1.0)
+        dataset = self.create_governing_ll_load_case(dataset, partial_safety_factor=1.0)
 
         sp = self.section_props
         sr = self.sizing_result
@@ -504,12 +505,12 @@ class PlateGirderBridge:
         model = self.grillage_model
         model.create_self_weight_load()
         model.create_deck_load(slab_thickness_m=deck_t_m)
-        model.create_wearing_course_load(thickness_m=wc_t_m, density_kN_m3=wc_rho, load_factor=1.0)
+        model.create_wearing_course_load(thickness_m=wc_t_m, density_kN_m3=wc_rho, partial_safety_factor=1.0)
         model.create_footpath_load()
         model.create_crash_barrier_load(barrier_load_kN_per_m=barrier_load_kN_m)
         model.create_railing_load(railing_load_kN_per_m=railing_load_kN_m)
         model.create_median_load()
-        model.create_dead_load_combination(load_factor=1.0)
+        model.create_dead_load_combination(partial_safety_factor=1.0)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Live loads — vehicle and moving loads applied after the grillage model
@@ -526,6 +527,58 @@ class PlateGirderBridge:
         model = self.grillage_model
         model.add_vehicle_load_cases_from_combinations()
         model.create_moving_vehicle_load_cases()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Wind loads — applied after dead and live loads, before analysis
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def add_wind_loads(self) -> None:
+        """
+        Apply wind loads to the grillage model per IRC:6-2017 Cl.209.3.3–209.3.5.
+
+        Wind parameters are read from ``self.additional_inputs`` (the
+        Additional Inputs dialog).  Any parameter not yet supplied falls back
+        to a sensible default so the method is always safe to call.
+
+        Load cases created (delegated to BridgeGrillageModel.create_wind_load):
+          - ``"WL Transverse"``   — FT line load on the two exterior girders
+          - ``"WL Longitudinal"`` — FL = 0.25 FT patch load over the full deck
+          - ``"WL Uplift"``       — Pz × G × CL patch load (upward) on the deck
+          - ``"1.0 WL"``          — combined load case with partial_safety_factor = 1.0
+        """
+        ai = self.additional_inputs
+        sp = self.section_props
+        sr = self.sizing_result
+
+        # ── Wind speed / terrain ─────────────────────────────────────────
+        basic_wind_speed = float(ai.get("basic_wind_speed") or 33.0)
+        height_for_pz    = float(ai.get("avg_exposed_height") or 10.0)
+        terrain_raw      = str(ai.get("terrain_type") or "Plain Terrain")
+        terrain          = "plain" if "plain" in terrain_raw.lower() else "obstructed"
+
+        # ── Exposed height components ────────────────────────────────────
+        railing_height       = float(ai.get("railing_height")       or 0.0)
+        crash_barrier_height = float(ai.get("crash_barrier_height") or 0.0)
+        deck_t_m             = deck_thickness_from_inputs(ai, _DEFAULT_DECK_THICKNESS_MM)
+
+        # ── Girder geometry for CD ───────────────────────────────────────
+        d_depth   = sp.get("D",              1.5)             if sp else 1.5
+        c_spacing = sr.girder_spacing                         if sr else DEFAULT_GIRDER_SPACING
+        n_girders = sr.no_of_girders                          if sr else None
+
+        self.grillage_model.create_wind_load(
+            railing_height=railing_height,
+            crash_barrier_height=crash_barrier_height,
+            deck_thickness=deck_t_m,
+            height_for_pz=height_for_pz,
+            terrain=terrain,
+            basic_wind_speed=basic_wind_speed,
+            girder_section="plate",
+            number_of_girders=n_girders,
+            c_spacing=c_spacing,
+            d_depth=d_depth,
+            partial_safety_factor=1.0,
+        )
 
     def vehicle_lane_coordinates(self) -> list:
         """
@@ -614,10 +667,10 @@ class PlateGirderBridge:
         """
         return self.grillage_model.analyze()
 
-    def create_governing_ll_load_case(self, dataset, load_factor: float = 1.0):
+    def create_governing_ll_load_case(self, dataset, partial_safety_factor: float = 1.0):
         """
         Identify the governing static vehicle load case, create a
-        ``"{load_factor} LL"`` load case from it, and re-analyze.
+        ``"{partial_safety_factor} LL"`` load case from it, and re-analyze.
 
         Must be called after analyze().
 
@@ -625,8 +678,8 @@ class PlateGirderBridge:
         ----------
         dataset : xarray.Dataset
             Results from the initial analysis.
-        load_factor : float
-            ULS load factor for the governing LL case (default 1.0).
+        partial_safety_factor : float
+            ULS partial safety factor for the governing LL case (default 1.0).
 
         Returns
         -------
@@ -635,7 +688,7 @@ class PlateGirderBridge:
         """
         return self.grillage_model.create_governing_ll_load_case(
             dataset=dataset,
-            load_factor=load_factor,
+            partial_safety_factor=partial_safety_factor,
         )
 
     # ─────────────────────────────────────────────────────────────────────────

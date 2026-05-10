@@ -435,7 +435,7 @@ class BridgeGrillageModel:
     def create_wearing_course_load(self, model=None, edge_clearance=0.0,
                                    thickness_m: float | None = None,
                                    density_kN_m3: float | None = None,
-                                   load_factor: float = 1.0):
+                                   partial_safety_factor: float = 1.0):
         """Creates wearing course load (patch).
 
         The magnitude is computed as ``thickness × ρ``. Typical bituminous
@@ -497,9 +497,9 @@ class BridgeGrillageModel:
             point4=p4,
         )
 
-        DL_overlay = og.create_load_case(name=f"{load_factor} DW")
+        DL_overlay = og.create_load_case(name=f"{partial_safety_factor} DW")
         DL_overlay.add_load(overlay)
-        model.add_load_case(DL_overlay, load_factor=load_factor)
+        model.add_load_case(DL_overlay, load_factor=partial_safety_factor)
 
         # store reference on the instance
         self.wearing_course_load = DL_overlay
@@ -815,10 +815,216 @@ class BridgeGrillageModel:
         return DL_median
 
     # ============================================================
+    #   Wind Load
+    # ============================================================
+
+    def create_wind_load(
+            self,
+            model=None,
+            railing_height: float = 0.0,
+            crash_barrier_height: float = 0.0,
+            deck_thickness: float = 0.2,
+            openings_in_railing: float = 0.0,
+            height_for_pz: float = 10.0,
+            terrain: str = "plain",
+            basic_wind_speed: float = 33.0,
+            girder_section: str = "plate",
+            number_of_girders: int | None = None,
+            c_spacing: float | None = None,
+            b_width: float | None = None,
+            d_depth: float | None = None,
+            partial_safety_factor: float = 1.0,
+    ) -> dict:
+        """
+        Creates wind load cases per IRC:6-2017 Cl.209.3.3–209.3.5 and
+        combines them into a single WL load case.
+
+        Load cases created
+        ------------------
+        ``"WL Transverse"``   : FT as a line load on the two exterior main
+                                girder grid lines (z-direction, N/m).
+        ``"WL Longitudinal"`` : FL = 0.25 × FT as a patch load over the full
+                                deck footprint (x-direction, N/m²).
+        ``"WL Uplift"``       : upward patch load Pz × G × CL over the full
+                                deck footprint (−y direction, N/m²).
+        ``"{lf} WL"``         : combined case (all three), registered with
+                                ``partial_safety_factor``.
+
+        Parameters
+        ----------
+        railing_height : float
+            Height of railing in metres (KEY_RAILING_HEIGHT). Use 0 when a
+            crash barrier is present instead.
+        crash_barrier_height : float
+            Height of crash barrier in metres. Use 0 when railing is present.
+        deck_thickness : float
+            Deck slab thickness in metres (KEY_DECK_THICKNESS).
+        openings_in_railing : float
+            Net openings in railing in metres (0 if solid).
+        height_for_pz : float
+            Height at which Pz is evaluated via Table 12 (metres).
+        terrain : str
+            ``"plain"`` or ``"obstructed"``.
+        basic_wind_speed : float
+            Basic wind speed V_b in m/s (from IRC:6-2017 Fig. 10).
+        girder_section : str
+            ``"slab"``, ``"plate"``, or ``"rolled"`` — used for CD.
+        number_of_girders : int, optional
+            Number of main girders. Defaults to the number of main girder
+            grid lines derived from the grillage mesh.
+        c_spacing : float, optional
+            Centre-to-centre girder spacing in metres (KEY_GIRDER_SPACING).
+            Required for plate girders (n ≥ 2) and rolled beams (n ≥ 2).
+        b_width : float, optional
+            Beam/box section width in metres.
+        d_depth : float, optional
+            Depth of windward girder in metres (KEY_GIRDER_DEPTH).
+        partial_safety_factor : float
+            Partial safety factor applied to the combined WL load case.
+
+        Returns
+        -------
+        dict
+            ``{"WL_T": ..., "WL_L": ..., "WL_V": ..., "WL": ...}``
+            — the four ospgrillage load-case objects.
+        """
+        model = model or self.model
+        if model is None:
+            raise ValueError("Model not created. Call create_model() first.")
+
+        span = self.L
+
+        # ── Resolve number of main girders from mesh when not supplied ────
+        noz_all = model.Mesh_obj.noz
+        # Main girder positions: skip edge-beam slots (index 0 and -1)
+        main_noz = noz_all[1:-1] if self.edge_dist > 0 else noz_all
+        n_main_girders = number_of_girders or len(main_noz)
+
+        # ── 1. IRC:6-2017 Cl.209.3.3 — transverse wind force ─────────────
+        ft_result = IRC6_2017.cl_209_3_3_transverse_wind_load(
+            span=span,
+            railing_height=railing_height,
+            crash_barrier_height=crash_barrier_height,
+            deck_thickness=deck_thickness,
+            openings_in_railing=openings_in_railing,
+            height_for_pz=height_for_pz,
+            terrain=terrain,
+            basic_wind_speed=basic_wind_speed,
+            girder_section=girder_section,
+            number_of_girders=n_main_girders,
+            c_spacing=c_spacing,
+            b_width=b_width,
+            d_depth=d_depth,
+        )
+
+        Pz       = ft_result["Pz"]          # N/m²
+        G        = ft_result["G"]
+        FT_total = ft_result["FT"]          # total transverse force (N)
+
+        # Transverse line-load intensity (N/m) on exterior girders
+        FT_per_m = FT_total / span
+
+        # Deck footprint — shared by WL_L and WL_V
+        deck_geom    = self.load_manager.deck_load()
+        bridge_width = self.w or self.bridge_geometry.width
+        deck_area    = span * bridge_width                  # m²
+
+        # Longitudinal patch intensity (N/m²) — Cl.209.3.4: FL = 0.25 FT
+        FL_per_m2 = (0.25 * FT_total) / deck_area
+
+        # Uplift patch intensity (N/m²) — Cl.209.3.5: FV/A = Pz × G × CL
+        CL        = 0.75
+        FV_per_m2 = Pz * G * CL                            # upward (applied as −y)
+
+        print(
+            f"Wind loads (IRC:6-2017): Pz={Pz:.1f} N/m²  "
+            f"FT={FT_total/1000:.2f} kN  FT/m={FT_per_m/1000:.3f} kN/m  "
+            f"FL={FL_per_m2:.4f} N/m²  FV={FV_per_m2:.2f} N/m²"
+        )
+
+        # ── 2. Exterior main-girder z-positions ───────────────────────────
+        # Both exterior girder lines are loaded so analysis covers wind from
+        # either side.
+        ext_z = [main_noz[0], main_noz[-1]]
+
+        # ── Mesh grid lines (sorted) used for tributary calculations ─────
+        nox_sorted = sorted(model.Mesh_obj.nox)   # x grid lines
+        noz_sorted = sorted(model.Mesh_obj.noz)   # z grid lines
+        node_spec  = model.Mesh_obj.node_spec      # {tag: {"coordinate": [x,y,z]}}
+
+        def _trib_1d(positions: list, value: float) -> float:
+            """Tributary half-interval for `value` inside sorted `positions`."""
+            idx = min(range(len(positions)), key=lambda i: abs(positions[i] - value))
+            left  = (positions[idx] - positions[idx - 1]) / 2 if idx > 0                   else 0.0
+            right = (positions[idx + 1] - positions[idx]) / 2 if idx < len(positions) - 1  else 0.0
+            return left + right
+
+        TOL = 1e-3  # coordinate matching tolerance (m)
+
+        # ── 3. WL Transverse — nodal Fz on exterior girder nodes ─────────
+        # ospgrillage's p parameter is y-direction only; horizontal wind
+        # must be applied as nodal forces (Fz for transverse, IRC:6 Cl.209.3.3).
+        WL_T = og.create_load_case(name="WL Transverse")
+        for z_target in ext_z:
+            for tag, spec in node_spec.items():
+                coord = spec["coordinate"]
+                if abs(coord[2] - z_target) > TOL:
+                    continue
+                trib_x = _trib_1d(nox_sorted, coord[0])
+                Fz = FT_per_m * trib_x   # N (force = intensity × tributary length)
+                WL_T.add_load(og.create_load(
+                    loadtype="nodal", node_tag=tag,
+                    Fx=0, Fy=0, Fz=Fz, Mx=0, My=0, Mz=0,
+                ))
+        model.add_load_case(WL_T)
+        self.wind_transverse_load_case = WL_T
+
+        # ── 4. WL Longitudinal — nodal Fx on all deck nodes ──────────────
+        # FL = 0.25 FT distributed over full deck as a horizontal x-direction
+        # load (IRC:6 Cl.209.3.4).
+        WL_L = og.create_load_case(name="WL Longitudinal")
+        for tag, spec in node_spec.items():
+            coord = spec["coordinate"]
+            trib_area = _trib_1d(nox_sorted, coord[0]) * _trib_1d(noz_sorted, coord[2])
+            Fx = FL_per_m2 * trib_area   # N (force = intensity × tributary area)
+            WL_L.add_load(og.create_load(
+                loadtype="nodal", node_tag=tag,
+                Fx=Fx, Fy=0, Fz=0, Mx=0, My=0, Mz=0,
+            ))
+        model.add_load_case(WL_L)
+        self.wind_longitudinal_load_case = WL_L
+
+        # ── 5. WL Uplift — nodal Fy (upward, -y) on every deck node ─────────
+        # ospgrillage patch loads only cover nodes strictly inside the boundary;
+        # edge nodes may be missed. Nodal loads guarantee full coverage.
+        # Fy is negative (upward) per IRC:6 Cl.209.3.5: FV/A = Pz × G × CL.
+        WL_V = og.create_load_case(name="WL Uplift")
+        for tag, spec in node_spec.items():
+            coord = spec["coordinate"]
+            trib_area = _trib_1d(nox_sorted, coord[0]) * _trib_1d(noz_sorted, coord[2])
+            Fy = -FV_per_m2 * trib_area   # N, negative = upward
+            WL_V.add_load(og.create_load(
+                loadtype="nodal", node_tag=tag,
+                Fx=0, Fy=Fy, Fz=0, Mx=0, My=0, Mz=0,
+            ))
+        model.add_load_case(WL_V)
+        self.wind_uplift_load_case = WL_V
+
+        # ── 6. WL Combined ────────────────────────────────────────────────
+        WL = og.create_load_case(name=f"{partial_safety_factor} WL")
+        for sub_lc in (WL_T, WL_L, WL_V):
+            for entry in sub_lc.load_groups:
+                WL.add_load(entry["load"])
+        model.add_load_case(WL, load_factor=partial_safety_factor)
+        self.wind_load_case = WL
+
+        return {"WL_T": WL_T, "WL_L": WL_L, "WL_V": WL_V, "WL": WL}
+
+    # ============================================================
     #   Dead Load Combination
     # ============================================================
 
-    def create_dead_load_combination(self, model=None, load_factor=1.0):
+    def create_dead_load_combination(self, model=None, partial_safety_factor=1.0):
         """
         Creates a single ``"DL"`` load case by adding all individual dead-load
         sub-case loads into it.
@@ -839,7 +1045,7 @@ class BridgeGrillageModel:
             "median_load_case",
         ]
 
-        DL_combined = og.create_load_case(name=f"{load_factor} DL")
+        DL_combined = og.create_load_case(name=f"{partial_safety_factor} DL")
         added = False
 
         for attr in _DL_ATTRS:
@@ -856,7 +1062,7 @@ class BridgeGrillageModel:
             )
             return None
 
-        model.add_load_case(DL_combined, load_factor=load_factor)
+        model.add_load_case(DL_combined, load_factor=partial_safety_factor)
         self.dead_load_combination = DL_combined
         return DL_combined
 
@@ -1177,11 +1383,11 @@ class BridgeGrillageModel:
         return self.moving_load_cases_list
 
 
-    def create_governing_ll_load_case(self, dataset, model=None, load_factor: float = 1.0):
+    def create_governing_ll_load_case(self, dataset, model=None, partial_safety_factor: float = 1.0):
         """
         Identify the governing static vehicle load case (max |Mz_i|), create a
-        single ``"{load_factor} LL"`` load case from it, register it with the
-        given load_factor, and re-run the analysis.
+        single ``"{partial_safety_factor} LL"`` load case from it, register it with the
+        given partial_safety_factor, and re-run the analysis.
 
         Must be called after analyze() so the dataset is available.
 
@@ -1189,8 +1395,8 @@ class BridgeGrillageModel:
         ----------
         dataset : xarray.Dataset
             Results from the initial analysis (returned by analyze()).
-        load_factor : float
-            ULS load factor applied to the governing LL case (default 1.0).
+        partial_safety_factor : float
+            ULS partial safety factor applied to the governing LL case (default 1.0).
 
         Returns
         -------
@@ -1255,11 +1461,11 @@ class BridgeGrillageModel:
             return dataset
 
         # Build LL load case from the governing case's loads
-        LL = og.create_load_case(name=f"{load_factor} LL")
+        LL = og.create_load_case(name=f"{partial_safety_factor} LL")
         for entry in target_lc_obj.load_groups:
             LL.add_load(entry["load"])
 
-        model.add_load_case(LL, load_factor=load_factor)
+        model.add_load_case(LL, load_factor=partial_safety_factor)
         self.ll_load_case = LL
         self.governing_ll_name = str(governing_lc)
 

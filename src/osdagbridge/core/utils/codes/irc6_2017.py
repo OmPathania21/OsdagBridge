@@ -615,14 +615,10 @@ class IRC6_2017:
                 Vz_33 = V_low + ratio * (V_high - V_low)
                 Pz_33 = P_low + ratio * (P_high - P_low)
 
-        # Apply scaling rules
+        # IRC:6-2017 Cl.209.2: for Vb ≠ 33 m/s, scale Table 12 values by Vb/33 (speed) and (Vb/33)² (pressure)
         Vb = basic_wind_speed
-
-        # (2) Wind speed scale: Vz ∝ Vb / 33
         Vz_scaled = Vz_33 * (Vb / 33)
-
-        # (3) Wind pressure scale: Pz ∝ (Vb / 33)^2
-        Pz_scaled = Pz_33 * (Vb / 33)**2
+        Pz_scaled = Pz_33 * (Vb / 33) ** 2
 
         return {"Vz": Vz_scaled, "Pz": Pz_scaled}
 
@@ -643,112 +639,132 @@ class IRC6_2017:
             d_depth=None
     ):
         """
-        Computes transverse wind force as per IRC:6-2017 Clause 209.3.3.
+        Computes total transverse wind force as per IRC:6-2017 Clause 209.3.3.
+
+        Formula: FT = Pz × A1 × G × CD  (in Newtons, total force)
 
         Parameters:
-            span (float): span in meters
-            railing_height (float): height of railing in m
-            crash_barrier_height (float): height of crash barrier in m
-            deck_thickness (float): thickness of deck in m
-            openings_in_railing (float): openings in railing in m
-            height_for_pz (float): height at which Pz is evaluated (Table 12)
-            terrain (str): "plain" or "obstructed"
-            basic_wind_speed (float): V_b in m/s
-            girder_section (str): "plate" or "rolled"
-            number_of_girders (int): number of girders
-            c_spacing (float, optional): centre-to-centre spacing for plate girders (n ≥ 2)
-            b_width (float, optional): width for rolled beams (for CD)
-            d_depth (float, optional): depth for rolled beams (for CD)
+            span (float): span length in metres. (KEY_SPAN)
+            railing_height (float): height of railing in m. (KEY_RAILING_HEIGHT)
+                Set to 0 if crash barrier is used instead.
+            crash_barrier_height (float): height of crash barrier in m.
+                Set to 0 if railing is used instead.
+            deck_thickness (float): thickness of deck slab in m. (KEY_DECK_THICKNESS)
+            openings_in_railing (float): net openings in railing in m (use 0 if solid/unknown).
+            height_for_pz (float): height at which Pz is evaluated via Table 12, in m.
+            terrain (str): "plain" or "obstructed".
+            basic_wind_speed (float): basic wind speed V_b in m/s.
+            girder_section (str): "slab", "plate", or "rolled".
+            number_of_girders (int): number of girders. (KEY_NO_OF_GIRDERS)
+            c_spacing (float, optional): centre-to-centre spacing of adjacent girders in m.
+                (KEY_GIRDER_SPACING) Required for plate girders (n≥2) and rolled beams (n≥2).
+            b_width (float, optional): width of beam/box section in m.
+                Required for rolled single and rolled multiple cases.
+            d_depth (float, optional): depth of windward girder in m. (KEY_GIRDER_DEPTH)
+                Required for all beam/girder cases except single plate.
 
         Returns:
-            dict: {"A1":..., "Pz":..., "G":..., "CD":..., "FT":...}
+            dict: {"A1": m², "Pz": N/m², "G": dimensionless, "CD": dimensionless, "FT": N}
         """
-        # -----------------------------
-        # 1. Compute A1 (solid exposed area)
-        # -----------------------------
-        exposed_height = railing_height + crash_barrier_height + deck_thickness - openings_in_railing
+        # ------------------------------------------------------------------
+        # 1. A1 — total projected solid area (m²)  [IRC:6-2017 Cl.209.3.2]
+        # ------------------------------------------------------------------
+        exposed_height = (max(railing_height, crash_barrier_height)
+                          + deck_thickness - openings_in_railing)
         if exposed_height < 0:
-            exposed_height = 0
+            exposed_height = 0.0
+        A1 = span * exposed_height
 
-        
-        # -----------------------------
-        # 2. Compute Pz using Table 12 scaling
-        # -----------------------------
+        # ------------------------------------------------------------------
+        # 2. Pz — design wind pressure (N/m²) from Table 12
+        # ------------------------------------------------------------------
         Pz = IRC6_2017.table_12(height_for_pz, terrain, basic_wind_speed)["Pz"]
 
-        A1 = exposed_height   # m2 per metre length of bridge
+        # ------------------------------------------------------------------
+        # 3. G — gust factor (= 2.0 for highway bridges with span ≤ 150 m)
+        # ------------------------------------------------------------------
+        if span <= 150.0:
+            G = 2.0
+        else:
+            raise ValueError(
+                "G for span > 150 m is not tabulated in IRC:6-2017 Cl.209.3.3. "
+                "A specialist wind study is required."
+            )
 
-        # -----------------------------
-        # 3. Gust factor G (IRC:6 says G = 2 for spans ≤150m)
-        # -----------------------------
-        G = 2.0
+        # ------------------------------------------------------------------
+        # 4. CD — drag coefficient
+        # ------------------------------------------------------------------
+        girder_section = girder_section.strip().lower()
 
-        # -----------------------------
-        # 4. Compute Drag Coefficient CD
-        # -----------------------------
-        girder_section = girder_section.lower()
-        # Case 1: Plate girder, single girder
-        if girder_section == "plate" and number_of_girders == 1:
+        # Case 0: Slab bridge (b/d ≥ 10)
+        if girder_section == "slab":
+            CD = 1.1
+
+        # Case 1: Single plate girder
+        elif girder_section == "plate" and number_of_girders == 1:
             CD = 2.2
 
-        # Case 2: Plate girder, 2 or more girders
+        # Case 2: Two or more plate girders
+        # CD = 2(1 + c/20d), not more than 4.0
+        # c = centre-to-centre distance of adjacent girders, d = depth of windward girder
         elif girder_section == "plate" and number_of_girders >= 2:
             if c_spacing is None or d_depth is None:
-                raise ValueError("For plate girders with n>=2, c_spacing and d_depth must be provided.")
-            ratio = c_spacing / (20 * d_depth)
-            if ratio < 4:
-                CD = 2 * (1 + ratio)
-            else:
-                CD = 2 * (1 + 4)  # upper bound
+                raise ValueError(
+                    "For plate girders with n >= 2, c_spacing and d_depth must be provided."
+                )
+            CD = min(2.0 * (1.0 + c_spacing / (20.0 * d_depth)), 4.0)
 
-        # Case 3: Rolled beam, single girder
+        # Case 3: Single rolled beam / box girder
+        # CD interpolated between 1.5 (b/d=2) and 1.3 (b/d≥6)
         elif girder_section == "rolled" and number_of_girders == 1:
             if b_width is None or d_depth is None:
-                raise ValueError("For rolled beam girder, b_width and d_depth must be provided.")
+                raise ValueError(
+                    "For a single rolled beam/box girder, b_width and d_depth must be provided."
+                )
             bd_ratio = b_width / d_depth
-
-            if abs(bd_ratio - 2) < 1e-6:
+            if bd_ratio <= 2.0:
                 CD = 1.5
-            elif bd_ratio >= 6:
+            elif bd_ratio >= 6.0:
                 CD = 1.3
             else:
-                # interpolate between 1.5 at b/d=2 and 1.3 at b/d=6
-                CD = 1.5 + (bd_ratio - 2) * (1.3 - 1.5) / (6 - 2)
+                CD = 1.5 + (bd_ratio - 2.0) * (1.3 - 1.5) / (6.0 - 2.0)
 
-        # Case 4: Rolled beam, multiple girders
+        # Case 4: Two or more rolled beams / box girders
+        # CD = 1.5 × CD_single when clear distance / depth ≤ 7
         elif girder_section == "rolled" and number_of_girders >= 2:
-            if c_spacing is None or d_depth is None:
-                raise ValueError("For multiple rolled beams, c_spacing and d_depth must be provided.")
-            bd_ratio = c_spacing / d_depth
-
-            # Condition: ratio of clear distance to depth ≤ 7
-            if bd_ratio <= 7:
-                # CD = 1.5 × (CD_single_beam)
-                # CD_single_beam depends on b/d ratio of single beam
-                if b_width is None:
-                    raise ValueError("b_width must also be provided for multi-rolled girder case.")
-
+            if c_spacing is None or b_width is None or d_depth is None:
+                raise ValueError(
+                    "For multiple rolled beams, c_spacing, b_width, and d_depth must be provided."
+                )
+            # Clause uses clear distance between beams (not c/c spacing)
+            clear_over_depth = (c_spacing - b_width) / d_depth
+            if clear_over_depth <= 7.0:
                 bd_single = b_width / d_depth
-                if abs(bd_single - 2) < 1e-6:
+                if bd_single <= 2.0:
                     CD_single = 1.5
-                elif bd_single >= 6:
+                elif bd_single >= 6.0:
                     CD_single = 1.3
                 else:
-                    CD_single = 1.5 + (bd_single - 2) * (1.3 - 1.5) / (6 - 2)
-
+                    CD_single = 1.5 + (bd_single - 2.0) * (1.3 - 1.5) / (6.0 - 2.0)
                 CD = 1.5 * CD_single
             else:
-                raise ValueError("c/d ratio exceeds 7 → IRC does not define CD beyond this limit.")
+                raise ValueError(
+                    f"Clear distance / depth ratio ({clear_over_depth:.3f}) exceeds 7. "
+                    "IRC:6-2017 Cl.209.3.3 does not define CD beyond this limit."
+                )
 
         else:
-            raise ValueError("Invalid girder section input.")
+            raise ValueError(
+                f"Invalid girder_section '{girder_section}'. "
+                "Expected 'slab', 'plate', or 'rolled'."
+            )
 
-        # -----------------------------
-        # 5. Final transverse wind force
-        # -----------------------------
+        # ------------------------------------------------------------------
+        # 5. FT — total transverse wind force (N)
+        # ------------------------------------------------------------------
         FT = Pz * A1 * G * CD
-        
-        # Todo, check this clause also add Wind force eccentricity below slab top
+
+        # Todo: add wind force eccentricity below slab top
         return {
             "A1": A1,
             "Pz": Pz,
