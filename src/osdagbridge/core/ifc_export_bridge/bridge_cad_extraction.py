@@ -1,5 +1,17 @@
 import math
+import dataclasses
 import numpy as np
+
+
+def _to_dims_dict(dims) -> dict:
+    """Normalize a section dims value to a plain dict regardless of its type."""
+    if dims is None:
+        return {}
+    if isinstance(dims, dict):
+        return dims
+    if dataclasses.is_dataclass(dims):
+        return dataclasses.asdict(dims)
+    return vars(dims) if hasattr(dims, '__dict__') else {}
 
 # Osdag Core Imports
 from osdagbridge.core.utils.codes.irc5_2015 import IRC5_2015
@@ -268,7 +280,7 @@ class PlateGirderIFCExtractor:
         z_top = depth / 2
         
         def add_member(p1, p2, thickness, sec_type, dims, roll, name):
-            braces.append(ExtractedObject("StructuralMember", p1=p1, p2=p2, T=thickness, sec_type=sec_type, dims=dims, roll=roll, ifc_name=name))
+            braces.append(ExtractedObject("StructuralMember", p1=p1, p2=p2, T=thickness, sec_type=sec_type, dims=_to_dims_dict(dims), roll=roll, ifc_name=name))
             
         def extract_bay(x, yL, yR, is_end, is_first):
             x_l = x + self._calculate_skew_offset(yL)
@@ -304,7 +316,7 @@ class PlateGirderIFCExtractor:
                 if self.cad.end_diaphragm_type == "Cross Bracing":
                     build_bracing(self.cad.end_diaphragm_bracing_type, self.cad.end_diaphragm_diagonal_section_type, self.cad.end_diaphragm_diagonal_section_dims, self.cad.end_diaphragm_diagonal_thickness, self.cad.end_diaphragm_top_chord_section_type, self.cad.end_diaphragm_top_chord_section_dims, self.cad.end_diaphragm_top_chord_thickness, self.cad.end_diaphragm_bottom_chord_section_type, self.cad.end_diaphragm_bottom_chord_section_dims, self.cad.end_diaphragm_bottom_chord_thickness, self.cad.x_bracket_option, self.cad.k_top_bracket)
                 else: # Rolled Beam / Welded Beam
-                    d_dims = self.cad.end_diaphragm_dims
+                    d_dims = _to_dims_dict(self.cad.end_diaphragm_dims)
                     z_center = z_top - (d_dims.get("depth", 100) / 2)
                     add_member([x_l_eff, yL, z_center], [x_r_eff, yR, z_center], 0, self.cad.end_diaphragm_section, d_dims, +1, "End Diaphragm")
             else:

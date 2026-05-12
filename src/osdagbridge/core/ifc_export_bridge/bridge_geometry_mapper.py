@@ -13,18 +13,19 @@ def create_ifc_guid():
 class BridgeGeometryMapper:
     def __init__(self, ifc_file):
         self.file = ifc_file
-        self._context2d = self._get_or_create_context("Model", "Plan", "GeometricCurveSet")
-        self._context3d = self._get_or_create_context("Model", "Body", "SweptSolid")
-        
-    def _get_or_create_context(self, ctx_type, ctx_id, ctx_type_qualifier):
-        contexts = self.file.by_type("IfcGeometricRepresentationContext")
-        for ctx in contexts:
-            if ctx.ContextType == ctx_type and ctx.ContextIdentifier == ctx_id:
-                return ctx
-        # Create fallback contexts
-        return self.file.createIfcGeometricRepresentationContext(
-            ContextIdentifier=ctx_id, ContextType=ctx_type, CoordinateSpaceDimension=2 if ctx_type_qualifier == "GeometricCurveSet" else 3,
-            Precision=1e-5, WorldCoordinateSystem=self.file.createIfcAxis2Placement3D(self.file.createIfcCartesianPoint((0.,0.,0.)))
+        # IFC4 requires: one root 3-D context linked to IfcProject.RepresentationContexts,
+        # then sub-contexts for each representation type.
+        # Using a flat IfcGeometricRepresentationContext with CoordinateSpaceDimension=2 and
+        # an IfcAxis2Placement3D WorldCoordinateSystem violates WHERE rule WR21 and causes
+        # strict parsers to reject the entire file.
+        origin_3d = self.file.createIfcCartesianPoint((0., 0., 0.))
+        place_3d = self.file.createIfcAxis2Placement3D(origin_3d)
+        self._model_context = self.file.createIfcGeometricRepresentationContext(
+            None, "Model", 3, 1e-5, place_3d, None
+        )
+        self._context3d = self.file.createIfcGeometricRepresentationSubContext(
+            "Body", "Model", None, None, None, None,
+            self._model_context, None, "MODEL_VIEW", None
         )
 
     def define_material(self, name="Steel"):

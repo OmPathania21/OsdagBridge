@@ -48,7 +48,12 @@ class BridgeIfcGenerator:
         angle_unit = self.file.createIfcSIUnit(None, "PLANEANGLEUNIT", None, "RADIAN")
         unit_assignment = self.file.createIfcUnitAssignment([length_unit, area_unit, volume_unit, angle_unit])
         
-        self.project = self.file.createIfcProject(create_ifc_guid(), self._owner_history, Name="Osdag Plate Girder Bridge", UnitsInContext=unit_assignment)
+        self.project = self.file.createIfcProject(
+            create_ifc_guid(), self._owner_history,
+            Name="Osdag Plate Girder Bridge",
+            RepresentationContexts=[self.mapper._model_context],
+            UnitsInContext=unit_assignment,
+        )
         
         # Site, Building, Storey (FacilityPart substitution for IFC4 Bridge)
         place_3d = self.mapper.create_axis2placement_3d((0., 0., 0.))
