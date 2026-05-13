@@ -23,16 +23,29 @@ Step-wise process
           PlateGirderBridge (section_props, sizing_result,
           grillage_geometry).  Diagonal angle and length follow.
 
-  Step 3  Call forces from analysis results.
-          Vz (horizontal transverse shear) and Mx (torsion) at each
-          cross-bracing station are read from PlateGirderAnalysisResults.
+  Step 3  Read girder forces from analysis results.
+          Three force components are extracted at each cross-bracing
+          station from PlateGirderAnalysisResults:
+            Vz  transverse (horizontal) shear in the girder element
+            Mx  torsional moment in the girder element
+            Fx  axial force in the girder element
+          Both ends of each element are read; the end with the larger
+          absolute magnitude governs.  Both ends can carry forces in the
+          same direction under distributed loading, so the abs-max ensures
+          the governing value is always captured.
+          These girder forces pass directly into the cross-bracing members
+          as axial forces (Step 4 below).
           Internal station-to-node mapping locates the right element;
           once analysis_results.py exposes a direct station-query API,
           that internal lookup can be replaced transparently.
 
   Step 4  Resolve member forces.
-          Panel shear F_T and torsion Mx are converted to diagonal
-          and chord axial forces using the portal-method analogy.
+          Each girder force component transfers into a specific
+          cross-bracing member as an axial force:
+            Vz (transverse shear) → compressive diagonal
+            Mx (torsion)          → both diagonal and chord
+            Fx (axial)            → chord directly
+          See "Force resolution" below for the exact expressions.
 
   Step 5  Tabulate and envelope for design.
           Forces are assembled into a full DataFrame and enveloped
@@ -74,30 +87,39 @@ K-type (inverted-V / chevron)
 
 Force resolution
 ----------------
-Both types use the PORTAL-METHOD ANALOGY (story-shear approach), which
-is standard for braced-frame design:
+Two girder force components drive the cross-bracing design:
 
-  Panel shear F_T acts horizontally (from Vz at both brace-node girders)
+  Fx  axial force in the girder (kN)  — goes directly into the chord.
+  Mz  bending moment in the girder (kNm) — converted to an equivalent
+      axial force (AF) via the lever arm h (brace clear height):
 
-    F_diag        = |F_T| / (2 · sin α)       per diagonal (from shear)
-    F_chord_shear = |F_T| / (2 · tan α)       chord from shear
+        F_mz  =  |Mz| / h          (kN)
 
-  where α is the diagonal angle from horizontal (alpha_X or alpha_K).
+  The combined axial-force demand per girder side:
 
-  Torsion Mx in the girders creates a force couple at the chord level:
+        F_af_L  =  |Fx_L|  +  |Mz_L| / h
+        F_af_R  =  |Fx_R|  +  |Mz_R| / h
 
-    F_couple      = (|Mx_L| + |Mx_R|) / h
-    F_chord_torsion = F_couple / 2             (top/bottom chord each carry half)
-    F_diag_torsion  = F_couple / (2 · sin α)  (diagonal from torsion)
+  Both sides transfer into the diagonal, so the total panel demand is:
 
-  Design forces:
-    F_chord_total = F_chord_shear + F_chord_torsion
-    F_diag_total  = F_diag + F_diag_torsion
+        F_total  =  F_af_L  +  F_af_R
 
-  For K-type, alpha_K = atan(h / (s/2)) is steeper than alpha_X,
-  resulting in larger diagonal forces for the same F_T.  If the top
-  chord is absent, F_chord_shear is zero (no top chord to carry it)
-  and only the torsion term contributes to chord design.
+  Resolving along the diagonal axis (angle α from horizontal):
+
+        F_diag   =  F_total / cos α
+
+  The governing chord force is taken from the worse of the two sides:
+
+        F_chord  =  max(F_af_L, F_af_R)
+
+  where
+    Fx_L, Fx_R   (kN)   — axial force in each brace-node girder
+    Mz_L, Mz_R   (kNm)  — bending moment in each brace-node girder
+    h             (m)    — brace clear height
+    α             (rad)  — atan(h / horiz_proj)
+
+  For K-type, horiz_proj = s/2, giving a steeper α and larger diagonal
+  forces than X-type for the same loading.
 
 Usage
 -----
@@ -170,7 +192,7 @@ class CrossBracingForces:
     def __init__(
         self,
         bridge,
-        results,
+        results=None,
         brace_type:    Optional[str]   = None,
         top_chord:     Optional[bool]  = None,
         bottom_chord:  Optional[bool]  = None,
@@ -179,7 +201,6 @@ class CrossBracingForces:
         include_edge_beams: bool = False,
     ):
         self.bridge = bridge
-        self.results = results
         self.depth_ratio = depth_ratio
         self.include_edge_beams = include_edge_beams
 
@@ -188,13 +209,6 @@ class CrossBracingForces:
 
         # Step 2: diagonal geometry from bridge section/sizing data
         self._init_geometry(cb_spacing)
-
-        # Propagate deck overhang so build_girders() names edge beams correctly
-        sizing = getattr(bridge, "sizing_result", None)
-        if sizing is not None:
-            overhang = float(getattr(sizing, "deck_overhang", 0.0) or 0.0)
-            if overhang > 0 and getattr(results, "edge_dist", 0) == 0:
-                results.edge_dist = overhang
 
     # =======================================================================
     # STEP 1 — IDENTIFY BRACE CONFIGURATION
@@ -299,9 +313,7 @@ class CrossBracingForces:
 
         self.L_d      = math.sqrt(self.horiz_proj ** 2 + self.h ** 2)
         self.alpha_rad = math.atan2(self.h, self.horiz_proj)
-        self.sin_alpha = math.sin(self.alpha_rad)
         self.cos_alpha = math.cos(self.alpha_rad)
-        self.tan_alpha = math.tan(self.alpha_rad)
 
     # -----------------------------------------------------------------------
     # Private helper — station-to-node mapping
@@ -313,8 +325,10 @@ class CrossBracingForces:
 
     def _build_station_map(self) -> tuple[dict, dict]:
         """
-        Map each cross-bracing x-station to the nearest grillage node on
-        every girder, plus the element ID and which end of that element.
+        Derive cross-bracing stations directly from transverse members in
+        bridge.result_data.  Each unique x-position shared by the two nodes
+        of a transverse member is a station; girder assignment is determined
+        by matching Z-coordinates to longitudinal member groups.
 
         Returns
         -------
@@ -323,55 +337,80 @@ class CrossBracingForces:
                 { girder_name ->
                     { node, element, is_i_node, actual_x } } }
         girder_map : dict
-            Raw girder map from results.build_girders().
+            { girder_name -> {"z": float} } — ordered by Z.
         """
-        nodes, _, _  = self.results.build_grillage_connectivity()
-        girder_map, _ = self.results.build_girders(verbose=False)
+        from collections import defaultdict
 
-        # Station x-positions: 0, Δ, 2Δ, …, L
-        n_int = max(1, round(self.L / self.cb_spacing))
-        raw_xs = [i * self.cb_spacing for i in range(n_int + 1)]
-        xs = sorted({round(min(x, self.L), 6) for x in raw_xs})
-        if not xs or xs[-1] < self.L - 1e-6:
-            xs.append(round(self.L, 6))
-        xs = sorted(set(xs))
+        rd          = self.bridge.result_data
+        nodes_dict  = rd["nodes"]                   # str(tag) → [x, y, z]
+        members_dict = rd["members"]                # str(tag) → [n1, n2]
+        trans_tags  = rd["transverse_members"]      # list[int]
+        long_tags   = rd["longitudinal_members"]    # list[int]
+        edge_dist   = rd["edge_dist"]
+
+        # ── Build longitudinal girder groups (same Z) ─────────────────────
+        _z_tol = 1e-3
+        girder_elems: dict = defaultdict(list)   # z_rounded → [(x_start, eid, n1, n2)]
+        for eid in long_tags:
+            n1, n2 = members_dict[str(eid)]
+            z = round(float(nodes_dict[str(n1)][2]), 3)
+            x1 = float(nodes_dict[str(n1)][0])
+            girder_elems[z].append((x1, eid, n1, n2))
+        for z in girder_elems:
+            girder_elems[z].sort(key=lambda t: t[0])
+
+        sorted_z = sorted(girder_elems.keys())
+        n_g = len(sorted_z)
+        if edge_dist > 0:
+            def _gname(i):
+                if i == 0:          return "EB1"
+                if i == n_g - 1:    return "EB2"
+                return f"G{i}"
+        else:
+            def _gname(i):
+                return f"G{i + 1}"
+        girder_names = {z: _gname(i) for i, z in enumerate(sorted_z)}
+        girder_map   = {girder_names[z]: {"z": z} for z in sorted_z}
+
+        # ── node → adjacent longitudinal element ──────────────────────────
+        node_to_long: dict = {}   # node_id(int) → (eid, is_i_node)
+        for eid in long_tags:
+            n1, n2 = members_dict[str(eid)]
+            node_to_long.setdefault(n1, (eid, True))
+            node_to_long.setdefault(n2, (eid, False))
+
+        # ── Collect stations from transverse member nodes ─────────────────
+        station_nodes: dict = defaultdict(set)   # x_rounded → set[node_id]
+        for eid in trans_tags:
+            n1, n2 = members_dict[str(eid)]
+            x = round(float(nodes_dict[str(n1)][0]), 3)
+            station_nodes[x].add(n1)
+            station_nodes[x].add(n2)
+
+        # ── Build station_map ─────────────────────────────────────────────
+        node_z = {int(k): round(float(v[2]), 3) for k, v in nodes_dict.items()}
 
         station_map: dict = {}
-        for sx in xs:
-            key = round(sx, 3)
-            station_map[key] = {}
-
-            for g_name, g_data in girder_map.items():
-                path        = g_data["path"]          # ordered node IDs
-                element_map = g_data["element_map"]   # list of (eid, n1, n2)
-
-                # Nearest node to this station x
-                best = min(path, key=lambda nid: abs(nodes[nid][0] - sx))
-
-                # Find the element and which end this node is
-                # Prefer the element where the node is the i-node (start)
-                # so we read forces at the beginning of the forward span
-                eid, is_i = None, True
-                for e, n1, n2 in element_map:
-                    if n1 == best:
-                        eid, is_i = e, True
-                        break
-                    if n2 == best:
-                        eid, is_i = e, False
-                        break
-
-                if eid is not None:
-                    station_map[key][g_name] = {
-                        "node":     best,
-                        "element":  eid,
+        for sx in sorted(station_nodes.keys()):
+            station_map[sx] = {}
+            for nid in station_nodes[sx]:
+                z = node_z.get(nid)
+                if z is None or z not in girder_names:
+                    continue
+                g_name = girder_names[z]
+                if nid in node_to_long:
+                    eid, is_i = node_to_long[nid]
+                    station_map[sx][g_name] = {
+                        "node":      nid,
+                        "element":   eid,
                         "is_i_node": is_i,
-                        "actual_x": round(nodes[best][0], 6),
+                        "actual_x":  float(nodes_dict[str(nid)][0]),
                     }
 
         return station_map, girder_map
 
     # =======================================================================
-    # STEP 3 — CALL FORCES FROM ANALYSIS RESULTS
+    # STEP 3 — READ GIRDER FORCES FROM ANALYSIS RESULTS
     # =======================================================================
 
     def _read_component(
@@ -382,12 +421,12 @@ class CrossBracingForces:
         base: str,
     ) -> Optional[float]:
         """
-        Read one force/moment component from the xarray dataset.
+        Read one force/moment component from bridge.result_data (flat dict).
 
         Parameters
         ----------
         base : str
-            Component root name without end suffix: 'Vz', 'Mx', 'Vy', etc.
+            Component root name without end suffix: 'Vz', 'Mx', 'Fx', 'Vy', etc.
             The suffix '_i' or '_j' is appended based on is_i.
 
         Returns
@@ -397,14 +436,35 @@ class CrossBracingForces:
         comp = base + ("_i" if is_i else "_j")
         try:
             return float(
-                self.results.ds.sel(
-                    Loadcase=lc,
-                    Element=eid,
-                    Component=comp,
-                )["forces"]
+                self.bridge.result_data["forces"][str(lc)][str(int(eid))][comp]
             )
-        except Exception:
+        except (KeyError, TypeError, ValueError):
             return None
+
+    def _governing_af(
+        self,
+        lc: str,
+        eid: int,
+        is_i_node: bool,
+    ) -> Optional[tuple[float, float, float]]:
+        """
+        Return (Fx_kN, Mz_kNm, F_af_kN) at the bracing station node.
+
+        The station is at one specific node (is_i_node).  Mz and Fx at that
+        node are the physically relevant values — the opposite end belongs to
+        the adjacent bracing panel and must not be mixed in.
+
+        Returns None if Fx is absent for this element.
+        """
+        fx = self._read_component(lc, eid, is_i_node, "Vx")   # ospgrillage: axial = Vx
+        if fx is None:
+            return None
+
+        mz = self._read_component(lc, eid, is_i_node, "Mz") or 0.0
+        fx = fx or 0.0
+        af = abs(fx) + abs(mz) / self.h
+
+        return fx / 1e3, mz / 1e3, af / 1e3
 
     def _extract_forces(
         self,
@@ -413,30 +473,21 @@ class CrossBracingForces:
         info_r: dict,
     ) -> Optional[dict]:
         """
-        Extract Vz, Mx, and Vy for the left and right girder nodes at one
-        station and load case.
+        For each girder side, compute the governing (Fx, Mz, F_af) using the
+        station node as the primary read, falling back to the opposite end
+        when it gives a larger combined F_af.
 
-        Returns None if Vz is absent from the dataset for either girder
-        (transverse lateral loads not yet modelled).  All returned values
-        are in engineering units: kN for forces, kNm for moments.
+        Returns None if Fx is absent for either girder.
         """
-        def _kN(v):   return v / 1000.0 if v is not None else None
-        def _kNm(v):  return v / 1000.0 if v is not None else None
+        gov_l = self._governing_af(lc, info_l["element"], info_l["is_i_node"])
+        gov_r = self._governing_af(lc, info_r["element"], info_r["is_i_node"])
 
-        vz_l = _kN(self._read_component(lc, info_l["element"], info_l["is_i_node"], "Vz"))
-        vz_r = _kN(self._read_component(lc, info_r["element"], info_r["is_i_node"], "Vz"))
-
-        # Vz not yet in dataset → skip this station
-        if vz_l is None or vz_r is None:
+        if gov_l is None or gov_r is None:
             return None
 
         return {
-            "vz_l":  vz_l,
-            "vz_r":  vz_r,
-            "mx_l":  _kNm(self._read_component(lc, info_l["element"], info_l["is_i_node"], "Mx")) or 0.0,
-            "mx_r":  _kNm(self._read_component(lc, info_r["element"], info_r["is_i_node"], "Mx")) or 0.0,
-            "vy_l":  _kN(self._read_component(lc, info_l["element"], info_l["is_i_node"], "Vy")),
-            "vy_r":  _kN(self._read_component(lc, info_r["element"], info_r["is_i_node"], "Vy")),
+            "fx_l":   gov_l[0], "mz_l":   gov_l[1], "f_af_l": gov_l[2],
+            "fx_r":   gov_r[0], "mz_r":   gov_r[1], "f_af_r": gov_r[2],
         }
 
     # =======================================================================
@@ -445,67 +496,41 @@ class CrossBracingForces:
 
     def _resolve_forces(
         self,
-        F_T_kN:      float,
-        Mx_left_kNm: float,
-        Mx_right_kNm: float,
+        F_af_left_kN:  float,
+        F_af_right_kN: float,
     ) -> dict:
         """
-        Resolve panel shear F_T and torsions Mx into member axial forces.
+        Convert pre-computed per-side axial-force demands into member forces.
 
-        Portal-method analogy (story-shear approach):
-          Both diagonals share the panel shear equally — one in tension,
-          one in compression.  The diagonal's VERTICAL component
-          equilibrates F_T (the same formula applies to both X and K type;
-          only the angle alpha differs):
+        F_af per side is already the governing combined demand (|Fx| + |Mz|/h)
+        at the governing node — computed in _governing_af.
 
-            F_diag_shear  = |F_T| / (2 · sin α)
-            F_chord_shear = |F_T| / (2 · tan α)   [if chord present]
+        Both sides transfer through the diagonal:
 
-          Torsion Mx in the girder creates a horizontal force couple at
-          the chord level:
+            F_diag  =  (F_af_L + F_af_R) / cos α
 
-            F_couple       = (|Mx_L| + |Mx_R|) / h
-            F_chord_torsion = F_couple / 2
-            F_diag_torsion  = F_couple / (2 · sin α)
+        Governing chord:
 
-          For K-type, α = atan(h / (s/2)) → steeper → larger forces.
-          If the top chord is absent, F_chord_shear is set to zero
-          (no member to carry horizontal shear at the top).
+            F_chord  =  max(F_af_L, F_af_R)
 
         Returns
         -------
         dict with keys:
-            F_diag_kN         axial force per diagonal (shear only)
-            F_chord_kN        axial chord force (shear + torsion)
-            F_diag_total_kN   diagonal force (shear + torsion)
+            F_total_kN   combined panel demand (kN)
+            F_diag_kN    diagonal design force (kN)
+            F_chord_kN   governing chord design force (kN)
         """
-        if self.sin_alpha < 1e-9 or self.h < 1e-9:
-            return {"F_diag_kN": 0.0, "F_chord_kN": 0.0, "F_diag_total_kN": 0.0}
+        if self.cos_alpha < 1e-9:
+            return {"F_total_kN": 0.0, "F_diag_kN": 0.0, "F_chord_kN": 0.0}
 
-        abs_FT = abs(F_T_kN)
-
-        # --- Panel-shear component ---
-        F_diag_shear = abs_FT / (2.0 * self.sin_alpha)
-
-        # Chord carries horizontal shear only when the relevant chord is present
-        if self.brace_type == BRACE_X:
-            chord_present = self.top_chord or self.bottom_chord
-        else:  # K-type: top chord resists horizontal shear at the top
-            chord_present = self.top_chord
-
-        F_chord_shear = (abs_FT / (2.0 * self.tan_alpha)) if chord_present else 0.0
-
-        # --- Torsion component ---
-        # Each girder's torsion Mx creates a transverse couple = Mx/h at chord level.
-        # Top and bottom chords each carry half of the combined couple from both girders.
-        mx_couple_kN = (abs(Mx_left_kNm) + abs(Mx_right_kNm)) / self.h
-        F_chord_torsion = mx_couple_kN / 2.0
-        F_diag_torsion  = mx_couple_kN / (2.0 * self.sin_alpha)
+        F_total = F_af_left_kN + F_af_right_kN
+        F_diag  = F_total / self.cos_alpha
+        F_chord = max(F_af_left_kN, F_af_right_kN)
 
         return {
-            "F_diag_kN":       round(F_diag_shear, 4),
-            "F_chord_kN":      round(F_chord_shear + F_chord_torsion, 4),
-            "F_diag_total_kN": round(F_diag_shear + F_diag_torsion, 4),
+            "F_total_kN": round(F_total, 4),
+            "F_diag_kN":  round(F_diag,  4),
+            "F_chord_kN": round(F_chord, 4),
         }
 
     # =======================================================================
@@ -526,13 +551,13 @@ class CrossBracingForces:
         -------
         pd.DataFrame with columns:
             LoadCase, Station X (m), Girder Pair,
-            Vz Left (kN), Vz Right (kN),
-            Mx Left (kNm), Mx Right (kNm),
-            Vy Left (kN), Vy Right (kN), dVy (kN),
-            F_T (kN), F_diag (kN), F_chord (kN), F_diag+torsion (kN)
+            Fx Left (kN), Fx Right (kN),
+            Mz Left (kNm), Mz Right (kNm),
+            F_af Left (kN), F_af Right (kN),
+            F_total (kN), F_diag (kN), F_chord (kN)
         """
         station_map, girder_map = self._build_station_map()
-        all_lcs = self.results.get_available_loadcases()
+        all_lcs = self.bridge.result_data["loadcases"]
 
         if load_case_filter:
             all_lcs = [lc for lc in all_lcs if load_case_filter in str(lc)]
@@ -548,49 +573,29 @@ class CrossBracingForces:
                 avail = [g for g in g_order if g in g_info]
 
                 for k in range(len(avail) - 1):
-                    g_l, g_r  = avail[k], avail[k + 1]
-                    info_l    = g_info[g_l]
-                    info_r    = g_info[g_r]
+                    g_l, g_r = avail[k], avail[k + 1]
+                    info_l   = g_info[g_l]
+                    info_r   = g_info[g_r]
 
                     forces = self._extract_forces(lc, info_l, info_r)
                     if forces is None:
-                        continue    # Vz absent → skip
+                        continue
 
-                    vz_l = forces["vz_l"]
-                    vz_r = forces["vz_r"]
-                    mx_l = forces["mx_l"]
-                    mx_r = forces["mx_r"]
-                    vy_l = forces["vy_l"]
-                    vy_r = forces["vy_r"]
-
-                    # Net lateral panel shear: sum of Vz at both brace nodes.
-                    # When both girders shear in the same direction the brace
-                    # carries the full combined force; equal-and-opposite Vz
-                    # (symmetric gravity) cancels, leaving only Mx to drive design.
-                    F_T = vz_l + vz_r
-
-                    resolved = self._resolve_forces(F_T, mx_l, mx_r)
-                    dVy = (
-                        round(abs(vy_l) - abs(vy_r), 4)
-                        if vy_l is not None and vy_r is not None
-                        else None
-                    )
+                    resolved = self._resolve_forces(forces["f_af_l"], forces["f_af_r"])
 
                     rows.append({
-                        "LoadCase":           lc_str,
-                        "Station X (m)":      sx,
-                        "Girder Pair":        f"{g_l}-{g_r}",
-                        "Vz Left (kN)":       round(vz_l, 4),
-                        "Vz Right (kN)":      round(vz_r, 4),
-                        "Mx Left (kNm)":      round(mx_l, 4),
-                        "Mx Right (kNm)":     round(mx_r, 4),
-                        "Vy Left (kN)":       round(vy_l, 4) if vy_l is not None else None,
-                        "Vy Right (kN)":      round(vy_r, 4) if vy_r is not None else None,
-                        "dVy (kN)":           dVy,
-                        "F_T (kN)":           round(F_T, 4),
-                        "F_diag (kN)":        resolved["F_diag_kN"],
-                        "F_chord (kN)":       resolved["F_chord_kN"],
-                        "F_diag+torsion (kN)": resolved["F_diag_total_kN"],
+                        "LoadCase":          lc_str,
+                        "Station X (m)":     sx,
+                        "Girder Pair":       f"{g_l}-{g_r}",
+                        "Vx Left (kN)":      round(forces["fx_l"],   4),
+                        "Vx Right (kN)":     round(forces["fx_r"],   4),
+                        "Mz Left (kNm)":     round(forces["mz_l"],   4),
+                        "Mz Right (kNm)":    round(forces["mz_r"],   4),
+                        "F_af Left (kN)":    round(forces["f_af_l"], 4),
+                        "F_af Right (kN)":   round(forces["f_af_r"], 4),
+                        "F_total (kN)":      resolved["F_total_kN"],
+                        "F_diag (kN)":       resolved["F_diag_kN"],
+                        "F_chord (kN)":      resolved["F_chord_kN"],
                     })
 
         return pd.DataFrame(rows)
@@ -611,7 +616,7 @@ class CrossBracingForces:
         if df.empty:
             return pd.DataFrame()
 
-        diag_col  = "F_diag+torsion (kN)"
+        diag_col  = "F_diag (kN)"
         chord_col = "F_chord (kN)"
         rows = []
         for (pair, sx), grp in df.groupby(["Girder Pair", "Station X (m)"]):

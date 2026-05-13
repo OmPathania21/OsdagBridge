@@ -130,6 +130,7 @@ class PlateGirderBridge:
         self.section_props: dict = {}
         self.grillage_geometry: GrillageGeometry | None = None
         self.deck_layout: DeckLayoutProperties | None = None
+        self.result_data: dict = {}         # flat restructured dataset, set after analysis
 
         # Analyser — populated by setup_grillage()
         self.grillage_model: BridgeGrillageModel = BridgeGrillageModel()
@@ -224,6 +225,9 @@ class PlateGirderBridge:
         )
 
         self._run_dcr_checks(dataset)
+        from osdagbridge.core.bridge_types.plate_girder.result_data import restructure_data
+        self.result_data = restructure_data(self, dev=False)
+        self._print_cross_bracing_forces()
 
     def _parse_basic_inputs(self) -> dict:
         """Extract and normalise scalar values from ``self.basic_inputs``."""
@@ -721,6 +725,17 @@ class PlateGirderBridge:
         self._frontend.set_output_value(KEY_UTIL_LONG_TRANS_SHEAR,  trans_shear_dcr * 100)
         stress_dcr = max(dcr_by_id.get(10, 0.0), dcr_by_id.get(11, 0.0), dcr_by_id.get(12, 0.0))
         self._frontend.set_output_value(KEY_UTIL_STRESS_LIMITATION, stress_dcr * 100)
+
+
+    def _print_cross_bracing_forces(self) -> None:
+        from osdagbridge.core.bridge_types.plate_girder.crossbracingforces import CrossBracingForces
+
+        if not self.result_data:
+            print("[CrossBracing] No analysis results available — skipping.")
+            return
+
+        cb = CrossBracingForces(bridge=self)
+        cb.print_critical_forces()
 
     # ─────────────────────────────────────────────────────────────────────────
     # Plotting
