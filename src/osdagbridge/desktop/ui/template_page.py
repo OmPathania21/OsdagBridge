@@ -155,15 +155,6 @@ class CustomWindow(QWidget):
         control_button_layout.setSpacing(10)
         control_button_layout.setContentsMargins(5,5,5,5)
 
-        # Input Dock
-        self.input_dock_control = ClickableSvgWidget()
-        self.input_dock_control.setFixedSize(18, 18)
-        self.input_dock_control.load(":/vectors/view_btn/input_dock_active.svg")
-        self.input_dock_control.setToolTip("Toggle Input Dock")
-        self.input_dock_control.clicked.connect(self.input_dock_toggle)
-        self.input_dock_active = True
-        control_button_layout.addWidget(self.input_dock_control)
-
         # Cross-section view control
         self.cross_section_control = ClickableSvgWidget()
         self.cross_section_control.setFixedSize(18, 18)
@@ -208,6 +199,15 @@ class CustomWindow(QWidget):
         self.plots_control.clicked.connect(self.plots_view_toggle)
         self.plots_view_active = False
         control_button_layout.addWidget(self.plots_control)
+
+        # Input Dock
+        self.input_dock_control = ClickableSvgWidget()
+        self.input_dock_control.setFixedSize(18, 18)
+        self.input_dock_control.load(":/vectors/view_btn/input_dock_active.svg")
+        self.input_dock_control.setToolTip("Toggle Input Dock")
+        self.input_dock_control.clicked.connect(self.input_dock_toggle)
+        self.input_dock_active = True
+        control_button_layout.addWidget(self.input_dock_control)
 
         self.output_dock_control = ClickableSvgWidget()
         self.output_dock_control.load(":/vectors/view_btn/output_dock_inactive.svg")
