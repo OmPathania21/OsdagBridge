@@ -23,29 +23,24 @@ Step-wise process
           PlateGirderBridge (section_props, sizing_result,
           grillage_geometry).  Diagonal angle and length follow.
 
-  Step 3  Read girder forces from analysis results.
-          Three force components are extracted at each cross-bracing
-          station from PlateGirderAnalysisResults:
-            Vz  transverse (horizontal) shear in the girder element
-            Mx  torsional moment in the girder element
-            Fx  axial force in the girder element
-          Both ends of each element are read; the end with the larger
-          absolute magnitude governs.  Both ends can carry forces in the
-          same direction under distributed loading, so the abs-max ensures
-          the governing value is always captured.
-          These girder forces pass directly into the cross-bracing members
-          as axial forces (Step 4 below).
-          Internal station-to-node mapping locates the right element;
-          once analysis_results.py exposes a direct station-query API,
-          that internal lookup can be replaced transparently.
+  Step 3  Read Vz from the cross-bracing (transverse) members.
+          The grillage forces are in global axes.  The vertical shear
+          Vz_i at the i-end (left girder) of the transverse member is
+          the direct load the cross-bracing panel carries.
+          For a member with no distributed load Vz_i = -Vz_j, so both
+          ends carry the same magnitude — using the sum would double-count.
 
   Step 4  Resolve member forces.
-          Each girder force component transfers into a specific
-          cross-bracing member as an axial force:
-            Vz (transverse shear) → compressive diagonal
-            Mx (torsion)          → both diagonal and chord
-            Fx (axial)            → chord directly
-          See "Force resolution" below for the exact expressions.
+
+          Resolving Vz_i along the diagonal (angle α from horizontal):
+
+            F_diag  =  Vz_i / cos α
+
+          Chord force equals the full vertical shear:
+
+            F_chord  =  Vz_i
+
+          Sign is preserved: positive → tension, negative → compression.
 
   Step 5  Tabulate and envelope for design.
           Forces are assembled into a full DataFrame and enveloped
@@ -87,39 +82,25 @@ K-type (inverted-V / chevron)
 
 Force resolution
 ----------------
-Two girder force components drive the cross-bracing design:
+Vz of the transverse (cross-bracing) member is in the global axis,
+so it is read directly — no coordinate transformation needed.
 
-  Fx  axial force in the girder (kN)  — goes directly into the chord.
-  Mz  bending moment in the girder (kNm) — converted to an equivalent
-      axial force (AF) via the lever arm h (brace clear height):
+For a grillage element with no distributed load, Vz_i = -Vz_j.
+Both ends carry the same force magnitude; summing them would
+double-count the shear.  Vz_i (left girder end) is used.
 
-        F_mz  =  |Mz| / h          (kN)
+  Resolving along the diagonal (α from horizontal):
 
-  The combined axial-force demand per girder side:
+    F_diag  =  Vz_i / cos α     (kN)
 
-        F_af_L  =  |Fx_L|  +  |Mz_L| / h
-        F_af_R  =  |Fx_R|  +  |Mz_R| / h
+  Chord force:
 
-  Both sides transfer into the diagonal, so the total panel demand is:
-
-        F_total  =  F_af_L  +  F_af_R
-
-  Resolving along the diagonal axis (angle α from horizontal):
-
-        F_diag   =  F_total / cos α
-
-  The governing chord force is taken from the worse of the two sides:
-
-        F_chord  =  max(F_af_L, F_af_R)
+    F_chord =  Vz_i              (kN)
 
   where
-    Fx_L, Fx_R   (kN)   — axial force in each brace-node girder
-    Mz_L, Mz_R   (kNm)  — bending moment in each brace-node girder
-    h             (m)    — brace clear height
-    α             (rad)  — atan(h / horiz_proj)
-
-  For K-type, horiz_proj = s/2, giving a steeper α and larger diagonal
-  forces than X-type for the same loading.
+    Vz_i  (kN)  — Vz at the i-end of the cross-bracing member (left girder)
+    α     (rad) — atan(h / horiz_proj)
+    Sign preserved: positive = tension, negative = compression
 
 Usage
 -----
@@ -138,7 +119,12 @@ Usage
 
 from __future__ import annotations
 
+import copy
+import json
 import math
+import time
+import warnings
+from pathlib import Path
 from typing import Optional
 
 import pandas as pd
@@ -153,12 +139,17 @@ from osdagbridge.core.utils.common import (
 # Constants
 # ---------------------------------------------------------------------------
 
-BRACE_X = "X"           # X-type cross bracing
-BRACE_K = "K"           # K-type (inverted-V / chevron) cross bracing
+BRACE_X = "X"
+BRACE_K = "K"
 
-# Keys used to look up chord configuration from additional_inputs
 _KEY_TOP_CHORD    = "Cross Bracing Top Chord"
 _KEY_BOTTOM_CHORD = "Cross Bracing Bottom Chord"
+
+
+def _fmt_coords(coords) -> str:
+    if not coords:
+        return "unknown"
+    return f"({coords[0]:.3f}, {coords[1]:.3f}, {coords[2]:.3f})"
 
 
 # ===========================================================================
@@ -170,6 +161,8 @@ class CrossBracingForces:
     ----------
     bridge : PlateGirderBridge
         Fully solved bridge (design() already called).
+        bridge.result_data must contain a "crossbracings" key produced by
+        results_data_post_processing.post_process().
     results : PlateGirderAnalysisResults
         Analysis handler from bridge.get_result_handler().
     brace_type : str or None
@@ -204,10 +197,7 @@ class CrossBracingForces:
         self.depth_ratio = depth_ratio
         self.include_edge_beams = include_edge_beams
 
-        # Step 1: brace type, chord presence, panel spacing (from bridge)
         self._identify_configuration(brace_type, top_chord, bottom_chord)
-
-        # Step 2: diagonal geometry from bridge section/sizing data
         self._init_geometry(cb_spacing)
 
     # =======================================================================
@@ -220,33 +210,23 @@ class CrossBracingForces:
         top_chord:    Optional[bool],
         bottom_chord: Optional[bool],
     ) -> None:
-        """
-        Determine brace type (X or K) and which chords are present.
-
-        Priority:  argument > additional_inputs > default.
-        """
         ai = getattr(self.bridge, "additional_inputs", {})
 
-        # --- Brace type ---
         if brace_type is not None:
             raw = str(brace_type).strip().upper()
         else:
             raw = str(ai.get(KEY_CROSS_BRACING_TYPE, BRACE_X)).strip().upper()
 
         if raw not in (BRACE_X, BRACE_K):
-            raise ValueError(
-                f"Unsupported brace_type '{raw}'. Choose 'X' or 'K'."
-            )
+            raise ValueError(f"Unsupported brace_type '{raw}'. Choose 'X' or 'K'.")
         self.brace_type: str = raw
 
-        # --- Top chord ---
         if top_chord is not None:
             self.top_chord = bool(top_chord)
         else:
             val = ai.get(_KEY_TOP_CHORD, "Yes")
             self.top_chord = str(val).strip().lower() not in ("no", "false", "0")
 
-        # --- Bottom chord ---
         if bottom_chord is not None:
             self.bottom_chord = bool(bottom_chord)
         else:
@@ -258,25 +238,6 @@ class CrossBracingForces:
     # =======================================================================
 
     def _init_geometry(self, cb_spacing: Optional[float]) -> None:
-        """
-        Compute brace geometry from the solved bridge.
-
-        Common quantities (both types)
-        ───────────────────────────────
-          h   clear brace height  = D × depth_ratio  (m)
-          s   girder spacing                          (m)
-          L   bridge span                             (m)
-
-        X-type specific
-        ───────────────
-          alpha_X = atan(h / s)          angle of full diagonal from horizontal
-          L_d_X   = sqrt(s² + h²)        full diagonal length
-
-        K-type specific
-        ───────────────
-          alpha_K = atan(h / (s/2))      angle of half-diagonal from horizontal
-          L_d_K   = sqrt((s/2)² + h²)    half-diagonal length
-        """
         sizing = getattr(self.bridge, "sizing_result", None)
         geom   = getattr(self.bridge, "grillage_geometry", None)
 
@@ -285,7 +246,6 @@ class CrossBracingForces:
                 "CrossBracingForces requires bridge.design() to have been called first."
             )
 
-        # --- Panel spacing ---
         if cb_spacing is not None:
             self.cb_spacing = float(cb_spacing)
         else:
@@ -294,243 +254,109 @@ class CrossBracingForces:
                 ai.get(KEY_CROSS_BRACING_SPACING, DEFAULT_CROSS_BRACING_SPACING)
             )
 
-        # --- Girder section dimensions (metres) ---
         sp = self.bridge.section_props
         self.D      = float(sp["D"])
         self.tf_top = float(sp.get("t_f_top", 0.0))
         self.tf_bot = float(sp.get("t_f_bot", self.tf_top))
 
-        # --- Common geometry ---
-        self.h = self.D * self.depth_ratio          # brace clear height (m)
-        self.s = float(sizing.girder_spacing)        # girder spacing (m)
-        self.L = float(geom.L)                       # bridge span (m)
+        self.h = self.D * self.depth_ratio
+        self.s = float(sizing.girder_spacing)
+        self.L = float(geom.L)
 
-        # --- Type-specific diagonal geometry ---
         if self.brace_type == BRACE_X:
-            self.horiz_proj = self.s               # horizontal projection of diagonal
-        else:  # K-type: diagonals go to centre of bottom chord
+            self.horiz_proj = self.s
+        else:
             self.horiz_proj = self.s / 2.0
 
         self.L_d      = math.sqrt(self.horiz_proj ** 2 + self.h ** 2)
         self.alpha_rad = math.atan2(self.h, self.horiz_proj)
         self.cos_alpha = math.cos(self.alpha_rad)
 
-    # -----------------------------------------------------------------------
-    # Private helper — station-to-node mapping
-    # Locates the nearest grillage node (and its element) for each
-    # cross-bracing x-position along every girder.  This detail is
-    # internal to Step 3; when analysis_results.py gains a direct
-    # station-query API it can be replaced without changing the interface.
-    # -----------------------------------------------------------------------
+    # =======================================================================
+    # STEP 3 — BUILD CHAIN MAP FROM crossbracings
+    # =======================================================================
 
-    def _build_station_map(self) -> tuple[dict, dict]:
+    def _build_chain_map(self) -> list:
         """
-        Derive cross-bracing stations directly from transverse members in
-        bridge.result_data.  Each unique x-position shared by the two nodes
-        of a transverse member is a station; girder assignment is determined
-        by matching Z-coordinates to longitudinal member groups.
+        Read each cross-bracing chain from result_data["crossbracings"].
+
+        left_girder, right_girder, and connection coordinates are already
+        stored on each chain by results_data_post_processing.build_crossbracings
+        — no re-derivation needed here.
 
         Returns
         -------
-        station_map : dict
-            { station_x (rounded m) ->
-                { girder_name ->
-                    { node, element, is_i_node, actual_x } } }
-        girder_map : dict
-            { girder_name -> {"z": float} } — ordered by Z.
+        chain_stations : list[dict]
+            [{ "start_coords", "end_coords",
+               "first_member", "last_member",
+               "left_girder",  "right_girder" }, ...]
         """
-        from collections import defaultdict
+        rd        = self.bridge.result_data
+        cb_chains = rd.get("crossbracings", [])
 
-        rd          = self.bridge.result_data
-        nodes_dict  = rd["nodes"]                   # str(tag) → [x, y, z]
-        members_dict = rd["members"]                # str(tag) → [n1, n2]
-        trans_tags  = rd["transverse_members"]      # list[int]
-        long_tags   = rd["longitudinal_members"]    # list[int]
-        edge_dist   = rd["edge_dist"]
+        chain_stations = []
+        for chain in cb_chains:
+            mems = chain.get("members", [])
+            if not mems:
+                continue
 
-        # ── Build longitudinal girder groups (same Z) ─────────────────────
-        _z_tol = 1e-3
-        girder_elems: dict = defaultdict(list)   # z_rounded → [(x_start, eid, n1, n2)]
-        for eid in long_tags:
-            n1, n2 = members_dict[str(eid)]
-            z = round(float(nodes_dict[str(n1)][2]), 3)
-            x1 = float(nodes_dict[str(n1)][0])
-            girder_elems[z].append((x1, eid, n1, n2))
-        for z in girder_elems:
-            girder_elems[z].sort(key=lambda t: t[0])
+            left_girder  = chain.get("left_girder")
+            right_girder = chain.get("right_girder")
+            if left_girder is None or right_girder is None:
+                continue
 
-        sorted_z = sorted(girder_elems.keys())
-        n_g = len(sorted_z)
-        if edge_dist > 0:
-            def _gname(i):
-                if i == 0:          return "EB1"
-                if i == n_g - 1:    return "EB2"
-                return f"G{i}"
-        else:
-            def _gname(i):
-                return f"G{i + 1}"
-        girder_names = {z: _gname(i) for i, z in enumerate(sorted_z)}
-        girder_map   = {girder_names[z]: {"z": z} for z in sorted_z}
+            start = chain.get("start") or {}
+            end   = chain.get("end")   or {}
 
-        # ── node → adjacent longitudinal element ──────────────────────────
-        node_to_long: dict = {}   # node_id(int) → (eid, is_i_node)
-        for eid in long_tags:
-            n1, n2 = members_dict[str(eid)]
-            node_to_long.setdefault(n1, (eid, True))
-            node_to_long.setdefault(n2, (eid, False))
+            chain_stations.append({
+                "start_coords": start.get("coords"),
+                "end_coords":   end.get("coords"),
+                "first_member": str(mems[0]),
+                "last_member":  str(mems[-1]),
+                "left_girder":  left_girder,
+                "right_girder": right_girder,
+            })
 
-        # ── Collect stations from transverse member nodes ─────────────────
-        station_nodes: dict = defaultdict(set)   # x_rounded → set[node_id]
-        for eid in trans_tags:
-            n1, n2 = members_dict[str(eid)]
-            x = round(float(nodes_dict[str(n1)][0]), 3)
-            station_nodes[x].add(n1)
-            station_nodes[x].add(n2)
-
-        # ── Build station_map ─────────────────────────────────────────────
-        node_z = {int(k): round(float(v[2]), 3) for k, v in nodes_dict.items()}
-
-        station_map: dict = {}
-        for sx in sorted(station_nodes.keys()):
-            station_map[sx] = {}
-            for nid in station_nodes[sx]:
-                z = node_z.get(nid)
-                if z is None or z not in girder_names:
-                    continue
-                g_name = girder_names[z]
-                if nid in node_to_long:
-                    eid, is_i = node_to_long[nid]
-                    station_map[sx][g_name] = {
-                        "node":      nid,
-                        "element":   eid,
-                        "is_i_node": is_i,
-                        "actual_x":  float(nodes_dict[str(nid)][0]),
-                    }
-
-        return station_map, girder_map
+        return chain_stations
 
     # =======================================================================
-    # STEP 3 — READ GIRDER FORCES FROM ANALYSIS RESULTS
+    # STEP 3 (cont.) — READ Vz FROM TRANSVERSE MEMBER
     # =======================================================================
 
-    def _read_component(
-        self,
-        lc: str,
-        eid: int,
-        is_i: bool,
-        base: str,
-    ) -> Optional[float]:
+    def _read_vz(self, lc: str, member_id: str, is_i: bool) -> Optional[float]:
         """
-        Read one force/moment component from bridge.result_data (flat dict).
+        Read Vz_i or Vz_j from a transverse (cross-bracing) member.
+        Forces are in global axes so Vz is used directly.
 
-        Parameters
-        ----------
-        base : str
-            Component root name without end suffix: 'Vz', 'Mx', 'Fx', 'Vy', etc.
-            The suffix '_i' or '_j' is appended based on is_i.
-
-        Returns
-        -------
-        float in raw SI units (N or Nm), or None if the component is absent.
+        Returns float in N, or None if absent.
         """
-        comp = base + ("_i" if is_i else "_j")
+        comp = "Vz_i" if is_i else "Vz_j"
         try:
             return float(
-                self.bridge.result_data["forces"][str(lc)][str(int(eid))][comp]
+                self.bridge.result_data["forces"][str(lc)][member_id][comp]
             )
         except (KeyError, TypeError, ValueError):
             return None
-
-    def _governing_af(
-        self,
-        lc: str,
-        eid: int,
-        is_i_node: bool,
-    ) -> Optional[tuple[float, float, float]]:
-        """
-        Return (Fx_kN, Mz_kNm, F_af_kN) at the bracing station node.
-
-        The station is at one specific node (is_i_node).  Mz and Fx at that
-        node are the physically relevant values — the opposite end belongs to
-        the adjacent bracing panel and must not be mixed in.
-
-        Returns None if Fx is absent for this element.
-        """
-        fx = self._read_component(lc, eid, is_i_node, "Vx")   # ospgrillage: axial = Vx
-        if fx is None:
-            return None
-
-        mz = self._read_component(lc, eid, is_i_node, "Mz") or 0.0
-        fx = fx or 0.0
-        af = abs(fx) + abs(mz) / self.h
-
-        return fx / 1e3, mz / 1e3, af / 1e3
-
-    def _extract_forces(
-        self,
-        lc: str,
-        info_l: dict,
-        info_r: dict,
-    ) -> Optional[dict]:
-        """
-        For each girder side, compute the governing (Fx, Mz, F_af) using the
-        station node as the primary read, falling back to the opposite end
-        when it gives a larger combined F_af.
-
-        Returns None if Fx is absent for either girder.
-        """
-        gov_l = self._governing_af(lc, info_l["element"], info_l["is_i_node"])
-        gov_r = self._governing_af(lc, info_r["element"], info_r["is_i_node"])
-
-        if gov_l is None or gov_r is None:
-            return None
-
-        return {
-            "fx_l":   gov_l[0], "mz_l":   gov_l[1], "f_af_l": gov_l[2],
-            "fx_r":   gov_r[0], "mz_r":   gov_r[1], "f_af_r": gov_r[2],
-        }
 
     # =======================================================================
     # STEP 4 — RESOLVE MEMBER FORCES
     # =======================================================================
 
-    def _resolve_forces(
-        self,
-        F_af_left_kN:  float,
-        F_af_right_kN: float,
-    ) -> dict:
+    def _resolve_forces(self, vz_kn: float) -> dict:
         """
-        Convert pre-computed per-side axial-force demands into member forces.
+        Resolve Vz_i (left-girder end shear, kN) into diagonal and chord forces.
 
-        F_af per side is already the governing combined demand (|Fx| + |Mz|/h)
-        at the governing node — computed in _governing_af.
+          F_diag  =  Vz_i / cos α   — axial force in diagonal
+          F_chord =  Vz_i            — axial force in chord
 
-        Both sides transfer through the diagonal:
-
-            F_diag  =  (F_af_L + F_af_R) / cos α
-
-        Governing chord:
-
-            F_chord  =  max(F_af_L, F_af_R)
-
-        Returns
-        -------
-        dict with keys:
-            F_total_kN   combined panel demand (kN)
-            F_diag_kN    diagonal design force (kN)
-            F_chord_kN   governing chord design force (kN)
+        Sign preserved: positive = tension, negative = compression.
         """
         if self.cos_alpha < 1e-9:
-            return {"F_total_kN": 0.0, "F_diag_kN": 0.0, "F_chord_kN": 0.0}
-
-        F_total = F_af_left_kN + F_af_right_kN
-        F_diag  = F_total / self.cos_alpha
-        F_chord = max(F_af_left_kN, F_af_right_kN)
+            return {"F_diag_kN": 0.0, "F_chord_kN": 0.0}
 
         return {
-            "F_total_kN": round(F_total, 4),
-            "F_diag_kN":  round(F_diag,  4),
-            "F_chord_kN": round(F_chord, 4),
+            "F_diag_kN":  round(vz_kn / self.cos_alpha, 4),
+            "F_chord_kN": round(vz_kn, 4),
         }
 
     # =======================================================================
@@ -542,75 +368,82 @@ class CrossBracingForces:
         load_case_filter: Optional[str] = None,
     ) -> pd.DataFrame:
         """
-        Full force table: one row per (load case, station, girder pair).
-
-        Returns an empty DataFrame if Vz is absent from the dataset
-        (transverse lateral loads not yet modelled).
+        Full force table: one row per (load case, cross-bracing chain).
 
         Returns
         -------
         pd.DataFrame with columns:
             LoadCase, Station X (m), Girder Pair,
-            Fx Left (kN), Fx Right (kN),
-            Mz Left (kNm), Mz Right (kNm),
-            F_af Left (kN), F_af Right (kN),
-            F_total (kN), F_diag (kN), F_chord (kN)
+            Vz_i (kN), Vz_j (kN), F_diag (kN), F_chord (kN)
         """
-        station_map, girder_map = self._build_station_map()
+        chain_stations = self._build_chain_map()
         all_lcs = self.bridge.result_data["loadcases"]
 
         if load_case_filter:
             all_lcs = [lc for lc in all_lcs if load_case_filter in str(lc)]
 
-        g_order = list(girder_map.keys())
-        if not self.include_edge_beams:
-            g_order = [g for g in g_order if g not in ("EB1", "EB2")]
+        _eq_tol = 1e-3  # kN tolerance for Vz_i + Vz_j == 0 check
 
         rows = []
         for lc in all_lcs:
             lc_str = str(lc)
-            for sx, g_info in sorted(station_map.items()):
-                avail = [g for g in g_order if g in g_info]
+            for st in chain_stations:
 
-                for k in range(len(avail) - 1):
-                    g_l, g_r = avail[k], avail[k + 1]
-                    info_l   = g_info[g_l]
-                    info_r   = g_info[g_r]
-
-                    forces = self._extract_forces(lc, info_l, info_r)
-                    if forces is None:
+                if not self.include_edge_beams:
+                    if st["left_girder"] in ("EB1", "EB2") or \
+                       st["right_girder"] in ("EB1", "EB2"):
                         continue
 
-                    resolved = self._resolve_forces(forces["f_af_l"], forces["f_af_r"])
+                # Vz_i of first member, Vz_j of last member (global axis)
+                vz_l = self._read_vz(lc_str, st["first_member"], is_i=True)
+                vz_r = self._read_vz(lc_str, st["last_member"],  is_i=False)
 
-                    rows.append({
-                        "LoadCase":          lc_str,
-                        "Station X (m)":     sx,
-                        "Girder Pair":       f"{g_l}-{g_r}",
-                        "Vx Left (kN)":      round(forces["fx_l"],   4),
-                        "Vx Right (kN)":     round(forces["fx_r"],   4),
-                        "Mz Left (kNm)":     round(forces["mz_l"],   4),
-                        "Mz Right (kNm)":    round(forces["mz_r"],   4),
-                        "F_af Left (kN)":    round(forces["f_af_l"], 4),
-                        "F_af Right (kN)":   round(forces["f_af_r"], 4),
-                        "F_total (kN)":      resolved["F_total_kN"],
-                        "F_diag (kN)":       resolved["F_diag_kN"],
-                        "F_chord (kN)":      resolved["F_chord_kN"],
-                    })
+                if vz_l is None or vz_r is None:
+                    continue
+
+                vz_l_kn = vz_l / 1e3
+                vz_r_kn = vz_r / 1e3
+
+                # Vz_i = -Vz_j must hold for a member with no distributed load
+                warning_msg = None
+                if abs(vz_l_kn + vz_r_kn) > _eq_tol:
+                    warning_msg = (
+                        f"Member {st['first_member']} LC '{lc_str}': "
+                        f"Vz_i={vz_l_kn:.4f} kN, Vz_j={vz_r_kn:.4f} kN — "
+                        f"expected Vz_i = -Vz_j (diff={vz_l_kn + vz_r_kn:.4f} kN)"
+                    )
+                    warnings.warn(
+                        f"[CrossBracingForces] Equilibrium violated — {warning_msg}",
+                        stacklevel=2,
+                    )
+
+                resolved = self._resolve_forces(vz_l_kn)
+
+                rows.append({
+                    "LoadCase":    lc_str,
+                    "Girder Pair": f"{st['left_girder']}-{st['right_girder']}",
+                    "Left Coords": _fmt_coords(st["start_coords"]),
+                    "Right Coords": _fmt_coords(st["end_coords"]),
+                    "Vz_i (kN)":   round(vz_l_kn, 4),
+                    "Vz_j (kN)":   round(vz_r_kn, 4),
+                    "F_diag (kN)": resolved["F_diag_kN"],
+                    "F_chord (kN)": resolved["F_chord_kN"],
+                    "Warning":     warning_msg,
+                })
 
         return pd.DataFrame(rows)
 
     def get_critical_forces(self) -> pd.DataFrame:
         """
         Envelope (max absolute) diagonal and chord forces across all load
-        cases, per girder pair and per cross-bracing station.
+        cases, per girder pair and station.
 
         Returns
         -------
         pd.DataFrame with columns:
             Girder Pair, Station X (m),
-            Max |F_diag+torsion| (kN), Governing LC (diag),
-            Max |F_chord| (kN),        Governing LC (chord)
+            Max |F_diag| (kN), Governing LC (diag),
+            Max |F_chord| (kN), Governing LC (chord)
         """
         df = self.compute_panel_forces()
         if df.empty:
@@ -619,106 +452,91 @@ class CrossBracingForces:
         diag_col  = "F_diag (kN)"
         chord_col = "F_chord (kN)"
         rows = []
-        for (pair, sx), grp in df.groupby(["Girder Pair", "Station X (m)"]):
+        for (pair, lc, rc), grp in df.groupby(
+            ["Girder Pair", "Left Coords", "Right Coords"]
+        ):
             idx_d = grp[diag_col].abs().idxmax()
             idx_c = grp[chord_col].abs().idxmax()
             rows.append({
-                "Girder Pair":              pair,
-                "Station X (m)":            sx,
-                "Max |F_diag+torsion| (kN)": round(abs(grp.loc[idx_d, diag_col]), 3),
-                "Governing LC (diag)":       grp.loc[idx_d, "LoadCase"],
-                "Max |F_chord| (kN)":        round(abs(grp.loc[idx_c, chord_col]), 3),
-                "Governing LC (chord)":      grp.loc[idx_c, "LoadCase"],
+                "Girder Pair":          pair,
+                "Left Coords":          lc,
+                "Right Coords":         rc,
+                "Max |F_diag| (kN)":    round(abs(grp.loc[idx_d, diag_col]),  3),
+                "Governing LC (diag)":  grp.loc[idx_d, "LoadCase"],
+                "Max |F_chord| (kN)":   round(abs(grp.loc[idx_c, chord_col]), 3),
+                "Governing LC (chord)": grp.loc[idx_c, "LoadCase"],
+                "Warning (diag)":       grp.loc[idx_d, "Warning"],
+                "Warning (chord)":      grp.loc[idx_c, "Warning"],
             })
         return pd.DataFrame(rows)
 
     def get_design_forces_dict(self) -> dict:
         """
-        Structured dict of governing design forces for the design module.
+        Governing design forces per girder pair, with force type (Tension/Compression).
 
-        Per girder pair, takes the WORST station across all stations
-        (governing diagonal force and governing chord force may come from
-        different stations and load cases).
+        Compression is preferred over tension of equal magnitude because steel
+        members buckle before yielding — compressive capacity is lower.
 
         Returns
         -------
         dict::
 
             {
-                "brace_type":    "X" or "K",
-                "top_chord":     bool,
-                "bottom_chord":  bool,
-                "geometry": {
-                    "girder_spacing_m":  float,
-                    "brace_height_m":    float,
-                    "girder_depth_m":    float,
-                    "diagonal_length_m": float,
-                    "alpha_deg":         float,
-                    "cb_spacing_m":      float,
-                    "depth_ratio":       float,
-                },
+                "brace_type":   "X" or "K",
+                "top_chord":    bool,
+                "bottom_chord": bool,
+                "geometry":     { ... },
                 "pairs": {
                     "G1-G2": {
-                        "max_diagonal_kN":          float,
-                        "governing_lc_diag":        str,
-                        "critical_station_diag_m":  float,
-                        "max_chord_kN":             float,
-                        "governing_lc_chord":       str,
-                        "critical_station_chord_m": float,
+                        "gov_diag_kN":   float,
+                        "gov_diag_type": "Tension" or "Compression",
+                        "gov_chord_kN":  float,
+                        "gov_chord_type": "Tension" or "Compression",
                     },
                     ...
                 },
-                "overall_max_diagonal_kN": float,
-                "overall_max_chord_kN":    float,
             }
-
-        Returns an empty dict when Vz is not yet in the dataset.
         """
-        crit = self.get_critical_forces()
-        if crit.empty:
+        df = self.compute_panel_forces()
+        if df.empty:
             return {}
 
-        # Collapse to one row per girder pair (worst station for each force)
-        worst: dict = {}
-        for _, row in crit.iterrows():
-            pair = row["Girder Pair"]
-            f_d  = row["Max |F_diag+torsion| (kN)"]
-            f_c  = row["Max |F_chord| (kN)"]
-            sx   = row["Station X (m)"]
-            lc_d = row["Governing LC (diag)"]
-            lc_c = row["Governing LC (chord)"]
+        diag_col  = "F_diag (kN)"
+        chord_col = "F_chord (kN)"
 
-            if pair not in worst:
-                worst[pair] = {
-                    "max_diagonal_kN":          f_d,
-                    "governing_lc_diag":        lc_d,
-                    "critical_station_diag_m":  sx,
-                    "max_chord_kN":             f_c,
-                    "governing_lc_chord":       lc_c,
-                    "critical_station_chord_m": sx,
-                }
+        pairs: dict = {}
+        for pair, grp in df.groupby("Girder Pair"):
+            max_tens_diag  = float(grp[diag_col].max())
+            max_comp_diag  = float(grp[diag_col].min())
+            max_tens_chord = float(grp[chord_col].max())
+            max_comp_chord = float(grp[chord_col].min())
+
+            if abs(max_comp_diag) >= abs(max_tens_diag):
+                gov_diag, gov_diag_type = abs(max_comp_diag), "Compression"
             else:
-                if f_d > worst[pair]["max_diagonal_kN"]:
-                    worst[pair]["max_diagonal_kN"]         = f_d
-                    worst[pair]["governing_lc_diag"]       = lc_d
-                    worst[pair]["critical_station_diag_m"] = sx
-                if f_c > worst[pair]["max_chord_kN"]:
-                    worst[pair]["max_chord_kN"]              = f_c
-                    worst[pair]["governing_lc_chord"]        = lc_c
-                    worst[pair]["critical_station_chord_m"]  = sx
+                gov_diag, gov_diag_type = abs(max_tens_diag), "Tension"
+
+            if abs(max_comp_chord) >= abs(max_tens_chord):
+                gov_chord, gov_chord_type = abs(max_comp_chord), "Compression"
+            else:
+                gov_chord, gov_chord_type = abs(max_tens_chord), "Tension"
+
+            pairs[pair] = {
+                "gov_diag_kN":    round(gov_diag,  3),
+                "gov_diag_type":  gov_diag_type,
+                "gov_chord_kN":   round(gov_chord, 3),
+                "gov_chord_type": gov_chord_type,
+            }
 
         return {
-            "brace_type":             self.brace_type,
-            "top_chord":              self.top_chord,
-            "bottom_chord":           self.bottom_chord,
-            "geometry":               self.get_brace_geometry_info(),
-            "pairs":                  worst,
-            "overall_max_diagonal_kN": max(v["max_diagonal_kN"] for v in worst.values()),
-            "overall_max_chord_kN":    max(v["max_chord_kN"]    for v in worst.values()),
+            "brace_type":   self.brace_type,
+            "top_chord":    self.top_chord,
+            "bottom_chord": self.bottom_chord,
+            "geometry":     self.get_brace_geometry_info(),
+            "pairs":        pairs,
         }
 
     def get_brace_geometry_info(self) -> dict:
-        """Return geometry parameters as a dict (for reporting and design module)."""
         return {
             "brace_type":        self.brace_type,
             "top_chord":         self.top_chord,
@@ -733,12 +551,89 @@ class CrossBracingForces:
             "depth_ratio":       self.depth_ratio,
         }
 
+    def get_crossbracing_count(self) -> int:
+        """Return the number of cross-bracing panels in result_data."""
+        return len(self.bridge.result_data.get("crossbracings", []))
+
+    def run_member_designs(self, forces_dict: dict, dev: bool = False) -> tuple[list, list]:
+        """
+        Run Osdag member designs for diagonals and chords.
+
+        Parameters
+        ----------
+        forces_dict : dict
+            Output of get_design_forces_dict().
+        dev : bool
+            If True, dump forces_dict as JSON to tools/crossbracing_forces_dict.json.
+
+        Returns
+        -------
+        (diag_results, chord_results) — one Osdag output dict per girder pair.
+        """
+        if dev:
+            out = Path(__file__).parents[5] / "tools" / "crossbracing_forces_dict.json"
+            out.write_text(json.dumps(forces_dict, indent=2))
+            print(f"[CrossBracing] dev dump → {out}")
+
+        from osdagbridge.core.utils.connect import (
+            design_dict_struts_bolted,
+            design_dict_tension_bolted,
+            run_parallel_designs,
+        )
+
+        if not forces_dict or not forces_dict.get("pairs"):
+            return [], []
+
+        geom       = forces_dict.get("geometry", {})
+        L_diag_mm  = round(geom.get("diagonal_length_m", 0) * 1000)
+        L_chord_mm = round(geom.get("horiz_proj_m",      0) * 1000)
+
+        diag_dicts:  list = []
+        chord_dicts: list = []
+
+        for pair, vals in forces_dict["pairs"].items():
+            base_diag  = (design_dict_tension_bolted if vals["gov_diag_type"]  == "Tension"
+                          else design_dict_struts_bolted)
+            base_chord = (design_dict_tension_bolted if vals["gov_chord_type"] == "Tension"
+                          else design_dict_struts_bolted)
+
+            d = copy.deepcopy(base_diag)
+            d["Load.Axial"]    = str(float(vals["gov_diag_kN"]))
+            d["Member.Length"] = str(L_diag_mm)
+            diag_dicts.append(d)
+
+            d = copy.deepcopy(base_chord)
+            d["Load.Axial"]    = str(float(vals["gov_chord_kN"]))
+            d["Member.Length"] = str(L_chord_mm)
+            chord_dicts.append(d)
+
+        # Submit diagonals + chords in one batch so all run concurrently.
+        all_dicts = diag_dicts + chord_dicts
+        if not all_dicts:
+            return [], []
+
+        n_diag = len(diag_dicts)
+        sep    = "-" * 60
+        print(
+            f"\n{sep}\n"
+            f"  CROSS BRACING DESIGNS  ({n_diag} pair(s))"
+            f"  diag L={L_diag_mm} mm  chord L={L_chord_mm} mm\n"
+            f"{sep}"
+        )
+        t0         = time.perf_counter()
+        all_results = run_parallel_designs(all_dicts)
+        print(f"  Total time : {time.perf_counter() - t0:.3f}s  |  {len(all_dicts)} designs\n{sep}")
+
+        diag_results  = all_results[:n_diag]
+        chord_results = all_results[n_diag:]
+
+        return diag_results, chord_results
+
     # =======================================================================
     # PRINT / REPORT METHODS
     # =======================================================================
 
     def print_configuration(self) -> None:
-        """Print brace configuration and geometry."""
         g = self.get_brace_geometry_info()
         print("\n" + "=" * 70)
         print(" " * 18 + "CROSS BRACING CONFIGURATION & GEOMETRY")
@@ -763,47 +658,45 @@ class CrossBracingForces:
         load_case_filter: Optional[str] = None,
         max_rows: int = 200,
     ) -> None:
-        """Print the full panel-force table (all load cases, stations, pairs)."""
         self.print_configuration()
         df = self.compute_panel_forces(load_case_filter=load_case_filter)
-        print("\n" + "=" * 115)
-        print(" " * 37 + "CROSS BRACING PANEL FORCES")
-        print("=" * 115)
+        print("\n" + "=" * 95)
+        print(" " * 30 + "CROSS BRACING PANEL FORCES")
+        print("=" * 95)
         if df.empty:
-            print("  No data — Vz (transverse shear) not yet in dataset, or no load cases found.")
+            print("  No data — Vz absent from dataset or no load cases found.")
         else:
             print(df.head(max_rows).to_string(index=False))
             if len(df) > max_rows:
                 print(f"\n  ... ({len(df) - max_rows} rows omitted; increase max_rows)")
-        print("=" * 115)
+        print("=" * 95)
 
     def print_critical_forces(self) -> None:
-        """Print the design-critical force envelope per girder pair and station."""
         self.print_configuration()
         df = self.get_critical_forces()
-        print("\n" + "=" * 115)
-        print(" " * 28 + "CROSS BRACING — CRITICAL DESIGN FORCES")
-        print("=" * 115)
+        print("\n" + "=" * 95)
+        print(" " * 22 + "CROSS BRACING — CRITICAL DESIGN FORCES")
+        print("=" * 95)
         if df.empty:
             print("  No critical forces — Vz not in dataset or no load cases found.")
         else:
             print(df.to_string(index=False))
-        print("=" * 115)
+        print("=" * 95)
 
     def print_station_summary(self, station_x: float, tol: float = 0.5) -> None:
-        """
-        Print forces for a single cross-bracing station.
-
-        Parameters
-        ----------
-        station_x : float   Nominal x-position (m).
-        tol : float         Search tolerance in metres (default 0.5).
-        """
         df = self.compute_panel_forces()
         if df.empty:
             print("No data available.")
             return
-        subset = df[(df["Station X (m)"] - station_x).abs() <= tol]
+
+        def _x_from_coords(s: str) -> float:
+            try:
+                return float(s.strip("()").split(",")[0])
+            except Exception:
+                return float("nan")
+
+        mask = df["Left Coords"].apply(_x_from_coords).sub(station_x).abs() <= tol
+        subset = df[mask]
         print(f"\n--- Cross-Bracing Station: x ~ {station_x:.2f} m ---")
         if subset.empty:
             print(f"  No station within ±{tol:.2f} m of x = {station_x:.2f} m.")

@@ -225,9 +225,11 @@ class PlateGirderBridge:
         )
 
         self._run_dcr_checks(dataset)
-        from osdagbridge.core.bridge_types.plate_girder.result_data import restructure_data
-        self.result_data = restructure_data(self, dev=False)
-        self._print_cross_bracing_forces()
+        self.result_data = self.grillage_model.get_result_data()
+
+        self.member_design_results, self.chord_design_results = (
+            self._design_cross_bracing_members()
+        )
 
     def _parse_basic_inputs(self) -> dict:
         """Extract and normalise scalar values from ``self.basic_inputs``."""
@@ -727,15 +729,81 @@ class PlateGirderBridge:
         self._frontend.set_output_value(KEY_UTIL_STRESS_LIMITATION, stress_dcr * 100)
 
 
-    def _print_cross_bracing_forces(self) -> None:
+    def _design_cross_bracing_members(self) -> tuple[list, list]:
+        """
+        Run Osdag member designs for cross-bracing diagonals and chords.
+
+        Returns
+        -------
+        (diag_results, chord_results) — Osdag output dicts per girder pair.
+        """
         from osdagbridge.core.bridge_types.plate_girder.crossbracingforces import CrossBracingForces
+        from osdagbridge.core.bridge_types.plate_girder.results_data_2 import enrich_crossbracing_dump
 
         if not self.result_data:
             print("[CrossBracing] No analysis results available — skipping.")
-            return
+            return [], []
 
         cb = CrossBracingForces(bridge=self)
+        if not cb.get_crossbracing_count():
+            print("[CrossBracing] No cross-bracing panels found — skipping.")
+            return [], []
+
         cb.print_critical_forces()
+        forces_dict = cb.get_design_forces_dict()
+        if not forces_dict or not forces_dict.get("pairs"):
+            return [], []
+
+        diag_results, chord_results = cb.run_member_designs(forces_dict)
+
+        pair_keys    = list(forces_dict["pairs"].keys())
+        pair_designs = {
+            pair: {
+                "diagonal": diag_results[i]  if i < len(diag_results)  else None,
+                "chord":    chord_results[i] if i < len(chord_results) else None,
+            }
+            for i, pair in enumerate(pair_keys)
+        }
+
+        enrich_crossbracing_dump(pair_designs)
+        self._print_crossbracing_design_results(forces_dict, pair_designs)
+
+        return diag_results, chord_results
+
+    @staticmethod
+    def _print_crossbracing_design_results(forces_dict: dict, pair_designs: dict) -> None:
+        from osdagbridge.core.bridge_types.plate_girder.results_data_2 import _extract_osdag_summary
+
+        sep = "=" * 75
+        print(f"\n{sep}")
+        print(f"{'CROSS BRACING — OSDAG DESIGN RESULTS':^75}")
+        print(sep)
+
+        for pair, vals in forces_dict.get("pairs", {}).items():
+            designs = pair_designs.get(pair, {})
+            diag    = _extract_osdag_summary(designs.get("diagonal") or {})
+            chord   = _extract_osdag_summary(designs.get("chord")    or {})
+
+            print(f"  Pair : {pair}")
+            for label, gov_type, gov_kn, res in (
+                ("Diagonal", vals["gov_diag_type"],  vals["gov_diag_kN"],  diag),
+                ("Chord",    vals["gov_chord_type"], vals["gov_chord_kN"], chord),
+            ):
+                sec  = res.get("section")     or "—"
+                cap  = res.get("capacity_kN") or "—"
+                eff  = res.get("efficiency")
+                slnd = res.get("slenderness")
+                conn = res.get("connection")  or "—"
+
+                eff_str  = f"  eff={eff:.2f}"   if eff  is not None else ""
+                slnd_str = f"  λ={slnd:.1f}"    if slnd is not None else ""
+
+                print(
+                    f"    {label:<8} [{gov_type:>11}  {gov_kn:>8.3f} kN]"
+                    f"  →  {sec}   cap={cap} kN{eff_str}{slnd_str}  {conn}"
+                )
+
+        print(sep)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Plotting

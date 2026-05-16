@@ -259,4 +259,4 @@ src/osdag_map_cache/
 ospgrillage/
 temp_plot.html
 *.html
-tools/bridge_plot_data.json
+tools/

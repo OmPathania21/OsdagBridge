@@ -30,6 +30,7 @@ from osdagbridge.core.bridge_types.plate_girder.load_placement import LoadPlacem
 import warnings
 from osdagbridge.core.bridge_types.plate_girder.analysis_results import PlateGirderAnalysisResults
 from osdagbridge.core.bridge_types.plate_girder.dto import (SectionProperties, SteelProperties, MaterialProperties, GrillageGeometry, DeckLayoutProperties)
+from osdagbridge.core.bridge_types.plate_girder.results_data_2 import restructure_data as restructure_data_direct
 
 
 class BridgeGrillageModel:
@@ -1499,7 +1500,34 @@ class BridgeGrillageModel:
         model.analyze()
 
         results = model.get_results()
+        self.result_data = self.get_result_data(dev=True)
         return results
+
+    def get_result_data(self, dev: bool = False) -> dict:
+        """
+        Return the flat result dict for all analysed load cases.
+
+        Delegates to results_data_2.restructure_data(), which reads nodes and
+        members directly from the live openseespy model rather than through the
+        PlateGirderBridge wrapper.
+
+        Parameters
+        ----------
+        dataset : xarray.Dataset, optional
+            Pre-computed results dataset.  When omitted, ``self.model.get_results()``
+            is called internally.
+        dev : bool
+            If True, also dump the dict to tools/bridge_plot_data.json.
+        """
+        if self.model is None:
+            raise RuntimeError(
+                "No model available. Call create_model() before get_result_data()."
+            )
+        return restructure_data_direct(
+            model=self.model,
+            edge_dist=self.edge_dist or 0.0,
+            dev=dev,
+        )
 
     def plot(self, model=None):
         model = model or self.model
