@@ -76,6 +76,7 @@ def run_calculation(design_dict: Dict[str, Any], quiet: bool = True) -> Dict[str
         validation_errors = module_instance.func_for_validation(design_dict)
 
         if validation_errors:
+            print(f"[Osdag] Validation errors: {validation_errors}")
             raise RuntimeError("Validation errors occurred during execution.")
 
         output_dict = _get_output_dictionary(module_instance)

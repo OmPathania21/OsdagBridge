@@ -19,16 +19,15 @@ Step-wise process
           spacing are read from PlateGirderBridge.additional_inputs.
 
   Step 2  Compute brace geometry.
-          Girder depth D, spacing s, and span L come from
-          PlateGirderBridge (section_props, sizing_result,
-          grillage_geometry).  Diagonal angle and length follow.
+          Girder depth D and spacing s come from PlateGirderBridge
+          (section_props, sizing_result).  Diagonal angle and length follow.
 
   Step 3  Read Vz from the cross-bracing (transverse) members.
-          The grillage forces are in global axes.  The vertical shear
-          Vz_i at the i-end (left girder) of the transverse member is
-          the direct load the cross-bracing panel carries.
-          For a member with no distributed load Vz_i = -Vz_j, so both
-          ends carry the same magnitude — using the sum would double-count.
+          The grillage forces are in global axes.  Cross-bracing members
+          run along global Z, so Vz_i is their axial force directly.
+          Vz_i at the i-end (left girder) is used; for a member with no
+          distributed load Vz_i = -Vz_j, so summing both ends would
+          double-count.
 
   Step 4  Resolve member forces.
 
@@ -102,14 +101,19 @@ double-count the shear.  Vz_i (left girder end) is used.
     α     (rad) — atan(h / horiz_proj)
     Sign preserved: positive = tension, negative = compression
 
+TODO
+----
+  Verify sign convention: Vz_i > 0 is assumed to mean tension and
+  Vz_i < 0 compression (forces reported in global axis). Confirm against
+  a known result before relying on the T/C classification.
+
 Usage
 -----
     pgb = PlateGirderBridge()
     pgb.set_input(input_dict)
     pgb.design()
 
-    results = pgb.get_result_handler()
-    cb = CrossBracingForces(bridge=pgb, results=results)
+    cb = CrossBracingForces(bridge=pgb)
 
     df   = cb.compute_panel_forces()        # full table
     crit = cb.get_critical_forces()         # envelope per pair
@@ -146,12 +150,6 @@ _KEY_TOP_CHORD    = "Cross Bracing Top Chord"
 _KEY_BOTTOM_CHORD = "Cross Bracing Bottom Chord"
 
 
-def _fmt_coords(coords) -> str:
-    if not coords:
-        return "unknown"
-    return f"({coords[0]:.3f}, {coords[1]:.3f}, {coords[2]:.3f})"
-
-
 # ===========================================================================
 class CrossBracingForces:
     """
@@ -163,8 +161,6 @@ class CrossBracingForces:
         Fully solved bridge (design() already called).
         bridge.result_data must contain a "crossbracings" key produced by
         results_data_post_processing.post_process().
-    results : PlateGirderAnalysisResults
-        Analysis handler from bridge.get_result_handler().
     brace_type : str or None
         'X' or 'K'.  If None, read from bridge.additional_inputs
         [KEY_CROSS_BRACING_TYPE]; default 'X'.
@@ -185,7 +181,6 @@ class CrossBracingForces:
     def __init__(
         self,
         bridge,
-        results=None,
         brace_type:    Optional[str]   = None,
         top_chord:     Optional[bool]  = None,
         bottom_chord:  Optional[bool]  = None,
@@ -255,13 +250,9 @@ class CrossBracingForces:
             )
 
         sp = self.bridge.section_props
-        self.D      = float(sp["D"])
-        self.tf_top = float(sp.get("t_f_top", 0.0))
-        self.tf_bot = float(sp.get("t_f_bot", self.tf_top))
-
+        self.D = float(sp["D"])
         self.h = self.D * self.depth_ratio
         self.s = float(sizing.girder_spacing)
-        self.L = float(geom.L)
 
         if self.brace_type == BRACE_X:
             self.horiz_proj = self.s
@@ -373,8 +364,7 @@ class CrossBracingForces:
         Returns
         -------
         pd.DataFrame with columns:
-            LoadCase, Station X (m), Girder Pair,
-            Vz_i (kN), Vz_j (kN), F_diag (kN), F_chord (kN)
+            LoadCase, Girder Pair, Vz_i (kN), Vz_j (kN), F_diag (kN), F_chord (kN)
         """
         chain_stations = self._build_chain_map()
         all_lcs = self.bridge.result_data["loadcases"]
@@ -405,15 +395,12 @@ class CrossBracingForces:
                 vz_r_kn = vz_r / 1e3
 
                 # Vz_i = -Vz_j must hold for a member with no distributed load
-                warning_msg = None
                 if abs(vz_l_kn + vz_r_kn) > _eq_tol:
-                    warning_msg = (
+                    warnings.warn(
+                        f"[CrossBracingForces] Equilibrium violated — "
                         f"Member {st['first_member']} LC '{lc_str}': "
                         f"Vz_i={vz_l_kn:.4f} kN, Vz_j={vz_r_kn:.4f} kN — "
-                        f"expected Vz_i = -Vz_j (diff={vz_l_kn + vz_r_kn:.4f} kN)"
-                    )
-                    warnings.warn(
-                        f"[CrossBracingForces] Equilibrium violated — {warning_msg}",
+                        f"expected Vz_i = -Vz_j (diff={vz_l_kn + vz_r_kn:.4f} kN)",
                         stacklevel=2,
                     )
 
@@ -422,60 +409,60 @@ class CrossBracingForces:
                 rows.append({
                     "LoadCase":    lc_str,
                     "Girder Pair": f"{st['left_girder']}-{st['right_girder']}",
-                    "Left Coords": _fmt_coords(st["start_coords"]),
-                    "Right Coords": _fmt_coords(st["end_coords"]),
                     "Vz_i (kN)":   round(vz_l_kn, 4),
                     "Vz_j (kN)":   round(vz_r_kn, 4),
                     "F_diag (kN)": resolved["F_diag_kN"],
                     "F_chord (kN)": resolved["F_chord_kN"],
-                    "Warning":     warning_msg,
                 })
 
         return pd.DataFrame(rows)
 
-    def get_critical_forces(self) -> pd.DataFrame:
+    def get_critical_forces(self, forces_dict: Optional[dict] = None) -> pd.DataFrame:
         """
-        Envelope (max absolute) diagonal and chord forces across all load
-        cases, per girder pair and station.
+        Critical diagonal and chord forces per girder pair — one T row and one C
+        row per pair (where those force types exist).
+
+        Parameters
+        ----------
+        forces_dict : dict, optional
+            Pre-computed output of get_design_forces_dict(). If None, it is
+            computed here. Pass a pre-computed dict to avoid calling
+            compute_panel_forces() more than once.
 
         Returns
         -------
         pd.DataFrame with columns:
-            Girder Pair, Station X (m),
-            Max |F_diag| (kN), Governing LC (diag),
-            Max |F_chord| (kN), Governing LC (chord)
+            Girder Pair, Type, F_diag (kN), F_chord (kN), Gov LC
         """
-        df = self.compute_panel_forces()
-        if df.empty:
+        if forces_dict is None:
+            forces_dict = self.get_design_forces_dict()
+        if not forces_dict or not forces_dict.get("pairs"):
             return pd.DataFrame()
 
-        diag_col  = "F_diag (kN)"
-        chord_col = "F_chord (kN)"
         rows = []
-        for (pair, lc, rc), grp in df.groupby(
-            ["Girder Pair", "Left Coords", "Right Coords"]
-        ):
-            idx_d = grp[diag_col].abs().idxmax()
-            idx_c = grp[chord_col].abs().idxmax()
-            rows.append({
-                "Girder Pair":          pair,
-                "Left Coords":          lc,
-                "Right Coords":         rc,
-                "Max |F_diag| (kN)":    round(abs(grp.loc[idx_d, diag_col]),  3),
-                "Governing LC (diag)":  grp.loc[idx_d, "LoadCase"],
-                "Max |F_chord| (kN)":   round(abs(grp.loc[idx_c, chord_col]), 3),
-                "Governing LC (chord)": grp.loc[idx_c, "LoadCase"],
-                "Warning (diag)":       grp.loc[idx_d, "Warning"],
-                "Warning (chord)":      grp.loc[idx_c, "Warning"],
-            })
+        for pair, vals in forces_dict["pairs"].items():
+            if vals.get("diag_tension_kN") is not None:
+                rows.append({
+                    "Girder Pair":  pair,
+                    "Type":         "T",
+                    "F_diag (kN)":  vals["diag_tension_kN"],
+                    "F_chord (kN)": vals.get("chord_tension_kN") or 0.0,
+                    "Gov LC":       vals.get("diag_tension_gov_lc", ""),
+                })
+            if vals.get("diag_compression_kN") is not None:
+                rows.append({
+                    "Girder Pair":  pair,
+                    "Type":         "C",
+                    "F_diag (kN)":  -vals["diag_compression_kN"],
+                    "F_chord (kN)": -(vals.get("chord_compression_kN") or 0.0),
+                    "Gov LC":       vals.get("diag_compression_gov_lc", ""),
+                })
         return pd.DataFrame(rows)
 
     def get_design_forces_dict(self) -> dict:
         """
-        Governing design forces per girder pair, with force type (Tension/Compression).
-
-        Compression is preferred over tension of equal magnitude because steel
-        members buckle before yielding — compressive capacity is lower.
+        Design forces per girder pair — both tension and compression reported
+        separately because compression governs buckling independently of magnitude.
 
         Returns
         -------
@@ -488,10 +475,14 @@ class CrossBracingForces:
                 "geometry":     { ... },
                 "pairs": {
                     "G1-G2": {
-                        "gov_diag_kN":   float,
-                        "gov_diag_type": "Tension" or "Compression",
-                        "gov_chord_kN":  float,
-                        "gov_chord_type": "Tension" or "Compression",
+                        "diag_tension_kN":          float or None,
+                        "diag_tension_gov_lc":      str   or None,
+                        "diag_compression_kN":      float or None,
+                        "diag_compression_gov_lc":  str   or None,
+                        "chord_tension_kN":         float or None,
+                        "chord_tension_gov_lc":     str   or None,
+                        "chord_compression_kN":     float or None,
+                        "chord_compression_gov_lc": str   or None,
                     },
                     ...
                 },
@@ -503,29 +494,30 @@ class CrossBracingForces:
 
         diag_col  = "F_diag (kN)"
         chord_col = "F_chord (kN)"
+        # 0.005 kN = 5 N minimum — ensures round(..., 3) never produces 0.0
+        _tol = 5e-3
 
         pairs: dict = {}
         for pair, grp in df.groupby("Girder Pair"):
-            max_tens_diag  = float(grp[diag_col].max())
-            max_comp_diag  = float(grp[diag_col].min())
-            max_tens_chord = float(grp[chord_col].max())
-            max_comp_chord = float(grp[chord_col].min())
+            # F_diag and F_chord are proportional (same Vz_i), so idxmax/idxmin on
+            # F_diag gives the governing LC for both diag and chord simultaneously.
+            idx_t = grp[diag_col].idxmax()
+            idx_c = grp[diag_col].idxmin()
 
-            if abs(max_comp_diag) >= abs(max_tens_diag):
-                gov_diag, gov_diag_type = abs(max_comp_diag), "Compression"
-            else:
-                gov_diag, gov_diag_type = abs(max_tens_diag), "Tension"
-
-            if abs(max_comp_chord) >= abs(max_tens_chord):
-                gov_chord, gov_chord_type = abs(max_comp_chord), "Compression"
-            else:
-                gov_chord, gov_chord_type = abs(max_tens_chord), "Tension"
+            tens_diag  = float(grp.loc[idx_t, diag_col])
+            comp_diag  = float(grp.loc[idx_c, diag_col])
+            tens_chord = float(grp.loc[idx_t, chord_col])
+            comp_chord = float(grp.loc[idx_c, chord_col])
 
             pairs[pair] = {
-                "gov_diag_kN":    round(gov_diag,  3),
-                "gov_diag_type":  gov_diag_type,
-                "gov_chord_kN":   round(gov_chord, 3),
-                "gov_chord_type": gov_chord_type,
+                "diag_tension_kN":          round(tens_diag,       3) if tens_diag  >  _tol else None,
+                "diag_tension_gov_lc":      str(grp.loc[idx_t, "LoadCase"]) if tens_diag  >  _tol else None,
+                "diag_compression_kN":      round(abs(comp_diag),  3) if comp_diag  < -_tol else None,
+                "diag_compression_gov_lc":  str(grp.loc[idx_c, "LoadCase"]) if comp_diag  < -_tol else None,
+                "chord_tension_kN":         round(tens_chord,      3) if tens_chord >  _tol else None,
+                "chord_tension_gov_lc":     str(grp.loc[idx_t, "LoadCase"]) if tens_chord >  _tol else None,
+                "chord_compression_kN":     round(abs(comp_chord), 3) if comp_chord < -_tol else None,
+                "chord_compression_gov_lc": str(grp.loc[idx_c, "LoadCase"]) if comp_chord < -_tol else None,
             }
 
         return {
@@ -555,9 +547,13 @@ class CrossBracingForces:
         """Return the number of cross-bracing panels in result_data."""
         return len(self.bridge.result_data.get("crossbracings", []))
 
-    def run_member_designs(self, forces_dict: dict, dev: bool = False) -> tuple[list, list]:
+    def run_member_designs(self, forces_dict: dict, dev: bool = False) -> dict:
         """
         Run Osdag member designs for diagonals and chords.
+
+        Tension and compression are designed separately — a member that sees both
+        must satisfy both checks independently. Section selection is left to the user
+        since sections cannot be compared programmatically.
 
         Parameters
         ----------
@@ -568,7 +564,15 @@ class CrossBracingForces:
 
         Returns
         -------
-        (diag_results, chord_results) — one Osdag output dict per girder pair.
+        dict::
+
+            {
+                "G1-G2": {
+                    "diagonal": {"tension": result_or_None, "compression": result_or_None},
+                    "chord":    {"tension": result_or_None, "compression": result_or_None},
+                },
+                ...
+            }
         """
         if dev:
             out = Path(__file__).parents[5] / "tools" / "crossbracing_forces_dict.json"
@@ -578,56 +582,70 @@ class CrossBracingForces:
         from osdagbridge.core.utils.connect import (
             design_dict_struts_bolted,
             design_dict_tension_bolted,
-            run_parallel_designs,
         )
 
         if not forces_dict or not forces_dict.get("pairs"):
-            return [], []
+            return {}
 
         geom       = forces_dict.get("geometry", {})
         L_diag_mm  = round(geom.get("diagonal_length_m", 0) * 1000)
         L_chord_mm = round(geom.get("horiz_proj_m",      0) * 1000)
 
-        diag_dicts:  list = []
-        chord_dicts: list = []
+        # Build a flat job list so all designs run in one parallel batch.
+        # Each job tracks (pair, member_type, force_type) for reassembly.
+        jobs: list[tuple[str, str, str, dict]] = []
 
         for pair, vals in forces_dict["pairs"].items():
-            base_diag  = (design_dict_tension_bolted if vals["gov_diag_type"]  == "Tension"
-                          else design_dict_struts_bolted)
-            base_chord = (design_dict_tension_bolted if vals["gov_chord_type"] == "Tension"
-                          else design_dict_struts_bolted)
+            for member, L_mm, t_key, c_key in (
+                ("diagonal", L_diag_mm, "diag_tension_kN",  "diag_compression_kN"),
+                ("chord",    L_chord_mm, "chord_tension_kN", "chord_compression_kN"),
+            ):
+                if vals.get(t_key) is not None:
+                    d = copy.deepcopy(design_dict_tension_bolted)
+                    d["Load.Axial"]    = str(float(vals[t_key]))
+                    d["Member.Length"] = str(L_mm)
+                    jobs.append((pair, member, "tension", d))
 
-            d = copy.deepcopy(base_diag)
-            d["Load.Axial"]    = str(float(vals["gov_diag_kN"]))
-            d["Member.Length"] = str(L_diag_mm)
-            diag_dicts.append(d)
+                if vals.get(c_key) is not None:
+                    d = copy.deepcopy(design_dict_struts_bolted)
+                    d["Load.Axial"]    = str(float(vals[c_key]))
+                    d["Member.Length"] = str(L_mm)
+                    jobs.append((pair, member, "compression", d))
 
-            d = copy.deepcopy(base_chord)
-            d["Load.Axial"]    = str(float(vals["gov_chord_kN"]))
-            d["Member.Length"] = str(L_chord_mm)
-            chord_dicts.append(d)
+        if not jobs:
+            return {}
 
-        # Submit diagonals + chords in one batch so all run concurrently.
-        all_dicts = diag_dicts + chord_dicts
-        if not all_dicts:
-            return [], []
-
-        n_diag = len(diag_dicts)
-        sep    = "-" * 60
+        sep = "-" * 60
         print(
             f"\n{sep}\n"
-            f"  CROSS BRACING DESIGNS  ({n_diag} pair(s))"
+            f"  CROSS BRACING DESIGNS  ({len(forces_dict['pairs'])} pair(s))"
             f"  diag L={L_diag_mm} mm  chord L={L_chord_mm} mm\n"
             f"{sep}"
         )
-        t0         = time.perf_counter()
-        all_results = run_parallel_designs(all_dicts)
-        print(f"  Total time : {time.perf_counter() - t0:.3f}s  |  {len(all_dicts)} designs\n{sep}")
+        from concurrent.futures import ProcessPoolExecutor
+        from osdagbridge.core.utils.connect import run_calculation
 
-        diag_results  = all_results[:n_diag]
-        chord_results = all_results[n_diag:]
+        cpu_count = __import__("os").cpu_count() or 4
+        max_workers = min(cpu_count, len(jobs))
 
-        return diag_results, chord_results
+        t0 = time.perf_counter()
+        results: dict = {}
+
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(run_calculation, j[3]): j
+                for j in jobs
+            }
+            for future, (pair, member, force_type, _) in futures.items():
+                try:
+                    result = future.result()
+                except Exception as exc:
+                    print(f"  [CrossBracing] SKIP {pair} {member} {force_type}: {exc}")
+                    result = None
+                results.setdefault(pair, {}).setdefault(member, {})[force_type] = result
+
+        print(f"  Total time : {time.perf_counter() - t0:.3f}s  |  {len(jobs)} designs\n{sep}")
+        return results
 
     # =======================================================================
     # PRINT / REPORT METHODS
@@ -653,27 +671,9 @@ class CrossBracingForces:
         print(f"  Panel spacing            : {g['cb_spacing_m']:.3f} m")
         print("=" * 70)
 
-    def print_panel_forces(
-        self,
-        load_case_filter: Optional[str] = None,
-        max_rows: int = 200,
-    ) -> None:
+    def print_critical_forces(self, forces_dict: Optional[dict] = None) -> None:
         self.print_configuration()
-        df = self.compute_panel_forces(load_case_filter=load_case_filter)
-        print("\n" + "=" * 95)
-        print(" " * 30 + "CROSS BRACING PANEL FORCES")
-        print("=" * 95)
-        if df.empty:
-            print("  No data — Vz absent from dataset or no load cases found.")
-        else:
-            print(df.head(max_rows).to_string(index=False))
-            if len(df) > max_rows:
-                print(f"\n  ... ({len(df) - max_rows} rows omitted; increase max_rows)")
-        print("=" * 95)
-
-    def print_critical_forces(self) -> None:
-        self.print_configuration()
-        df = self.get_critical_forces()
+        df = self.get_critical_forces(forces_dict)
         print("\n" + "=" * 95)
         print(" " * 22 + "CROSS BRACING — CRITICAL DESIGN FORCES")
         print("=" * 95)
@@ -683,22 +683,3 @@ class CrossBracingForces:
             print(df.to_string(index=False))
         print("=" * 95)
 
-    def print_station_summary(self, station_x: float, tol: float = 0.5) -> None:
-        df = self.compute_panel_forces()
-        if df.empty:
-            print("No data available.")
-            return
-
-        def _x_from_coords(s: str) -> float:
-            try:
-                return float(s.strip("()").split(",")[0])
-            except Exception:
-                return float("nan")
-
-        mask = df["Left Coords"].apply(_x_from_coords).sub(station_x).abs() <= tol
-        subset = df[mask]
-        print(f"\n--- Cross-Bracing Station: x ~ {station_x:.2f} m ---")
-        if subset.empty:
-            print(f"  No station within ±{tol:.2f} m of x = {station_x:.2f} m.")
-        else:
-            print(subset.to_string(index=False))

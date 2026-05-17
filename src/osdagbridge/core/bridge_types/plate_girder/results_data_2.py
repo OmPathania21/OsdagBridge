@@ -408,9 +408,6 @@ def _dump_crossbracing(data: dict) -> None:
             ec = end["coords"]
             length_m = round(math.sqrt(sum((ec[i] - sc[i]) ** 2 for i in range(3))), 4)
 
-        mid       = chain.get("mid")
-        station_x = round(mid["coords"][0], 3) if mid else None
-
         lc_results = []
 
         for lc in load_cases:
@@ -448,12 +445,14 @@ def _dump_crossbracing(data: dict) -> None:
                 "warning":        warning,
             })
 
+        # Forces are in global axis. Cross-bracings run along global Z, so Vz is their axial force.
+        # Vz_i > 0 → tension, Vz_i < 0 → compression.
         tension_rows     = [r for r in lc_results if r["Vz_i_kN"] >  0]
         compression_rows = [r for r in lc_results if r["Vz_i_kN"] < 0]
 
         critical_tension = None
         if tension_rows:
-            row = max(tension_rows, key=lambda r: r["Vz_i_kN"])
+            row = max(tension_rows, key=lambda r: r["Vz_i_kN"])  # largest positive = worst tension
             critical_tension = {
                 "load_case": row["load_case"],
                 "Vz_i_kN":  row["Vz_i_kN"],
@@ -462,7 +461,7 @@ def _dump_crossbracing(data: dict) -> None:
 
         critical_compression = None
         if compression_rows:
-            row = min(compression_rows, key=lambda r: r["Vz_i_kN"])
+            row = min(compression_rows, key=lambda r: r["Vz_i_kN"])  # most negative = worst compression
             critical_compression = {
                 "load_case": row["load_case"],
                 "Vz_i_kN":  row["Vz_i_kN"],
@@ -478,7 +477,6 @@ def _dump_crossbracing(data: dict) -> None:
             "member_id":            m_id,
             "girder_pair":          girder_pair,
             "length_m":             length_m,
-            "station_x":            station_x,
             "critical_tension":     critical_tension,
             "critical_compression": critical_compression,
             "results":              lc_results,
@@ -519,7 +517,12 @@ def enrich_crossbracing_dump(pair_designs: dict) -> None:
     Parameters
     ----------
     pair_designs : dict
-        {"G1-G2": {"diagonal": osdag_result_dict, "chord": osdag_result_dict}, ...}
+        {
+            "G1-G2": {
+                "diagonal": {"tension": result_or_None, "compression": result_or_None},
+                "chord":    {"tension": result_or_None, "compression": result_or_None},
+            }, ...
+        }
     """
     out_path = _TOOLS_DIR / "crossbracing_results.json"
     if not out_path.exists():
@@ -531,13 +534,25 @@ def enrich_crossbracing_dump(pair_designs: dict) -> None:
     for entry in data.values():
         pair    = entry.get("girder_pair")
         designs = pair_designs.get(pair, {})
-        osdag_diag  = _extract_osdag_summary(designs.get("diagonal") or {})
-        osdag_chord = _extract_osdag_summary(designs.get("chord")    or {})
 
-        for key in ("critical_tension", "critical_compression"):
-            if entry.get(key):
-                entry[key]["osdag_diagonal"] = osdag_diag
-                entry[key]["osdag_chord"]    = osdag_chord
+        diag_designs  = designs.get("diagonal", {})
+        chord_designs = designs.get("chord",    {})
+
+        if entry.get("critical_tension"):
+            entry["critical_tension"]["osdag_diagonal"] = _extract_osdag_summary(
+                diag_designs.get("tension") or {}
+            )
+            entry["critical_tension"]["osdag_chord"] = _extract_osdag_summary(
+                chord_designs.get("tension") or {}
+            )
+
+        if entry.get("critical_compression"):
+            entry["critical_compression"]["osdag_diagonal"] = _extract_osdag_summary(
+                diag_designs.get("compression") or {}
+            )
+            entry["critical_compression"]["osdag_chord"] = _extract_osdag_summary(
+                chord_designs.get("compression") or {}
+            )
 
     with open(out_path, "w") as f:
         json.dump(data, f, indent=2)
@@ -617,8 +632,8 @@ def _plot_dev(model, ds_all) -> None:
         try:
             fig = og.plot_force(
                 model, ds_all,
+                member=og.Members.ALL,
                 component=comp,
-                backend="plotly",
                 show=False,
             )
             out = plots_dir / fname
