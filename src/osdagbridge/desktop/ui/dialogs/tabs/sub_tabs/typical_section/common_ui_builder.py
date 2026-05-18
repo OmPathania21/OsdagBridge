@@ -3,12 +3,13 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QGridLayout, QLabel, QComboBox, QLineEdit,
-    QTableWidget, QHeaderView, QSizePolicy,
+    QTableWidget, QHeaderView, QSizePolicy, QCheckBox, QGroupBox, QHBoxLayout,
+    QFrame,
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QDoubleValidator
+from PySide6.QtGui import QDoubleValidator, QIntValidator
 
-from osdagbridge.core.utils.common import TYPE_COMBOBOX, TYPE_NOTICE, TYPE_TEXTBOX
+from osdagbridge.core.utils.common import TYPE_COMBOBOX, TYPE_TEXTBOX, TYPE_NOTICE, TYPE_CHECKBOX
 
 
 class UIBuilder(QWidget):
@@ -39,7 +40,6 @@ class UIBuilder(QWidget):
         self._build_ui()
 
     def _build_ui(self):
-        owner = self.owner
         outer = QVBoxLayout(self)
         outer.setContentsMargins(18, 6, 18, 12)
         outer.setSpacing(0)
@@ -48,69 +48,33 @@ class UIBuilder(QWidget):
         self.main_widget.setObjectName(self._main_widget_object_name)
         main_layout = QVBoxLayout(self.main_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        main_layout.setSpacing(10)
 
-        card, card_layout = owner._create_section_card(self._card_title)
-        grid = QGridLayout()
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(self._horizontal_spacing)
-        grid.setVerticalSpacing(self._vertical_spacing)
-
-        # Pre-calculate max fields in any row to set column stretches correctly
-        all_rows = self._schema.get("rows") or []
-        max_fields = max(
-            (len(row.get("fields") or []) for row in all_rows),
-            default=1
-        )
-        filler_col = max_fields * 2
-        for c in range(filler_col):
-            grid.setColumnStretch(c, 0)
-        if self._filler_column_index is not None:
-            grid.setColumnStretch(filler_col, 1)
+        if "sections" in self._schema:
+            # Multiple cards — one per section (e.g. Design Options Cont)
+            for section in self._schema["sections"]:
+                self._build_section(section, main_layout)
         else:
-            grid.setColumnStretch(filler_col - 1, 1)
+            # Single card — original behavior (Typical Section subtabs)
+            # Grid building logic extracted to _build_grid for reuse
+            card, card_layout = self._create_section_card(self._card_title)
+            self._build_grid(self._schema, card_layout)
+            main_layout.addWidget(card)
 
-        label_width = self._schema.get("label_width", 200)
-        row_idx = 0
-        for row in all_rows:
-            fields = row.get("fields") or []
-            col = 0
-            for field_def in fields:
-                ftype = field_def.get("type")
-
-                if not ftype:  # empty placeholder — skip label, add empty spacer
-                    grid.addWidget(QWidget(), row_idx, col)      # empty label col
-                    grid.addWidget(QWidget(), row_idx, col + 1)  # empty field col
-                    col += 2
-                    continue
-
-                if ftype == "table_with_count":
-                    container = self._build_table_with_count(field_def, label_width)
-                    grid.addWidget(container, row_idx, 0, 1, -1)
-                    grid.setColumnStretch(0, 1)
-                    col += 2
-                else:
-                    label = QLabel(field_def.get("label") or "")
-                    label.setStyleSheet("font-size: 11px; color: #000;")
-                    label.setMinimumWidth(label_width)
-                    label.setObjectName((field_def.get("id") or "") + "_label")
-                    grid.addWidget(label, row_idx, col, Qt.AlignLeft)
-
-                    field = self._create_field(field_def, field_width=200)
-                    grid.addWidget(field, row_idx, col + 1, Qt.AlignLeft)
-                    col += 2
-
-            row_idx += 1
-
-        card_layout.addLayout(grid)
-        main_layout.addWidget(card)
         outer.addWidget(self.main_widget)
         outer.addStretch()
 
     def _create_field(self, field_def, field_width=260):
-        owner = self.owner
-        ftype = field_def.get("type")
+        """Create and wire a single field widget from a field_def dict."""
+        owner  = self.owner
+        ftype  = field_def.get("type")
+        ai     = self.additional_input_instance
 
+        # ── Normalize type aliases ─────────────────────────────────────────────
+        if ftype == "line":
+            ftype = TYPE_TEXTBOX
+
+        # ── Build widget ───────────────────────────────────────────────────────
         if ftype == TYPE_COMBOBOX:
             field = QComboBox()
             choices = field_def.get("choices") or []
@@ -118,6 +82,7 @@ class UIBuilder(QWidget):
             field.setSizeAdjustPolicy(QComboBox.AdjustToContents)
             field.setMinimumContentsLength(max((len(c) for c in choices), default=0))
             field.view().setMinimumWidth(320)
+
         elif ftype == TYPE_TEXTBOX:
             field = QLineEdit()
             placeholder = field_def.get("placeholder")
@@ -125,7 +90,6 @@ class UIBuilder(QWidget):
                 field.setPlaceholderText(placeholder)
             if field_def.get("enabled") is False:
                 field.setEnabled(False)
-            
             if field_def.get("read_only"):
                 field.setReadOnly(True)
                 field.setEnabled(False)
@@ -133,55 +97,176 @@ class UIBuilder(QWidget):
                     "QLineEdit { background-color: #f2f2f2; color: #666;"
                     " border: 1px solid #c0c0c0; border-radius: 4px; padding: 4px 6px; }"
                 )
+            # Validator
+            validator_def = field_def.get("validator")
+            if validator_def:
+                vtype = validator_def.get("type")
+                if vtype == "double_range":
+                    field.setValidator(QDoubleValidator(
+                        validator_def.get("bottom", 0.0),
+                        validator_def.get("top", 1e9),
+                        validator_def.get("decimals", 2),
+                    ))
+                elif vtype == "int_range":
+                    field.setValidator(QIntValidator(
+                        validator_def.get("bottom", 0),
+                        validator_def.get("top", 999999),
+                    ))
+
         elif ftype == TYPE_NOTICE:
+            # Notice container — set binds on owner and return immediately
             notice_container, adjust_lbl, warning_lbl = self._build_notice_container()
             setattr(owner, field_def["bind_adjust"],    adjust_lbl)
             setattr(owner, field_def["bind_warning"],   warning_lbl)
             setattr(owner, field_def["bind_container"], notice_container)
             return notice_container
+
+        elif ftype == TYPE_CHECKBOX:
+            # Standalone checkbox (not inside a checkbox_group)
+            field = QCheckBox(field_def.get("label", ""))
+            field.setObjectName(field_def.get("id", ""))
+            field.setStyleSheet("QCheckBox { font-size: 11px; color: #333; spacing: 6px; }")
+            bind_name = field_def.get("bind")
+            if bind_name:
+                setattr(owner, bind_name, field)
+            return field
+
         else:
             return QWidget()
 
-        field.setObjectName(field_def["id"])
+        # ── Common post-build ──────────────────────────────────────────────────
+        field.setObjectName(field_def.get("id", ""))
         field.setFixedWidth(field_width)
-        owner.style_input_field(field)
 
+        # style_input_field is optional — not all owners have it
+        if hasattr(owner, "style_input_field"):
+            owner.style_input_field(field)
+
+        # Tooltip
         tooltip_attr = field_def.get("tooltip")
         if tooltip_attr and hasattr(owner, tooltip_attr):
             field.setToolTip(getattr(owner, tooltip_attr))
 
+        # Bind widget onto owner
         bind_name = field_def.get("bind")
         if bind_name:
             setattr(owner, bind_name, field)
 
-        field_id = field_def["id"]
-        ai = self.additional_input_instance
+        field_id = field_def.get("id", "")
 
+        # ── Signal wiring ──────────────────────────────────────────────────────
         if ftype == TYPE_COMBOBOX:
-
-            # This will validate the input, either it say nothing or popup warning and set specific valid value
-            field.currentTextChanged.connect(lambda text, k=field_id: ai._on_field_edited(k, text))
-            
-            on_change = field_def.get("on_change")
+            # Central dict update via AdditionalInputs (optional)
+            if ai and field_id:
+                field.currentTextChanged.connect(
+                    lambda text, k=field_id: ai._on_field_edited(k, text)
+                )
+            # Domain callback on owner
+            on_change = field_def.get("on_change") or ""
             if on_change and hasattr(owner, on_change):
                 field.currentTextChanged.connect(getattr(owner, on_change))
 
         elif ftype == TYPE_TEXTBOX:
-
-            # For soft-validation while value is being edited in the textbox
-            field.textChanged.connect(lambda text, k=field_id: ai._on_field_editing(text, k))
-
-            # Signal that change in value so to update the input_dictionary
-            field.editingFinished.connect(lambda k=field_id, w=field: ai._on_field_edited(k, w))
-            
-            on_text_changed = field_def.get("on_text_changed")
+            # Soft validation while typing (optional)
+            if ai and field_id:
+                field.textChanged.connect(
+                    lambda text, k=field_id: ai._on_field_editing(text, k)
+                )
+            # Hard validation on focus-out (optional)
+            if ai and field_id:
+                field.editingFinished.connect(
+                    lambda k=field_id, w=field: ai._on_field_edited(k, w)
+                )
+            # Domain callbacks on owner
+            on_text_changed = field_def.get("on_text_changed") or ""
             if on_text_changed and hasattr(owner, on_text_changed):
                 field.textChanged.connect(getattr(owner, on_text_changed))
-            on_editing_finished = field_def.get("on_editing_finished")
+            on_editing_finished = field_def.get("on_editing_finished") or ""
             if on_editing_finished and hasattr(owner, on_editing_finished):
                 field.editingFinished.connect(getattr(owner, on_editing_finished))
 
         return field
+
+    def _build_section(self, section: dict, parent_layout):
+        """Build one section — either checkbox groups or a normal card with grid."""
+
+        if section.get("checkbox_groups"):
+            # ── Checkbox groups (side-by-side QGroupBox) ──────────────────────
+            title = section.get("title")
+            if title:
+                lbl = QLabel(title)
+                lbl.setStyleSheet("font-size: 12px; font-weight: bold; color: #000;")
+                parent_layout.addWidget(lbl)
+
+            groups_layout = QHBoxLayout()
+            groups_layout.setSpacing(20)
+
+            for group in section["checkbox_groups"]:
+                box = QGroupBox(group.get("title", ""))
+                box.setStyleSheet("""
+                    QGroupBox {
+                        border: 1px solid #000; border-radius: 8px;
+                        margin-top: 12px; padding: 8px; background-color: #fff;
+                    }
+                    QGroupBox::title {
+                        subcontrol-origin: margin; subcontrol-position: top left;
+                        left: 12px; padding: 0 6px; background-color: #fff;
+                        font-weight: 600; font-size: 11px; color: #000;
+                    }
+                """)
+                vbox = QVBoxLayout(box)
+                vbox.setContentsMargins(16, 20, 16, 16)
+                vbox.setSpacing(8)
+
+                checkboxes = []
+                default_checked = group.get("default_checked", False)
+                for item in group.get("items", []):
+                    label        = item["label"] if isinstance(item, dict) else item
+                    cb_id        = item.get("id") if isinstance(item, dict) else None
+                    cb = QCheckBox(label)
+                    cb.setChecked(default_checked)
+                    if cb_id:
+                        cb.setObjectName(cb_id)
+                    cb.setStyleSheet("QCheckBox { font-size: 11px; color: #333; spacing: 6px; }")
+                    vbox.addWidget(cb)
+                    checkboxes.append(cb)
+                vbox.addStretch()
+
+                bind_name = group.get("bind")
+                if bind_name:
+                    setattr(self.owner, bind_name, checkboxes)
+
+                groups_layout.addWidget(box)
+
+            parent_layout.addLayout(groups_layout)
+            return
+
+        # ── Normal card with grid ──────────────────────────────────────────────
+        card, card_layout = self._create_section_card(section.get("title", ""))
+        self._build_grid(section, card_layout)
+        parent_layout.addWidget(card)
+
+    def _create_section_card(self, title: str):
+        card = QFrame()
+        card.setObjectName("sectionCard")
+        card.setStyleSheet("""
+            QFrame#sectionCard {
+                background-color: white;
+                border: 1px solid #b2b2b2;
+                border-radius: 8px;
+            }
+        """)
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(16, 16, 16, 16)
+        card_layout.setSpacing(12)
+        if title:
+            title_label = QLabel(title)
+            title_label.setStyleSheet(
+                "font-size: 12px; font-weight: bold; color: #000;"
+                "border: none; background: transparent;"
+            )
+            card_layout.addWidget(title_label)
+        return card, card_layout
 
     def _build_table_with_count(self, field_def: dict, label_width: int = 200) -> QWidget:
         """Build a self-contained widget with label, count-combo, and table.
@@ -219,7 +304,8 @@ class UIBuilder(QWidget):
         combo.setObjectName(count_id)
         combo.addItems(field_def.get("count_choices") or [])
         combo.setFixedWidth(80)
-        owner.style_input_field(combo)
+        if hasattr(owner, "style_input_field"):
+            owner.style_input_field(combo)
         header_row.addWidget(combo, 0, Qt.AlignVCenter)
         header_row.addStretch()
 
@@ -295,3 +381,84 @@ class UIBuilder(QWidget):
         vbox.addWidget(warning_lbl)
 
         return container, adjust_lbl, warning_lbl
+    
+    def _build_grid(self, schema: dict, card_layout):
+        """Build a QGridLayout from schema rows and add it to card_layout."""
+        grid = QGridLayout()
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(self._horizontal_spacing)
+        grid.setVerticalSpacing(self._vertical_spacing)
+
+        all_rows = schema.get("rows") or []
+        max_fields = max(
+            (len(row.get("fields") or []) for row in all_rows if not row.get("row_fields")),
+            default=1
+        )
+        filler_col = max_fields * 2
+        for c in range(filler_col):
+            grid.setColumnStretch(c, 0)
+        if self._filler_column_index is not None:
+            grid.setColumnStretch(filler_col, 1)
+        else:
+            grid.setColumnStretch(filler_col - 1, 1)
+
+        label_width = schema.get("label_width", self._schema.get("label_width", 200))
+        row_idx = 0
+
+        for row in all_rows:
+
+            # ── Inline row_fields (e.g. "Limit : L / [field] m") ──────────────
+            if row.get("row_fields"):
+                h = QHBoxLayout()
+                h.setContentsMargins(0, 0, 0, 0)
+                h.setSpacing(8)
+                for item in row["row_fields"]:
+                    if item.get("type") == "label":
+                        lbl = QLabel(item.get("label", ""))
+                        lbl.setStyleSheet("font-size: 11px; color: #000;")
+                        h.addWidget(lbl)
+                        if item.get("after_spacing"):
+                            h.addSpacing(item["after_spacing"])
+                    else:
+                        f = self._create_field(item, field_width=item.get("width", 150))
+                        h.addWidget(f)
+                h.addStretch()
+                wrapper = QWidget()
+                wrapper.setLayout(h)
+                grid.addWidget(wrapper, row_idx, 0, 1, -1)
+                row_idx += 1
+                continue
+
+            # ── Normal fields row ──────────────────────────────────────────────
+            fields = row.get("fields") or []
+            col = 0
+            for field_def in fields:
+                ftype = field_def.get("type")
+
+                if not ftype:
+                    # Empty placeholder — push col without adding visible widgets
+                    grid.addWidget(QWidget(), row_idx, col)
+                    grid.addWidget(QWidget(), row_idx, col + 1)
+                    col += 2
+                    continue
+
+                if ftype == "table_with_count":
+                    container = self._build_table_with_count(field_def, label_width)
+                    grid.addWidget(container, row_idx, 0, 1, -1)
+                    grid.setColumnStretch(0, 1)
+                    col += 2
+                else:
+                    label = QLabel(field_def.get("label") or "")
+                    label.setTextFormat(Qt.RichText)
+                    label.setStyleSheet("font-size: 11px; color: #000;")
+                    label.setMinimumWidth(label_width)
+                    label.setObjectName((field_def.get("id") or "") + "_label")
+                    grid.addWidget(label, row_idx, col, Qt.AlignLeft)
+
+                    field = self._create_field(field_def, field_width=200)
+                    grid.addWidget(field, row_idx, col + 1, Qt.AlignLeft)
+                    col += 2
+
+            row_idx += 1
+
+        card_layout.addLayout(grid)

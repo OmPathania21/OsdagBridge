@@ -148,6 +148,8 @@ KEY_CRASH_BARRIER_DENSITY = "Crash Barrier Material Density"
 KEY_CRASH_BARRIER_WIDTH = "Crash Barrier Width"
 KEY_CRASH_BARRIER_AREA = "Crash Barrier Area"
 
+#══════════════TYPICAL-SECTION-TAB-KEY-START═══════════════════════════════════════════════════════
+
 # Typical Section - Crash Barrier Type Keys
 KEY_CB_TAB = "typical_section.crash_barrier.tab"
 KEY_CB_TYPE = "typical_section.crash_barrier.type"
@@ -198,6 +200,34 @@ KEY_TS_FOOTPATH_THICKNESS = "typical_section.footpath_thickness"
 KEY_WC_LD_TAB = "typical_section.lane_details.tab"
 KEY_WC_LD_LANE_TABLE = "typical_section.lane_details.lane_table"
 KEY_WC_LD_LANE_TABLE_COUNT = "typical_section.lane_details.lane_table_count"
+
+#══════════════TYPICAL-SECTION-TAB-KEY-ENDS═══════════════════════════════════════════════════════
+
+#══════════════DESIGN-OPTIONS-CONT-TAB-KEY-START══════════════════════════════════════════════════
+
+KEY_DO_TAB                  = "design_options_cont.tab"
+KEY_DO_GAMMA_C_BASIC        = "design_options_cont.partial_factor.gamma_c_basic"
+KEY_DO_GAMMA_C_ACCIDENTAL   = "design_options_cont.partial_factor.gamma_c_accidental"
+KEY_DO_GAMMA_M0             = "design_options_cont.partial_factor.gamma_m0"
+KEY_DO_GAMMA_M1             = "design_options_cont.partial_factor.gamma_m1"
+KEY_DO_GAMMA_S              = "design_options_cont.partial_factor.gamma_s"
+KEY_DO_GAMMA_V              = "design_options_cont.partial_factor.gamma_v"
+KEY_DO_GAMMA_FLT            = "design_options_cont.partial_factor.gamma_flt"
+KEY_DO_GAMMA_MF             = "design_options_cont.partial_factor.gamma_mf"
+KEY_DO_LOAD_CYCLES          = "design_options_cont.fatigue.load_cycles"
+KEY_DO_DEFLECTION_LIMIT     = "design_options_cont.deflection.limit"
+KEY_DO_ULS_BENDING          = "design_options_cont.uls.bending_resistance"
+KEY_DO_ULS_SHEAR            = "design_options_cont.uls.vertical_shear"
+KEY_DO_ULS_LTB              = "design_options_cont.uls.lateral_torsional_buckling"
+KEY_DO_ULS_TRANSVERSE       = "design_options_cont.uls.transverse_force"
+KEY_DO_ULS_LONG_SHEAR       = "design_options_cont.uls.longitudinal_shear"
+KEY_DO_ULS_FATIGUE          = "design_options_cont.uls.fatigue"
+KEY_DO_SLS_STRESS           = "design_options_cont.sls.stress_limitation"
+KEY_DO_SLS_LONG_SHEAR       = "design_options_cont.sls.longitudinal_shear"
+KEY_DO_SLS_DEFLECTION       = "design_options_cont.sls.deflection_control"
+KEY_DO_SLS_CRACK_WIDTH      = "design_options_cont.sls.crack_width"
+
+#══════════════DESIGN-OPTIONS-CONT-TAB-KEY-ENDS═══════════════════════════════════════════════════
 
 KEY_METALLIC_CRASH_BARRIER_TYPE = ["Single W-beam", "Double W-beam"]
 KEY_RIGID_CRASH_BARRIER_TYPE = ["IRC-5R", "High Containment"]

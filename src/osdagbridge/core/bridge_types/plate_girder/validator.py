@@ -78,7 +78,8 @@ class BridgeInputValidator:
         Per-field validation for additional inputs.
         Returns (corrected_value, message) or None if valid.
         """
-
+        # ═══TYPICAL-SECTION-TAB-VALIDATORS-STARTS═════════════════════════════════════════════════════════
+        
         # ── Deck Details ───────────────────────────────────────────────────────
         if key == KEY_TS_DECK_THICKNESS:
             v = self._to_float(inputs.get(key))
@@ -105,6 +106,14 @@ class BridgeInputValidator:
             if v is None:              return MIN_RAILING_HEIGHT, "Railing height must be a numeric value."
             if v < MIN_RAILING_HEIGHT: return MIN_RAILING_HEIGHT, f"Minimum railing height is {MIN_RAILING_HEIGHT} m as per IRC 5 Cl.109.7.2."
             if v > 3.0:                return 3.0, "Railing height must not exceed 3.0 m."
+
+        # ═══TYPICAL-SECTION-TAB-VALIDATORS-ENDS═══════════════════════════════════════════════════════════
+
+
+        # ═══DESIGN-OPTIONS-CONT-TAB-VALIDATORS-STARTS═════════════════════════════════════════════════════
+        
+        # ═══DESIGN-OPTIONS-CONT-TAB-VALIDATORS-ENDS═══════════════════════════════════════════════════════
+
 
         return None
     

@@ -5,72 +5,7 @@ flow, including Typical Section Details, Support/Design options, and
 Member Properties.
 """
 
-from osdagbridge.core.utils.common import (
-    DEFAULT_CRASH_BARRIER_WIDTH,
-    DEFAULT_RAILING_WIDTH,
-    KEY_INCLUDE_MEDIAN,
-    SAIL_APPROVED_THICKNESS_VALUES,
-    VALUES_BEARING_STIFFENER_COUNT,
-    VALUES_END_DIAPHRAGM_TYPE,
-    VALUES_GIRDER_DESIGN_MODE,
-    VALUES_GIRDER_SPAN_MODE,
-    VALUES_GIRDER_SUPPORT_TYPE,
-    VALUES_GIRDER_SYMMETRY,
-    VALUES_GIRDER_TYPE,
-    VALUES_LONGITUDINAL_STIFFENER,
-    VALUES_PROFILE_SCOPE,
-    VALUES_STIFFENER_DESIGN,
-    VALUES_TORSIONAL_RESTRAINT,
-    VALUES_WARPING_RESTRAINT,
-    VALUES_WEB_TYPE,
-    VALUES_RAILING_TYPE,
-    VALUES_WEARING_COAT_MATERIAL,
-    VALUES_NO_YES,
-    STIFFENER_DETAILS_DEFAULTS,
-    TYPE_COMBOBOX,
-    TYPE_TEXTBOX,
-    KEY_CB_TYPE,
-    KEY_CB_DENSITY,
-    KEY_CB_WIDTH,
-    KEY_CB_HEIGHT,
-    KEY_CB_AREA,
-    KEY_CB_LOAD,
-    KEY_CB_POST_SPACING,
-    KEY_CB_TAB,
-    KEY_MD_TYPE,
-    KEY_MD_DENSITY,
-    KEY_MD_WIDTH,
-    KEY_MD_HEIGHT,
-    KEY_MD_AREA,
-    KEY_MD_LOAD,
-    KEY_MD_POST_SPACING,
-    KEY_MD_TAB,
-    KEY_RL_TYPE,
-    KEY_RL_WIDTH,
-    KEY_RL_HEIGHT,
-    KEY_RL_LOAD_MODE,
-    KEY_RL_LOAD_VALUE,
-    KEY_RL_TAB,
-    KEY_WC_MATERIAL,
-    KEY_WC_DENSITY,
-    KEY_WC_THICKNESS,
-    KEY_WC_TAB,
-    KEY_WC_LD_TAB,
-    KEY_WC_LD_LANE_TABLE,
-    KEY_WC_LD_LANE_TABLE_COUNT,
-    KEY_TS_TAB,
-    KEY_TS_DECK_TAB,
-    KEY_TS_GIRDER_SPACING,
-    KEY_TS_NO_OF_GIRDERS,
-    KEY_TS_DECK_OVERHANG,
-    KEY_TS_OVERALL_WIDTH,
-    KEY_TS_DECK_THICKNESS,
-    KEY_TS_FOOTPATH_WIDTH,
-    KEY_TS_FOOTPATH_THICKNESS,
-    KEY_FOOTPATH,
-    VALUES_FOOTPATH,
-    TYPE_NOTICE
-)
+from osdagbridge.core.utils.common import *
 
 _DECK_DETAILS_TAB_SCHEMA = {
     "id": KEY_TS_DECK_TAB,
@@ -1332,157 +1267,118 @@ DESIGN_OPTIONS_SCHEMA = {
 }
 
 DESIGN_OPTIONS_CONT_SCHEMA = {
-    "id": "design_options_cont",
+    "id": KEY_DO_TAB,
     "sections": [
 
-        # ---------------- Partial Factor ----------------
+        # ──────────────────── Partial Factor ────────────────────
         {
             "title": "Partial Factor",
-            "fields": [
-
+            "rows": [
                 {
-                    "id": "gamma_c_basic",
-                    "label": "Concrete basic & seismic, &#947;<sub>c</sub>",
-                    "type": "line",
-                    "default": "1.50",
-                    "bind": "gamma_c_basic_input",
-                    "validator": {
-                        "type": "double_range",
-                        "bottom": 1.0,
-                        "top": 2.0,
-                        "decimals": 2,
-                    },
+                    "fields": [{
+                        "id":          KEY_DO_GAMMA_C_BASIC,
+                        "label":       "Concrete basic & seismic, &#947;<sub>c</sub>",
+                        "type":        TYPE_TEXTBOX,
+                        "bind":        "gamma_c_basic_input",
+                        "placeholder": "1.0 - 2.0",
+                    }]
                 },
-
                 {
-                    "id": "gamma_c_accidental",
-                    "label": "Concrete Accidental, &#947;<sub>c</sub>",
-                    "type": "line",
-                    "default": "1.20",
-                    "bind": "gamma_c_accidental_input",
-                    "validator": {
-                        "type": "double_range",
-                        "bottom": 1.0,
-                        "top": 2.0,
-                        "decimals": 2,
-                    },
+                    "fields": [{
+                        "id":          KEY_DO_GAMMA_C_ACCIDENTAL,
+                        "label":       "Concrete Accidental, &#947;<sub>c</sub>",
+                        "type":        TYPE_TEXTBOX,
+                        "bind":        "gamma_c_accidental_input",
+                        "placeholder": "1.0 - 2.0",
+                    }]
                 },
-
                 {
-                    "id": "gamma_m0",
-                    "label": "Structural steel for Yielding and Buckling, &#947;<sub>M0</sub>",
-                    "type": "line",
-                    "default": "1.10",
-                    "bind": "gamma_m0_input",
-                    "validator": {
-                        "type": "double_range",
-                        "bottom": 1.0,
-                        "top": 2.0,
-                        "decimals": 2,
-                    },
+                    "fields": [{
+                        "id":          KEY_DO_GAMMA_M0,
+                        "label":       "Structural steel for Yielding and Buckling, &#947;<sub>M0</sub>",
+                        "type":        TYPE_TEXTBOX,
+                        "bind":        "gamma_m0_input",
+                        "placeholder": "1.0 - 2.0",
+                    }]
                 },
-
                 {
-                    "id": "gamma_m1",
-                    "label": "Structural Steel For Ultimate Stress, &#947;<sub>M1</sub>",
-                    "type": "line",
-                    "default": "1.25",
-                    "bind": "gamma_m1_input",
-                    "validator": {
-                        "type": "double_range",
-                        "bottom": 1.0,
-                        "top": 2.0,
-                        "decimals": 2,
-                    },
+                    "fields": [{
+                        "id":          KEY_DO_GAMMA_M1,
+                        "label":       "Structural Steel For Ultimate Stress, &#947;<sub>M1</sub>",
+                        "type":        TYPE_TEXTBOX,
+                        "bind":        "gamma_m1_input",
+                        "placeholder": "1.0 - 2.0",
+                    }]
                 },
-
                 {
-                    "id": "gamma_s",
-                    "label": "Reinforcing Steel, &#947;<sub>s</sub>",
-                    "type": "line",
-                    "default": "1.15",
-                    "bind": "gamma_s_input",
-                    "validator": {
-                        "type": "double_range",
-                        "bottom": 1.0,
-                        "top": 2.0,
-                        "decimals": 2,
-                    },
+                    "fields": [{
+                        "id":          KEY_DO_GAMMA_S,
+                        "label":       "Reinforcing Steel, &#947;<sub>s</sub>",
+                        "type":        TYPE_TEXTBOX,
+                        "bind":        "gamma_s_input",
+                        "placeholder": "1.0 - 2.0",
+                    }]
                 },
-
                 {
-                    "id": "gamma_v",
-                    "label": "Shear Connectors For Yield, &#947;<sub>v</sub>",
-                    "type": "line",
-                    "default": "1.25",
-                    "bind": "gamma_v_input",
-                    "validator": {
-                        "type": "double_range",
-                        "bottom": 1.0,
-                        "top": 2.0,
-                        "decimals": 2,
-                    },
+                    "fields": [{
+                        "id":          KEY_DO_GAMMA_V,
+                        "label":       "Shear Connectors For Yield, &#947;<sub>v</sub>",
+                        "type":        TYPE_TEXTBOX,
+                        "bind":        "gamma_v_input",
+                        "placeholder": "1.0 - 2.0",
+                    }]
                 },
-
                 {
-                    "id": "gamma_flt",
-                    "label": "Fatigue Load, &#947;<sub>flt</sub>",
-                    "type": "line",
-                    "default": "1.00",
-                    "bind": "gamma_flt_input",
-                    "validator": {
-                        "type": "double_range",
-                        "bottom": 1.0,
-                        "top": 2.0,
-                        "decimals": 2,
-                    },
+                    "fields": [{
+                        "id":          KEY_DO_GAMMA_FLT,
+                        "label":       "Fatigue Load, &#947;<sub>flt</sub>",
+                        "type":        TYPE_TEXTBOX,
+                        "bind":        "gamma_flt_input",
+                        "placeholder": "1.0 - 2.0",
+                    }]
                 },
-
                 {
-                    "id": "gamma_mf",
-                    "label": "Fatigue Strength, &#947;<sub>Mf,t</sub>",
-                    "type": "line",
-                    "default": "1.35",
-                    "bind": "gamma_mf_input",
-                    "validator": {
-                        "type": "double_range",
-                        "bottom": 1.0,
-                        "top": 2.0,
-                        "decimals": 2,
-                    },
-                },
-            ]
-        },
-
-        # ---------------- Resistance to Fatigue ----------------
-        {
-            "title": "Resistance to Fatigue",
-            "fields": [
-                {"id": "load_cycles", "label": "Number of Load Cycles", "type": "line", "default": "2000000.00", "bind": "load_cycles_input",
-                 "validator": {
-                        "type": "double_range",
-                        "bottom": 100000,
-                        "top": 100000000,
-                        "decimals": 2,
-                    },
+                    "fields": [{
+                        "id":          KEY_DO_GAMMA_MF,
+                        "label":       "Fatigue Strength, &#947;<sub>Mf,t</sub>",
+                        "type":        TYPE_TEXTBOX,
+                        "bind":        "gamma_mf_input",
+                        "placeholder": "1.0 - 2.0",
+                    }]
                 },
             ],
         },
 
-        # ---------------- Deflection Control ----------------
+        # ──────────────────── Resistance to Fatigue ────────────────────
+        {
+            "title": "Resistance to Fatigue",
+            "rows": [
+                {
+                    "fields": [{
+                        "id":          KEY_DO_LOAD_CYCLES,
+                        "label":       "Number of Load Cycles",
+                        "type":        TYPE_TEXTBOX,
+                        "bind":        "load_cycles_input",
+                        "placeholder": "100000 - 100000000",
+                    }]
+                },
+            ],
+        },
+
+        # ──────────────────── Deflection Control ────────────────────
         {
             "title": "Deflection Control",
-            "fields": [
+            "rows": [
                 {
                     "row_fields": [
-                        {"label": "Limit :", "type": "label","after_spacing": 408},
-                        {"label": "L /", "type": "label"},
-                        {"id": "limit_l", "label": "", "type": "line", "default": "600.00", "bind": "limit_input", "width": 150,
-                        "validator": {
-                            "type": "int_range",
-                            "bottom": 300,
-                            "top": 800,
-                            }
+                        {"label": "Limit :", "type": "label", "after_spacing": 408},
+                        {"label": "L /",    "type": "label"},
+                        {
+                            "id":          KEY_DO_DEFLECTION_LIMIT,
+                            "type":        TYPE_TEXTBOX,
+                            "bind":        "limit_input",
+                            "width":       150,
+                            "placeholder": "300 - 800",
                         },
                         {"label": "m", "type": "label"},
                     ]
@@ -1490,38 +1386,39 @@ DESIGN_OPTIONS_CONT_SCHEMA = {
             ],
         },
 
-        # ---------------- Limit States ----------------
+        # ──────────────────── Limit States ────────────────────
         {
             "title": "Limit States",
             "checkbox_groups": [
                 {
-                    "title": "Ultimate Limit States",
-                    "items": [
-                        "Bending Resistance",
-                        "Resistance to Vertical Shear",
-                        "Resistance to Lateral-torsional Buckling",
-                        "Resistance to Transverse force",
-                        "Resistance to Longitudinal Shear",
-                        "Resistance to Fatigue",
-                    ],
-                    "bind": "ultimate_checkboxes",
+                    "title":           "Ultimate Limit States",
+                    "bind":            "ultimate_checkboxes",
                     "default_checked": True,
+                    "items": [
+                        {"id": KEY_DO_ULS_BENDING,    "label": "Bending Resistance",                       "type": TYPE_CHECKBOX},
+                        {"id": KEY_DO_ULS_SHEAR,      "label": "Resistance to Vertical Shear",             "type": TYPE_CHECKBOX},
+                        {"id": KEY_DO_ULS_LTB,        "label": "Resistance to Lateral-torsional Buckling", "type": TYPE_CHECKBOX},
+                        {"id": KEY_DO_ULS_TRANSVERSE,  "label": "Resistance to Transverse force",          "type": TYPE_CHECKBOX},
+                        {"id": KEY_DO_ULS_LONG_SHEAR,  "label": "Resistance to Longitudinal Shear",        "type": TYPE_CHECKBOX},
+                        {"id": KEY_DO_ULS_FATIGUE,     "label": "Resistance to Fatigue",                   "type": TYPE_CHECKBOX},
+                    ],
                 },
                 {
-                    "title": "Serviceability Limit States",
-                    "items": [
-                        "Stress Limitation",
-                        "Longitudinal Shear (SLS)",
-                        "Deflection Control",
-                        "Crack Width Check",
-                    ],
-                    "bind": "service_checkboxes",
+                    "title":           "Serviceability Limit States",
+                    "bind":            "service_checkboxes",
                     "default_checked": True,
+                    "items": [
+                        {"id": KEY_DO_SLS_STRESS,      "label": "Stress Limitation",        "type": TYPE_CHECKBOX},
+                        {"id": KEY_DO_SLS_LONG_SHEAR,  "label": "Longitudinal Shear (SLS)", "type": TYPE_CHECKBOX},
+                        {"id": KEY_DO_SLS_DEFLECTION,  "label": "Deflection Control",       "type": TYPE_CHECKBOX},
+                        {"id": KEY_DO_SLS_CRACK_WIDTH,  "label": "Crack Width Check",       "type": TYPE_CHECKBOX},
+                    ],
                 },
             ],
         },
     ],
 }
+
 GIRDER_DETAILS_SCHEMA = {
     "id": "girder_details_tab",
     "defaults": {

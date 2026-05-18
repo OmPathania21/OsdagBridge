@@ -13,9 +13,6 @@ from osdagbridge.core.utils.codes.keyfile import (
     KEY_RIGID_CRASH_BARRIER_TYPE,
 )
 from osdagbridge.core.utils.common import (
-    DEFAULT_CONCRETE_DENSITY,
-    DEFAULT_CRASH_BARRIER_WIDTH,
-    DEFAULT_GIRDER_SPACING,
     DEFAULT_RAILING_WIDTH,
     KEY_TS_GIRDER_SPACING, KEY_TS_NO_OF_GIRDERS, KEY_TS_DECK_OVERHANG, KEY_TS_OVERALL_WIDTH,
     KEY_TS_NO_OF_FOOTPATHS, KEY_TS_DECK_THICKNESS, KEY_TS_FOOTPATH_WIDTH, KEY_TS_FOOTPATH_THICKNESS,
@@ -32,6 +29,11 @@ from osdagbridge.core.utils.common import (
     KEY_GIRDER_ELASTIC_MODULUS_ZZ, KEY_GIRDER_ELASTIC_MODULUS_ZY,
     KEY_GIRDER_PLASTIC_MODULUS_ZUZ, KEY_GIRDER_PLASTIC_MODULUS_ZUY,
     KEY_GIRDER_TORSION_CONSTANT_IT, KEY_GIRDER_WARPING_CONSTANT_IW,
+
+    KEY_DO_GAMMA_C_BASIC, KEY_DO_GAMMA_C_ACCIDENTAL, KEY_DO_GAMMA_M0, KEY_DO_GAMMA_M1, KEY_DO_GAMMA_S,
+    KEY_DO_GAMMA_V, KEY_DO_GAMMA_FLT, KEY_DO_GAMMA_MF, KEY_DO_LOAD_CYCLES, KEY_DO_DEFLECTION_LIMIT,
+    KEY_DO_ULS_BENDING, KEY_DO_ULS_SHEAR, KEY_DO_ULS_LTB, KEY_DO_ULS_TRANSVERSE, KEY_DO_ULS_LONG_SHEAR, KEY_DO_ULS_FATIGUE,
+    KEY_DO_SLS_STRESS, KEY_DO_SLS_LONG_SHEAR, KEY_DO_SLS_DEFLECTION, KEY_DO_SLS_CRACK_WIDTH,
 )
 from .initial_sizing import (
     DEFAULT_DECK_OVERHANG_RATIO as IS_DEFAULT_DECK_OVERHANG_RATIO,
@@ -162,6 +164,33 @@ def _update_typical_section_defaults(input_dict: dict) -> None:
     _update(KEY_WC_DENSITY,   24.0)        # kN/m³
     _update(KEY_WC_THICKNESS, 50.0)        # mm
 
+def _update_design_options_cont_defaults(input_dict: dict) -> None:
+    """Fill Design Options (Cont.) tab keys that are None with schema defaults."""
+    
+    def _update(key, value):
+        input_dict.update({key: value})
+
+    _update(KEY_DO_GAMMA_C_BASIC,      "1.50")
+    _update(KEY_DO_GAMMA_C_ACCIDENTAL, "1.20")
+    _update(KEY_DO_GAMMA_M0,           "1.10")
+    _update(KEY_DO_GAMMA_M1,           "1.25")
+    _update(KEY_DO_GAMMA_S,            "1.15")
+    _update(KEY_DO_GAMMA_V,            "1.25")
+    _update(KEY_DO_GAMMA_FLT,          "1.00")
+    _update(KEY_DO_GAMMA_MF,           "1.35")
+    _update(KEY_DO_LOAD_CYCLES,        "2000000.00")
+    _update(KEY_DO_DEFLECTION_LIMIT,   "600.00")
+    _update(KEY_DO_ULS_BENDING,        True)
+    _update(KEY_DO_ULS_SHEAR,          True)
+    _update(KEY_DO_ULS_LTB,            True)
+    _update(KEY_DO_ULS_TRANSVERSE,     True)
+    _update(KEY_DO_ULS_LONG_SHEAR,     True)
+    _update(KEY_DO_ULS_FATIGUE,        True)
+    _update(KEY_DO_SLS_STRESS,         True)
+    _update(KEY_DO_SLS_LONG_SHEAR,     True)
+    _update(KEY_DO_SLS_DEFLECTION,     True)
+    _update(KEY_DO_SLS_CRACK_WIDTH,    True)
+
 
 def solve_extend_basic_input_dict(basic_input_dict: dict) -> None:
     """Parse basic inputs and solve bridge layout. Updates basic_input_dict in-place."""
@@ -173,6 +202,8 @@ def solve_extend_basic_input_dict(basic_input_dict: dict) -> None:
 
     # Fill sub-tab defaults before reading any typical-section keys (e.g. footpath width)
     _update_typical_section_defaults(basic_input_dict)
+
+    _update_design_options_cont_defaults(basic_input_dict)
 
     if footpath_str in ('None', ''):
         n_footpaths, footpath_width, railing_width = 0, 0.0, 0.0

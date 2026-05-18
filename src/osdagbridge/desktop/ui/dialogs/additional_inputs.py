@@ -7,7 +7,7 @@ from copy import deepcopy
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QTabBar, QLabel, QLineEdit,
     QComboBox, QGroupBox, QPushButton, QCheckBox, QMessageBox, QSizePolicy,
-    QGridLayout, QDialog, QSizePolicy, QSizeGrip,
+    QGridLayout, QDialog, QSizePolicy, QSizeGrip, QFrame, QScrollArea
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QDoubleValidator, QIntValidator
@@ -22,7 +22,6 @@ from osdagbridge.desktop.ui.dialogs.tabs.section_properties_tab import SectionPr
 from osdagbridge.desktop.ui.dialogs.tabs.loading_tab import LoadingTab
 from osdagbridge.desktop.ui.dialogs.tabs.support_conditions_tab import SupportConditionsTab
 from osdagbridge.desktop.ui.dialogs.tabs.design_options_tab import DesignOptionsTab
-from osdagbridge.desktop.ui.dialogs.tabs.design_options_cont_tab import DesignOptionsContTab
 from osdagbridge.desktop.ui.utils.custom_widgets import SmartCursorComboBoxView
 
 # =================================================================================
@@ -310,6 +309,9 @@ class AdditionalInputs(QDialog):
         overlay.addWidget(size_grip, 0, Qt.AlignBottom | Qt.AlignRight)
         main_layout.addLayout(overlay)
     
+    def style_input_field(self, field):
+        apply_field_style(field)
+
     def init_ui(self):
         self.setupWrapper()
         
@@ -380,8 +382,23 @@ class AdditionalInputs(QDialog):
         self.tabs.addTab(self.design_options_tab, "Analysis/Design Options")
         
         # Sub-Tab 6: Design Options (Cont.)
-        self.design_options_cont_tab = DesignOptionsContTab(self)
-        self.tabs.addTab(self.design_options_cont_tab, "Design Options (Cont.)")
+        from osdagbridge.desktop.ui.dialogs.tabs.sub_tabs.typical_section.common_ui_builder import UIBuilder
+        from osdagbridge.core.bridge_types.plate_girder.ui_fields_additional_input import DESIGN_OPTIONS_CONT_SCHEMA
+
+        _do_scroll = QScrollArea()
+        _do_scroll.setWidgetResizable(True)
+        _do_scroll.setFrameShape(QFrame.NoFrame)
+        _do_scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+
+        self.design_options_cont_tab = UIBuilder(
+            owner=self,
+            schema=DESIGN_OPTIONS_CONT_SCHEMA,
+            card_title="",
+            main_widget_object_name="design_options_cont.main",
+            additional_input_instance=None,
+        )
+        _do_scroll.setWidget(self.design_options_cont_tab)
+        self.tabs.addTab(_do_scroll, "Design Options (Cont.)")
 
         self.tabs.currentChanged.connect(self._on_top_tab_changed)        
         main_layout.addWidget(self.tabs)
