@@ -2593,7 +2593,6 @@ def _composite_stiffness_ratio(config: BridgeConfig) -> float:
 def _extract_demands_from_analysis(
     analysis_results: PlateGirderAnalysisResults,
     config: BridgeConfig,
-    girder_name: str | None = None,
 ) -> DemandEnvelope:
     """
     Extract every demand quantity from a solved grillage analysis.
@@ -2619,20 +2618,6 @@ def _extract_demands_from_analysis(
             list(info.get("path", [])),
             name,
         )
-
-    if girder_name is not None and girder_name in girders:
-        elements, nodes, name = _pick_girder_info(girder_name)
-        if elements:
-            return DemandExtractor.from_analysis_results(
-                results=analysis_results,
-                element_ids=elements,
-                node_ids=nodes,
-                Ze_steel_mm3=Ze_steel_mm3,
-                Aw_mm2=Aw_mm2,
-                Nsc=Nsc,
-                member_name=name,
-                stiffness_ratio=ratio,
-            )
 
     interior_g_name = next(
         (g for g in girders if "interior" in g.lower()), None
@@ -2702,7 +2687,6 @@ def run_design_check(
     config: BridgeConfig | None = None,
     demand: DemandEnvelope | None = None,
     print_report: bool = True,
-    girder_name: str | None = None,
 ) -> str:
     """
     Execute the complete IRC 22:2015 design-check pipeline.
@@ -2741,7 +2725,7 @@ def run_design_check(
     # -- Step 2: Demand from Analyser --
     print("\n[Step 2/5] Extracting design demands (Analyser) ...")
     if demand is None and analysis_results is not None:
-        demand = _extract_demands_from_analysis(analysis_results, config, girder_name=girder_name)
+        demand = _extract_demands_from_analysis(analysis_results, config)
     elif demand is None:
         demand = _example_demands(config)
     print(f"  Mu              = {demand.Mu_kNm:.2f} kNm")
