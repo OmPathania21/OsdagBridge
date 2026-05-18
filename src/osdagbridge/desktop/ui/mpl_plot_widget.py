@@ -7,9 +7,12 @@ from mpl_toolkits.mplot3d.art3d import Path3DCollection
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QSizePolicy, QPushButton,
-    QFrame, QLabel, QCheckBox, QScrollArea
+    QFrame, QLabel, QCheckBox, QScrollArea, QApplication
 )
-from PySide6.QtCore import Qt, QEvent
+from PySide6.QtCore import Qt, QEvent, QTimer
+
+from navcube import NavCubeOverlay, NavCubeStyle
+from osdagbridge.desktop.ui.utils.mpl_widget_navcube_sync import MatplotlibNavCubeSync
 
 from osdagbridge.core.bridge_types.plate_girder.plot_generator import (
     build_figure_sfd,
@@ -136,6 +139,30 @@ class MplPlotWidget(QWidget):
         # Initialize the Summary Overlay
         self._summary_overlay = SummaryOverlay(self._canvas)
         self._summary_overlay.hide()
+
+        # ── NavCube: create overlay + sync bridge ──────────────────
+        self._navcube = NavCubeOverlay(self._canvas, overlay=False, style=NavCubeStyle(
+            size=65, theme="light",
+            face_color=(242, 244, 247), edge_color=(218, 224, 232),
+            corner_color=(228, 232, 238), text_color=(45, 55, 72),
+            border_color=(30, 30, 30), border_secondary_color=(80, 80, 80),
+            border_width_main=1.6, border_width_secondary=0.9,
+            hover_color=(145, 176, 20, 235), hover_text_color=(255, 255, 255),
+            dot_color=(60, 60, 60, 180), shadow_color=(20, 20, 20, 45),
+            shadow_offset_x=2.0, shadow_offset_y=2.5,
+            face_color_dark=(52, 62, 76), edge_color_dark=(42, 52, 65),
+            corner_color_dark=(47, 57, 70), text_color_dark=(210, 220, 232),
+            border_color_dark=(200, 200, 200), border_secondary_color_dark=(130, 130, 130),
+            hover_color_dark=(145, 176, 20, 235),
+            show_gizmo=False, inactive_opacity=0.70, animation_ms=300,
+            light_direction=(-0.5, -1.0, -1.5),
+        ))
+        self._navcube.hide()
+        self._navcube_sync = MatplotlibNavCubeSync(self._canvas, self._navcube)
+        self._canvas.mpl_connect("button_press_event",   lambda e: self._navcube_sync.set_interaction_active(True)  if e.button == 1 else None)
+        self._canvas.mpl_connect("button_release_event", lambda e: self._navcube_sync.set_interaction_active(False) if e.button == 1 else None)
+        self._canvas.mpl_connect("motion_notify_event",  lambda e: self._navcube_sync.force_sync() if e.button == 1 else None)
+        # ──────────────────────────────────────────────────────────
 
         # zoom toolbar
         self._btn_zoom_in  = QPushButton("+")
@@ -335,6 +362,63 @@ class MplPlotWidget(QWidget):
         self._zoom_scale = 1.0
         self._store_orig_limits()
 
+        # Show NavCube for 3-D plots only, hide for 2-D.
+        QTimer.singleShot(100, self._update_navcube_visibility)
+
+    # ── NavCube helpers ────────────────────────────────────────────
+
+    def _update_navcube_visibility(self):
+        from mpl_toolkits.mplot3d import Axes3D
+        has_3d = any(isinstance(ax, Axes3D) for ax in self._fig.axes)
+        if has_3d:
+            self._resize_navcube()
+            self._position_navcube()
+            self._navcube.mark_ready()
+            self._navcube.show()
+            self._navcube.raise_()
+            self._navcube_sync.force_sync()
+        else:
+            self._navcube.hide()
+
+    def _resize_navcube(self):
+        """Scale NavCube to 8% of the shorter canvas edge, DPI-aware. (mirrors CustomViewer3d)"""
+        vp_logical = min(self._canvas.width(), self._canvas.height())
+        if vp_logical < 10:
+            return
+        nc = self._navcube
+        app = QApplication.instance()
+        screen = nc.screen() if nc.isVisible() else None
+        if screen is None and app:
+            screen = app.primaryScreen()
+        dpr          = max(1.0, screen.devicePixelRatio())  if screen else 1.0
+        physical_dpi = max(72.0, min(screen.physicalDotsPerInch(), 400.0)) if screen else 96.0
+        vp_physical  = vp_logical * dpr
+        ref_size    = max(40, min(round(vp_physical * 0.08 * 96.0 / physical_dpi), 90))
+        ref_padding = round(10 * 96.0 / physical_dpi)
+        ref_scale   = round(25.0 * ref_size / 100.0, 2)
+        if (nc._style.size == ref_size and nc._style.padding == ref_padding
+                and abs(nc._style.scale - ref_scale) < 0.05):
+            return
+        nc._style.size    = ref_size
+        nc._style.padding = ref_padding
+        nc._style.scale   = ref_scale
+        nc._update_dpi()
+
+    def _position_navcube(self):
+        padding = 10
+        x = max(0, self._canvas.width() - self._navcube.width() - padding)
+        self._navcube.move(x, padding)
+
+    def eventFilter(self, obj, event):
+        if obj is self._canvas and event.type() == QEvent.Type.Resize:
+            self._resize_navcube()
+            self._position_navcube()
+            if self._navcube.isVisible():
+                self._navcube.raise_()
+        return super().eventFilter(obj, event)
+
+    # ──────────────────────────────────────────────────────────────
+
     # NATIVE SLOTS: The 'checked' variable is now passed instantly by Qt!
     def _on_summary_toggled(self, checked):
         self._is_summary_checked = checked
@@ -386,6 +470,7 @@ class MplPlotWidget(QWidget):
             self._canvas.draw()
             self._zoom_scale = 1.0
             self._store_orig_limits()
+            QTimer.singleShot(100, self._update_navcube_visibility)
         else:
             self.update_plot()
 
