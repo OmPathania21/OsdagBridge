@@ -1268,11 +1268,16 @@ DESIGN_OPTIONS_SCHEMA = {
 
 DESIGN_OPTIONS_CONT_SCHEMA = {
     "id": KEY_DO_TAB,
+    "layout": {
+        "type":    "rows",   # single column, sections stacked vertically
+        "columns": 1,
+    },
     "sections": [
 
         # ──────────────────── Partial Factor ────────────────────
         {
-            "title": "Partial Factor",
+            "column": 0,
+            "title":  "Partial Factor",
             "rows": [
                 {
                     "fields": [{
@@ -1351,7 +1356,8 @@ DESIGN_OPTIONS_CONT_SCHEMA = {
 
         # ──────────────────── Resistance to Fatigue ────────────────────
         {
-            "title": "Resistance to Fatigue",
+            "column": 0,
+            "title":  "Resistance to Fatigue",
             "rows": [
                 {
                     "fields": [{
@@ -1367,7 +1373,8 @@ DESIGN_OPTIONS_CONT_SCHEMA = {
 
         # ──────────────────── Deflection Control ────────────────────
         {
-            "title": "Deflection Control",
+            "column": 0,
+            "title":  "Deflection Control",
             "rows": [
                 {
                     "row_fields": [
@@ -1388,7 +1395,8 @@ DESIGN_OPTIONS_CONT_SCHEMA = {
 
         # ──────────────────── Limit States ────────────────────
         {
-            "title": "Limit States",
+            "column": 0,
+            "title":  "Limit States",
             "checkbox_groups": [
                 {
                     "title":           "Ultimate Limit States",
