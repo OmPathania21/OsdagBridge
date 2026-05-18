@@ -871,9 +871,11 @@ class PlateGirderCADGenerator:
 
             return solids if solids else [shape]
 
-        # Collect shapes from model_data
+        # Collect shapes from model_data, excluding support geometry from export.
         shapes = []
-        for v in self.model_data.values():
+        for key, v in self.model_data.items():
+            if key in {"supports", "supports_tri", "supports_cyl"}:
+                continue
             shapes.extend(_flatten(v))
 
         # Keep only TopoDS_Shape instances

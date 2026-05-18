@@ -913,7 +913,7 @@ class CustomWindow(QWidget):
         """
         # Prefer the 3D CAD widget's generator as the source of shapes
         from OCC.Core.STEPControl import STEPControl_Writer, STEPControl_AsIs
-        from OCC.Core.Interface import Interface_Static_SetCVal
+        from OCC.Core.Interface import Interface_Static
         from OCC.Core.IFSelect import IFSelect_RetDone
         from OCC.Core.StlAPI import StlAPI_Writer
         from OCC.Core import BRepTools
@@ -993,7 +993,7 @@ class CustomWindow(QWidget):
             elif file_extension == 'stp' or file_extension == 'step':
                 # Initialize the STEP exporter
                 step_writer = STEPControl_Writer()
-                Interface_Static_SetCVal("write.step.schema", "AP203")
+                Interface_Static.SetCVal("write.step.schema", "AP203")
                 
                 # Transfer shapes and write file
                 step_writer.Transfer(fuse_model, STEPControl_AsIs)
@@ -1022,6 +1022,57 @@ class CustomWindow(QWidget):
                 text=f"Failed to save file: {str(e)}",
                 dialogType=MessageBoxType.Critical
             ).exec()
+
+    #Cad-image-export-Start
+    def save_cadImages(self, main):
+        """Save the rendered 3D CAD model as a raster image."""
+
+        cad_window = getattr(main, "cad_3d_widget", None)
+        display = getattr(cad_window, "display", None)
+
+        if display is None:
+            CustomMessageBox(
+                title="Information",
+                text="3D CAD view is not ready. Run Design and open the 3D CAD view before exporting.",
+                dialogType=MessageBoxType.About
+            ).exec()
+            return
+
+        file_types = (
+            "PNG (*.png);;"
+            "JPEG (*.jpeg *.jpg);;"
+            "TIFF (*.tiff *.tif);;"
+            "BMP (*.bmp)"
+        )
+
+        filePath, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export CAD Image",
+            os.path.join(str(get_documents_folder()), "cad.png"),
+            file_types
+        )
+
+        if not filePath:
+            return
+
+        _, ext = os.path.splitext(filePath)
+        ext = ext.lower()
+
+        if ext in [".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"]:
+            display.ExportToImage(filePath)
+            CustomMessageBox(
+                title="Information",
+                text="File saved successfully",
+                dialogType=MessageBoxType.About
+            ).exec()
+        else:
+            CustomMessageBox(
+                title="Error",
+                text="Unsupported file format selected",
+                dialogType=MessageBoxType.Critical
+            ).exec()
+    #Cad-image-export-End
+
     def create_menu_bar_items(self):
         # File Menus
         file_menu = self.menu_bar.addMenu("File")
@@ -1053,6 +1104,7 @@ class CustomWindow(QWidget):
 
         save_cad_action = QAction("Save CAD Image", self)
         save_cad_action.setShortcut(QKeySequence("Alt+I"))
+        save_cad_action.triggered.connect(lambda: self.save_cadImages(self))
         file_menu.addAction(save_cad_action)
 
         export_ifc_action = QAction("Export IFC", self)
