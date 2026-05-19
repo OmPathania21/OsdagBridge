@@ -299,9 +299,9 @@ class IRC22_2014:
         ratio = depth_web_mm / tw_mm
         eps = math.sqrt(250.0 / fy_MPa)
 
-        plastic_limit = 67 * eps
-        compact_limit = 83 * eps
-        semi_limit = 124 * eps
+        plastic_limit = 84 * eps
+        compact_limit = 105 * eps
+        semi_limit = 126 * eps
 
         # --- Determine class ---
         if ratio <= plastic_limit:
