@@ -2061,7 +2061,7 @@ class IRC22_2014:
         fyk,            # MPa (yield strength of transverse reinforcement)
         L_mm,           # length of possible shear plane (mm)
         Ast_cm2_per_m,  # provided transverse steel area per metre (cm2/m)
-        n_layers=6      # default based on 200mm spacing assumption
+        n_layers=2      # default for interior girder
     ):
         """
         IRC 22:2015 - Clause 606.10 Transverse Shear Check
