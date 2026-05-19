@@ -9,7 +9,10 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QDoubleValidator, QIntValidator
 
-from osdagbridge.core.utils.common import TYPE_COMBOBOX, TYPE_TEXTBOX, TYPE_NOTICE, TYPE_CHECKBOX
+from osdagbridge.core.utils.common import (
+    TYPE_COMBOBOX, TYPE_TEXTBOX, TYPE_NOTICE, TYPE_CHECKBOX, TYPE_BOUND_BTN,
+    TYPE_BUTTON, TYPE_TABLE_WITH_COUNTER,
+)
 
 
 class UIBuilder(QWidget):
@@ -21,7 +24,7 @@ class UIBuilder(QWidget):
         schema: dict,
         card_title: str,
         main_widget_object_name: str,
-        additional_input_instance=None,
+        additional_input_instance,
         *,
         horizontal_spacing: int = 24,
         vertical_spacing: int = 10,
@@ -97,6 +100,7 @@ class UIBuilder(QWidget):
         col_layouts = []
         for i in range(num_cols):
             col_widget = QWidget()
+            col_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
             col_layout = QVBoxLayout(col_widget)
             col_layout.setContentsMargins(0, 0, 0, 0)
             col_layout.setSpacing(12)
@@ -108,9 +112,10 @@ class UIBuilder(QWidget):
             col_idx = section.get("column", 0)
             col_idx = max(0, min(col_idx, num_cols - 1))
             stype   = section.get("type")
+            stretch = 1 if section.get("stretch") else 0
 
             if stype == "description":
-                self._build_description_box(section, col_layouts[col_idx])
+                self._build_description_box(section, col_layouts[col_idx], stretch=stretch)
             else:
                 self._build_section(section, col_layouts[col_idx])
 
@@ -119,9 +124,10 @@ class UIBuilder(QWidget):
 
         parent_layout.addLayout(row)
 
-    def _build_description_box(self, section: dict, parent_layout):
+    def _build_description_box(self, section: dict, parent_layout, stretch: int = 0):
         """Styled grey description box."""
         box = QFrame()
+        box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         box.setStyleSheet("""
             QFrame {
                 border: 1px solid #9c9c9c;
@@ -150,7 +156,7 @@ class UIBuilder(QWidget):
             layout.addWidget(txt)
 
         layout.addStretch()
-        parent_layout.addWidget(box)
+        parent_layout.addWidget(box, stretch)
 
     def _build_section(self, section: dict, parent_layout):
         """Build one section — checkbox groups or a normal card with grid."""
@@ -293,7 +299,7 @@ class UIBuilder(QWidget):
                     col += 2
                     continue
 
-                if ftype == "table_with_count":
+                if ftype == TYPE_TABLE_WITH_COUNTER:
                     container = self._build_table_with_count(field_def, label_width)
                     grid.addWidget(container, row_idx, 0, 1, -1)
                     grid.setColumnStretch(0, 1)
@@ -379,17 +385,17 @@ class UIBuilder(QWidget):
             return notice_container
 
         elif ftype == TYPE_CHECKBOX:
-            field = QCheckBox(field_def.get("label", ""))
-            field.setObjectName(field_def.get("id", ""))
+            field = QCheckBox(field_def.get("label"))
+            field.setObjectName(field_def.get("id"))
             field.setStyleSheet("QCheckBox { font-size: 11px; color: #333; spacing: 6px; }")
             bind_name = field_def.get("bind")
             if bind_name:
                 setattr(owner, bind_name, field)
             return field
 
-        elif ftype == "button":
-            btn = QPushButton(field_def.get("text", ""))
-            btn.setObjectName(field_def.get("id", ""))
+        elif ftype == TYPE_BUTTON:
+            btn = QPushButton(field_def.get("text"))
+            btn.setObjectName(field_def.get("id"))
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setStyleSheet("""
                 QPushButton {
@@ -406,12 +412,15 @@ class UIBuilder(QWidget):
             if bind_name:
                 setattr(owner, bind_name, btn)
             return btn
+        
+        elif ftype == TYPE_BOUND_BTN:
+            return self._create_bound_btn_field(field_def, owner, ai)
 
         else:
             return QWidget()
 
         # ── Common post-build ──────────────────────────────────────────────
-        field.setObjectName(field_def.get("id", ""))
+        field.setObjectName(field_def.get("id"))
         field.setFixedWidth(field_width)
 
         if hasattr(owner, "style_input_field"):
@@ -561,3 +570,82 @@ class UIBuilder(QWidget):
         vbox.addWidget(warning_lbl)
 
         return container, adjust_lbl, warning_lbl
+
+    def _create_bound_btn_field(self, field_def: dict, owner, ai) -> QPushButton:
+        """Create a Set Bounds button that opens BoundsSelectorDialog."""
+        from osdagbridge.desktop.ui.utils.bounds_selector import BoundsSelectorDialog
+
+        field_id    = field_def.get("id", "")
+        bind_name   = field_def.get("bind")
+        with_inc    = field_def.get("with_increment", True)
+        lower_limit = field_def.get("lower_limit")
+        upper_limit = field_def.get("upper_limit")
+        title       = field_def.get("text", "Set Bounds")
+        on_accepted = field_def.get("on_accepted") or ""
+
+        btn = QPushButton(title)
+        btn.setObjectName(field_id)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        
+        btn.setFixedHeight(28)
+        btn.setFixedWidth(200)
+        btn.setStyleSheet("""
+            QPushButton {
+                background-color: #ffffff;
+                border: 1px solid #b2b2b2;
+                border-radius: 6px;
+                padding: 4px 12px;
+                font-size: 11px;
+                font-weight: bold;
+            }
+            QPushButton:hover   { background-color: #e6e6e6; color: #2b2b2b; }
+            QPushButton:pressed { background-color: #d0d0d0; }
+        """)
+
+        if bind_name:
+            setattr(owner, bind_name, btn)
+
+        def _open_bounds(
+            _checked,
+            _ai=ai,
+            _owner=owner,
+            _field_id=field_id,
+            _with_inc=with_inc,
+            _lower_limit=lower_limit,
+            _upper_limit=upper_limit,
+            _title=title,
+            _on_accepted=on_accepted,
+        ):
+            # Read current bounds from working_input_dict
+            current = {}
+            if _ai and hasattr(_ai, "working_input_dict"):
+                stored = _ai.working_input_dict.get(_field_id)
+                if isinstance(stored, dict):
+                    current = stored
+
+            dlg = BoundsSelectorDialog(
+                title=_title,
+                bounds=current or {
+                    "lower":     _lower_limit,
+                    "upper":     _upper_limit,
+                    "increment": 1.0,
+                },
+                with_increment=_with_inc,
+                lower_limit=_lower_limit,
+                upper_limit=_upper_limit,
+            )
+            if dlg.exec():
+                result = dlg.result_bounds()
+                print(f"@P0@: {result}")
+                if result:
+                    print(f"@P1@: {_ai}")
+                    # Update working_input_dict via standard pipeline
+                    if _ai:
+                        print(f"@P2@: {result}")
+                        _ai._on_field_edited(_field_id, result)
+                    # Domain callback on owner
+                    if _on_accepted and hasattr(_owner, _on_accepted):
+                        getattr(_owner, _on_accepted)(result)
+
+        btn.clicked.connect(_open_bounds)
+        return btn

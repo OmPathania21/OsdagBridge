@@ -30,6 +30,8 @@ TYPE_PERCENT_BAR = "percent_bar"
 TYPE_ONLY_BUTTON = "only_button"
 TYPE_RADIO_GRID = "radio_button_grid"
 TYPE_NOTICE = "notice"
+TYPE_BOUND_BTN = "bounds_dialog_btn"
+TYPE_TABLE_WITH_COUNTER = "table_with_count"
 
 # Keys for inputs (consistent dot notation for object names)
 KEY_MODULE = "Module"
@@ -203,9 +205,35 @@ KEY_WC_LD_LANE_TABLE_COUNT = "typical_section.lane_details.lane_table_count"
 
 #══════════════TYPICAL-SECTION-TAB-KEY-ENDS═══════════════════════════════════════════════════════
 
-#══════════════DESIGN-OPTIONS-CONT-TAB-KEY-START══════════════════════════════════════════════════
+#══════════════DESIGN-OPTIONS-TAB-KEY-START════════════════════════════════════
+
+KEY_DS_TAB                        = "design_options.tab"
+
+# Construction
+KEY_DS_CONSTRUCTION_STAGE         = "design_options.construction.stage"
+
+# Deck Design
+KEY_DS_REINF_BOUNDS               = "design_options.deck.reinforcement_bounds"
+KEY_DS_REINF_MATERIAL             = "design_options.deck.reinforcement_material"
+KEY_DS_TOP_CLEAR_COVER            = "design_options.deck.top_clear_cover"
+KEY_DS_BOTTOM_CLEAR_COVER         = "design_options.deck.bottom_clear_cover"
+KEY_DS_SIDE_CLEAR_COVER           = "design_options.deck.side_clear_cover"
+
+# Shear Studs
+KEY_DS_STUD_YIELD_STRENGTH        = "design_options.shear_studs.yield_strength"
+KEY_DS_STUD_ULTIMATE_STRENGTH     = "design_options.shear_studs.ultimate_strength"
+KEY_DS_STUD_DIAMETER              = "design_options.shear_studs.diameter"
+KEY_DS_STUD_HEIGHT                = "design_options.shear_studs.height"
+KEY_DS_STUD_COUNT                 = "design_options.shear_studs.count"
+KEY_DS_STUD_TRANSVERSE_SPACING    = "design_options.shear_studs.transverse_spacing"
+
+#══════════════DESIGN-OPTIONS-TAB-KEY-ENDS═════════════════════════════════════
+
+#══════════════DESIGN-OPTIONS-CONT-TAB-KEY-START═══════════════════════════════
 
 KEY_DO_TAB                  = "design_options_cont.tab"
+
+# Partial Factor
 KEY_DO_GAMMA_C_BASIC        = "design_options_cont.partial_factor.gamma_c_basic"
 KEY_DO_GAMMA_C_ACCIDENTAL   = "design_options_cont.partial_factor.gamma_c_accidental"
 KEY_DO_GAMMA_M0             = "design_options_cont.partial_factor.gamma_m0"
@@ -214,20 +242,28 @@ KEY_DO_GAMMA_S              = "design_options_cont.partial_factor.gamma_s"
 KEY_DO_GAMMA_V              = "design_options_cont.partial_factor.gamma_v"
 KEY_DO_GAMMA_FLT            = "design_options_cont.partial_factor.gamma_flt"
 KEY_DO_GAMMA_MF             = "design_options_cont.partial_factor.gamma_mf"
+
+# Fatigue
 KEY_DO_LOAD_CYCLES          = "design_options_cont.fatigue.load_cycles"
+
+# Deflection
 KEY_DO_DEFLECTION_LIMIT     = "design_options_cont.deflection.limit"
+
+# Ultimate Limit States
 KEY_DO_ULS_BENDING          = "design_options_cont.uls.bending_resistance"
 KEY_DO_ULS_SHEAR            = "design_options_cont.uls.vertical_shear"
 KEY_DO_ULS_LTB              = "design_options_cont.uls.lateral_torsional_buckling"
 KEY_DO_ULS_TRANSVERSE       = "design_options_cont.uls.transverse_force"
 KEY_DO_ULS_LONG_SHEAR       = "design_options_cont.uls.longitudinal_shear"
 KEY_DO_ULS_FATIGUE          = "design_options_cont.uls.fatigue"
+
+# Serviceability Limit States
 KEY_DO_SLS_STRESS           = "design_options_cont.sls.stress_limitation"
 KEY_DO_SLS_LONG_SHEAR       = "design_options_cont.sls.longitudinal_shear"
 KEY_DO_SLS_DEFLECTION       = "design_options_cont.sls.deflection_control"
 KEY_DO_SLS_CRACK_WIDTH      = "design_options_cont.sls.crack_width"
 
-#══════════════DESIGN-OPTIONS-CONT-TAB-KEY-ENDS═══════════════════════════════════════════════════
+#══════════════DESIGN-OPTIONS-CONT-TAB-KEY-ENDS════════════════════════════════
 
 KEY_METALLIC_CRASH_BARRIER_TYPE = ["Single W-beam", "Double W-beam"]
 KEY_RIGID_CRASH_BARRIER_TYPE = ["IRC-5R", "High Containment"]

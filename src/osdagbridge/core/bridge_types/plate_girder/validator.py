@@ -110,6 +110,11 @@ class BridgeInputValidator:
         # ═══TYPICAL-SECTION-TAB-VALIDATORS-ENDS═══════════════════════════════════════════════════════════
 
 
+        # ═══ANALYSIS/DESIGN-OPTIONS-TAB-VALIDATORS-STARTS═════════════════════════════════════════════════════
+        
+        # ═══ANALYSIS/DESIGN-OPTIONS-TAB-VALIDATORS-ENDS═══════════════════════════════════════════════════════
+
+
         # ═══DESIGN-OPTIONS-CONT-TAB-VALIDATORS-STARTS═════════════════════════════════════════════════════
         
         # ═══DESIGN-OPTIONS-CONT-TAB-VALIDATORS-ENDS═══════════════════════════════════════════════════════

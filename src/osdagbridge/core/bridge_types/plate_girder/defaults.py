@@ -34,6 +34,10 @@ from osdagbridge.core.utils.common import (
     KEY_DO_GAMMA_V, KEY_DO_GAMMA_FLT, KEY_DO_GAMMA_MF, KEY_DO_LOAD_CYCLES, KEY_DO_DEFLECTION_LIMIT,
     KEY_DO_ULS_BENDING, KEY_DO_ULS_SHEAR, KEY_DO_ULS_LTB, KEY_DO_ULS_TRANSVERSE, KEY_DO_ULS_LONG_SHEAR, KEY_DO_ULS_FATIGUE,
     KEY_DO_SLS_STRESS, KEY_DO_SLS_LONG_SHEAR, KEY_DO_SLS_DEFLECTION, KEY_DO_SLS_CRACK_WIDTH,
+
+    KEY_DS_CONSTRUCTION_STAGE, KEY_DS_REINF_BOUNDS, KEY_DS_REINF_MATERIAL, KEY_DS_TOP_CLEAR_COVER, KEY_DS_BOTTOM_CLEAR_COVER,
+    KEY_DS_SIDE_CLEAR_COVER, KEY_DS_STUD_YIELD_STRENGTH, KEY_DS_STUD_ULTIMATE_STRENGTH, KEY_DS_STUD_DIAMETER,
+    KEY_DS_STUD_HEIGHT, KEY_DS_STUD_COUNT, KEY_DS_STUD_TRANSVERSE_SPACING,
 )
 from .initial_sizing import (
     DEFAULT_DECK_OVERHANG_RATIO as IS_DEFAULT_DECK_OVERHANG_RATIO,
@@ -164,6 +168,28 @@ def _update_typical_section_defaults(input_dict: dict) -> None:
     _update(KEY_WC_DENSITY,   24.0)        # kN/m³
     _update(KEY_WC_THICKNESS, 50.0)        # mm
 
+def _update_design_options_defaults(input_dict: dict) -> None:
+    """Fill Design Options (Cont.) tab keys that are None with schema defaults."""
+    
+    def _update(key, value):
+        input_dict.update({key: value})
+
+    _update(KEY_DS_CONSTRUCTION_STAGE,      "Yes")
+    _update(KEY_DS_REINF_BOUNDS,            {
+                                                "lower":     None,
+                                                "upper":     None,
+                                            })
+    _update(KEY_DS_REINF_MATERIAL,          "Fe 415")
+    _update(KEY_DS_TOP_CLEAR_COVER,         "50")
+    _update(KEY_DS_BOTTOM_CLEAR_COVER,      "50")
+    _update(KEY_DS_SIDE_CLEAR_COVER,        "50")
+    _update(KEY_DS_STUD_YIELD_STRENGTH,     "400")
+    _update(KEY_DS_STUD_ULTIMATE_STRENGTH,  "400")
+    _update(KEY_DS_STUD_DIAMETER,           "12")
+    _update(KEY_DS_STUD_HEIGHT,             "10")
+    _update(KEY_DS_STUD_COUNT,              "1")
+    _update(KEY_DS_STUD_TRANSVERSE_SPACING, "10")
+
 def _update_design_options_cont_defaults(input_dict: dict) -> None:
     """Fill Design Options (Cont.) tab keys that are None with schema defaults."""
     
@@ -202,7 +228,9 @@ def solve_extend_basic_input_dict(basic_input_dict: dict) -> None:
 
     # Fill sub-tab defaults before reading any typical-section keys (e.g. footpath width)
     _update_typical_section_defaults(basic_input_dict)
-
+    
+    _update_design_options_defaults(basic_input_dict)
+    
     _update_design_options_cont_defaults(basic_input_dict)
 
     if footpath_str in ('None', ''):

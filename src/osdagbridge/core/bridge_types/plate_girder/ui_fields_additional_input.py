@@ -331,7 +331,7 @@ _LANE_DETAILS_TAB_SCHEMA = {
                 {
                     "id": KEY_WC_LD_LANE_TABLE,
                     "label": "No. of Traffic Lanes:",
-                    "type": "table_with_count",
+                    "type": TYPE_TABLE_WITH_COUNTER,
                     "count_id": KEY_WC_LD_LANE_TABLE_COUNT,
                     "count_choices": [str(i) for i in range(1, 7)],
                     "on_count_change": "on_lane_count_changed",
@@ -1083,185 +1083,157 @@ SUPPORT_CONDITIONS_SCHEMA = {
 }
 
 DESIGN_OPTIONS_SCHEMA = {
-    "id": "design_options",
-    "cards": [
+    "id":     KEY_DS_TAB,
+    "layout": {
+        "type":          "columns",
+        "columns":       2,
+        "column_widths": [3, 2],
+    },
+    "sections": [
 
-        # ---------------- Construction ----------------
+        # ──────────────── Column 0: Construction Stages ────────────────
         {
-            "title": "Construction Stages",
-            "field_width": 150,
-            "sections": [
+            "column": 0,
+            "title":  "Construction Stages",
+            "rows": [
+                {
+                    "fields": [{
+                        "id":      KEY_DS_CONSTRUCTION_STAGE,
+                        "label":   "Include automatic",
+                        "type":    TYPE_COMBOBOX,
+                        "choices": ["Yes", "No"],
+                        "bind":    "construction_stage_combo",
+                    }]
+                },
+            ],
+        },
+
+        # ──────────────── Column 0: Deck Design ────────────────
+        {
+            "column": 0,
+            "title":  "Deck Design",
+            "rows": [
                 {
                     "fields": [
                         {
-                            "id": "construction_stage",
-                            "label": "Include automatic",
-                            "type": "combo",
-                            "choices": ["Yes", "No"],
-                            "default": "Yes",
-                            "bind": "construction_stage_combo",
-                        }
+                            "id":             KEY_DS_REINF_BOUNDS,
+                            "label":          "Reinforcement Size",
+                            "type":           TYPE_BOUND_BTN,
+                            "text":           "Set Bounds",
+                            "with_increment": False,
+                            "lower_limit":    8.0,
+                            "upper_limit":    40.0,
+                        },
                     ]
-                }
+                },
+                {
+                    "fields": [{
+                        "id":      KEY_DS_REINF_MATERIAL,
+                        "label":   "Reinforcement Material",
+                        "type":    TYPE_COMBOBOX,
+                        "choices": ["Fe 415", "Fe 415D", "Fe 500", "Fe 500D", "Fe 550", "Fe 550D", "Fe 600"],
+                        "bind":    "reinforcement_material_combo",
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":          KEY_DS_TOP_CLEAR_COVER,
+                        "label":       "Top Clear Cover (mm)",
+                        "type":        TYPE_TEXTBOX,
+                        "placeholder": "40 - 75",
+                        "bind":        "top_clear_cover_input",
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":          KEY_DS_BOTTOM_CLEAR_COVER,
+                        "label":       "Bottom Clear Cover (mm)",
+                        "type":        TYPE_TEXTBOX,
+                        "placeholder": "35 - 75",
+                        "bind":        "bottom_clear_cover_input",
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":          KEY_DS_SIDE_CLEAR_COVER,
+                        "label":       "Side Clear Cover (mm)",
+                        "type":        TYPE_TEXTBOX,
+                        "placeholder": "35 - 75",
+                        "bind":        "side_clear_cover_input",
+                    }]
+                },
             ],
         },
 
-        # ---------------- Deck Design ----------------
+        # ──────────────── Column 0: Shear Studs ────────────────
         {
-            "title": "Deck Design",
-            "field_width": 150,
-            "sections": [
+            "column": 0,
+            "title":  "Shear Studs",
+            "rows": [
                 {
-                    "fields": [
-                        {
-                            "id": "reinforcement_bounds",
-                            "label": "Reinforcement Size",
-                            "type": "button",
-                            "text": "Set Bounds",
-                            "bind": "reinforcement_bounds_btn"
-                        },
-                        {
-                            "id": "reinforcement_material",
-                            "label": "Reinforcement Material",
-                            "type": "combo",
-                            "choices": [
-                                "Fe 415",
-                                "Fe 415D",
-                                "Fe 500",
-                                "Fe 500D",
-                                "Fe 550",
-                                "Fe 550D",
-                                "Fe 600"
-                            ],
-                            "default": "Fe 500",
-                            "bind": "reinforcement_material_combo",
-                        },
-                        {
-                            
-                            "id": "top_clear_cover",
-                            "bind": "top_clear_cover_input",
-                            "label": "Top Clear Cover (mm)",
-                            "type": "number",
-                            "default": 50.00,
-                            "validator": {
-                                "type": "double_range",
-                                "bottom": 40.00,
-                                "top": 75.0,
-                                "decimals": 1,
-                            },
-                            "bind": "top_clear_cover_input",
-                        },
-
-                        {
-                            "id": "bottom_clear_cover",
-                            "label": "Bottom Clear Cover (mm)",
-                            "type": "number",
-                            "default": 40.00,
-                            "validator": {
-                                "type": "double_range",
-                                "bottom": 35.0,
-                                "top": 75.0,
-                                "decimals": 1,
-                            },
-                            "bind": "bottom_clear_cover_input",
-                        },
-
-                        {
-                            "id": "side_clear_cover",
-                            "label": "Side Clear Cover (mm)",
-                            "type": "number",
-                            "default": 40.0,
-                            "validator": {
-                                "type": "double_range",
-                                "bottom": 35.0,
-                                "top": 75.0,
-                                "decimals": 1,
-                            },
-                            "bind": "side_clear_cover_input",
-                        },
-                    ],
-                }
+                    "fields": [{
+                        "id":          KEY_DS_STUD_YIELD_STRENGTH,
+                        "label":       "Yield Strength (MPa)",
+                        "type":        TYPE_TEXTBOX,
+                        "placeholder": "350 - 600",
+                        "bind":        "shear_stud_yield_strength_input",
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":          KEY_DS_STUD_ULTIMATE_STRENGTH,
+                        "label":       "Ultimate Strength (MPa)",
+                        "type":        TYPE_TEXTBOX,
+                        "placeholder": "350 - 600",
+                        "bind":        "shear_stud_ultimate_strength_input",
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":      KEY_DS_STUD_DIAMETER,
+                        "label":   "Diameter (mm)",
+                        "type":    TYPE_COMBOBOX,
+                        "choices": ["12", "16", "20", "22", "25"],
+                        "bind":    "shear_stud_diameter_combo",
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":          KEY_DS_STUD_HEIGHT,
+                        "label":       "Height (mm)",
+                        "type":        TYPE_TEXTBOX,
+                        "placeholder": "0 - 500",
+                        "bind":        "shear_stud_height_input",
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":      KEY_DS_STUD_COUNT,
+                        "label":   "No. of Shear Studs per Section",
+                        "type":    TYPE_COMBOBOX,
+                        "choices": [str(i) for i in range(1, 11)],
+                        "bind":    "shear_stud_count_combo",
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":          KEY_DS_STUD_TRANSVERSE_SPACING,
+                        "label":       "Transverse Spacing (mm)",
+                        "type":        TYPE_TEXTBOX,
+                        "placeholder": "0 - 5000",
+                        "bind":        "shear_stud_spacing_input",
+                    }]
+                },
             ],
         },
 
-        # ---------------- Shear Studs ----------------
+        # ──────────────── Column 1: Description ────────────────
         {
-            "title": "Shear Studs",
-            "field_width": 150,
-            "sections": [
-                {
-                    "fields": [
-                        {
-                            "id": "shear_stud_yield_strength",
-                            "label": "Yield Strength (MPa)",
-                            "type": "line",
-                            "default": "385.00",
-                            "validator": {
-                                "type": "double_range",
-                                "bottom": 350,
-                                "top": 600,
-                                "decimals": 2,
-                            },
-                            "bind": "shear_stud_yield_strength_input",
-                        },
-                        {
-                            "id": "shear_stud_ultimate_strength",
-                            "label": "Ultimate Strength (MPa)",
-                            "type": "line",
-                            "default": "495.00",
-                            "validator": {
-                                "type": "double_range",
-                                "bottom": 350,
-                                "top": 600,
-                                "decimals": 2,
-                            },
-                            "bind": "shear_stud_ultimate_strength_input",
-                        },
-                        {
-                            "id": "shear_stud_diameter",
-                            "label": "Diameter (mm)",
-                            "type": "combo",
-                            "choices": ["12", "16", "20", "22", "25"],
-                            "default": "20",
-                            "bind": "shear_stud_diameter_combo",
-                        },
-                        {
-                            "id": "shear_stud_height",
-                            "label": "Height (mm)",
-                            "type": "line",
-                            "default": "100.00",
-                            "validator": {
-                                "type": "double_range",
-                                "bottom": 0.0,
-                                "top": 500.0,
-                                "decimals": 2,
-                            },
-                            "bind": "shear_stud_height_input",
-                        },
-                        {
-                            "id": "shear_stud_count",
-                            "label": "No. of Shear Studs per Section",
-                            "type": "combo",
-                            "choices": [str(i) for i in range(1, 11)],
-                            "default": "2",
-                            "bind": "shear_stud_count_combo",
-                        },
-                        {
-                            "id": "shear_stud_transverse_spacing",
-                            "label": "Transverse Spacing (mm)",
-                            "type": "line",
-                            "default": "100.00",
-                            "validator": {
-                                "type": "double_range",
-                                "bottom": 0.0,
-                                "top": 5000.0,
-                                "decimals": 2,
-                            },
-                            "bind": "shear_stud_spacing_input",
-                        },
-                    ],
-                }
-            ],
+            "column": 1,
+            "type":   "description",
+            "title":  "Description Box",
+            "text":   "",
+            "stretch": True,
         },
     ],
 }
