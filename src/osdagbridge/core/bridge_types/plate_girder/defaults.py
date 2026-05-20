@@ -38,6 +38,10 @@ from osdagbridge.core.utils.common import (
     KEY_DS_CONSTRUCTION_STAGE, KEY_DS_REINF_BOUNDS, KEY_DS_REINF_MATERIAL, KEY_DS_TOP_CLEAR_COVER, KEY_DS_BOTTOM_CLEAR_COVER,
     KEY_DS_SIDE_CLEAR_COVER, KEY_DS_STUD_YIELD_STRENGTH, KEY_DS_STUD_ULTIMATE_STRENGTH, KEY_DS_STUD_DIAMETER,
     KEY_DS_STUD_HEIGHT, KEY_DS_STUD_COUNT, KEY_DS_STUD_TRANSVERSE_SPACING,
+
+    KEY_SC_LEFT_SUPPORT, KEY_SC_RIGHT_SUPPORT, KEY_SC_BEARING_LENGTH,
+
+
 )
 from .initial_sizing import (
     DEFAULT_DECK_OVERHANG_RATIO as IS_DEFAULT_DECK_OVERHANG_RATIO,
@@ -168,8 +172,19 @@ def _update_typical_section_defaults(input_dict: dict) -> None:
     _update(KEY_WC_DENSITY,   24.0)        # kN/m³
     _update(KEY_WC_THICKNESS, 50.0)        # mm
 
+def _update_support_conditions_defaults(input_dict: dict) -> None:
+    """Fill Support Conditions tab keys that are None with schema defaults."""
+    
+    def _update(key, value):
+        if input_dict.get(key) is None:
+            input_dict.update({key: value})
+
+    _update(KEY_SC_LEFT_SUPPORT,   "Pinned")
+    _update(KEY_SC_RIGHT_SUPPORT,  "Roller")
+    _update(KEY_SC_BEARING_LENGTH, "400.00")
+
 def _update_design_options_defaults(input_dict: dict) -> None:
-    """Fill Design Options (Cont.) tab keys that are None with schema defaults."""
+    """Fill Design Options tab keys that are None with schema defaults."""
     
     def _update(key, value):
         input_dict.update({key: value})
@@ -228,6 +243,8 @@ def solve_extend_basic_input_dict(basic_input_dict: dict) -> None:
 
     # Fill sub-tab defaults before reading any typical-section keys (e.g. footpath width)
     _update_typical_section_defaults(basic_input_dict)
+
+    _update_support_conditions_defaults(basic_input_dict)
     
     _update_design_options_defaults(basic_input_dict)
     

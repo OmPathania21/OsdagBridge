@@ -11,7 +11,7 @@ from PySide6.QtGui import QDoubleValidator, QIntValidator
 
 from osdagbridge.core.utils.common import (
     TYPE_COMBOBOX, TYPE_TEXTBOX, TYPE_NOTICE, TYPE_CHECKBOX, TYPE_BOUND_BTN,
-    TYPE_BUTTON, TYPE_TABLE_WITH_COUNTER,
+    TYPE_BUTTON, TYPE_TABLE_WITH_COUNTER, TYPE_DIRECT_WIDGET
 )
 
 
@@ -254,10 +254,6 @@ class UIBuilder(QWidget):
         filler_col = max_fields * 2
         for c in range(filler_col):
             grid.setColumnStretch(c, 0)
-        if self._filler_column_index is not None:
-            grid.setColumnStretch(filler_col, 1)
-        else:
-            grid.setColumnStretch(filler_col - 1, 1)
 
         label_width = schema.get("label_width", self._schema.get("label_width", 200))
         row_idx = 0
@@ -309,6 +305,12 @@ class UIBuilder(QWidget):
                     field = self._create_field(field_def, field_width=200)
                     grid.addWidget(field, row_idx, col + 1, Qt.AlignLeft)
                     col += 2
+                elif ftype == TYPE_DIRECT_WIDGET:
+                    field = self._create_field(field_def)
+                    field.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+                    field.setMinimumSize(200, 200)
+                    grid.addWidget(field, row_idx, col, 1, 2)
+                    col += 2
                 else:
                     label = QLabel(field_def.get("label") or "")
                     label.setTextFormat(Qt.RichText)
@@ -346,7 +348,19 @@ class UIBuilder(QWidget):
             field.addItems(choices)
             field.setSizeAdjustPolicy(QComboBox.AdjustToContents)
             field.setMinimumContentsLength(max((len(c) for c in choices), default=0))
-            field.view().setMinimumWidth(320)
+
+            # enabled_choices — disable others with grey + forbidden cursor
+            enabled_choices = field_def.get("enabled_choices")
+            if enabled_choices is not None:
+                for idx in range(field.count()):
+                    text = field.itemText(idx)
+                    if text not in enabled_choices:
+                        item = field.model().item(idx)
+                        if item is not None:
+                            item.setEnabled(False)
+                            item.setForeground(Qt.gray)
+                from osdagbridge.desktop.ui.utils.custom_widgets import SmartCursorComboBoxView
+                field.setView(SmartCursorComboBoxView())
 
         elif ftype == TYPE_TEXTBOX:
             field = QLineEdit()
@@ -416,12 +430,21 @@ class UIBuilder(QWidget):
         elif ftype == TYPE_BOUND_BTN:
             return self._create_bound_btn_field(field_def, owner, ai)
 
+        elif ftype == TYPE_DIRECT_WIDGET:
+            widget_class = field_def.get("widget_class")
+            widget = widget_class()
+            widget.setObjectName(field_def.get("id"))
+            return widget
+
         else:
             return QWidget()
 
         # ── Common post-build ──────────────────────────────────────────────
         field.setObjectName(field_def.get("id"))
-        field.setFixedWidth(field_width)
+        if field_width is not None:
+            field.setFixedWidth(field_width)
+        else:
+            field.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         if hasattr(owner, "style_input_field"):
             owner.style_input_field(field)

@@ -1033,50 +1033,74 @@ LOAD_COMBINATION_TAB_SCHEMA = {
     ],
 }
 
+from osdagbridge.desktop.ui.dialogs.tabs.drawings.support_conditions_cad import SupportCADWidget
+from osdagbridge.desktop.ui.dialogs.tabs.drawings.support_detail_cad import SupportDetailCADWidget
+
 SUPPORT_CONDITIONS_SCHEMA = {
-    "id": "support_conditions",
-    "title": "Support Conditions",
+    "id":     KEY_SC_TAB,
+    "layout": {"type": "rows", "columns": 1},
     "sections": [
+
         {
-            "title": "Support Conditions",
-            "fields": [
+            "column": 0,
+            "title":  "Support Conditions",
+            "rows": [
                 {
-                    "id": "left_support",
-                    "label": "Left Support",
-                    "type": "combo",
-                    "choices": ["Fixed", "Pinned", "Roller"],
-                    "default": "Pinned",
-                    "enabled_choices": ["Pinned"],
-                    "bind": "left_support_combo",
-                },
+                    "fields": 
+                    [{
+                        "id": KEY_SC_LEFT_SUPPORT,  
+                        "label": "Left Support",  
+                        "type": TYPE_COMBOBOX, 
+                        "choices": ["Fixed", "Pinned", "Roller"],
+                        "enabled_choices": ["Pinned"],
+                        }]},
                 {
-                    "id": "right_support",
-                    "label": "Right Support",
-                    "type": "combo",
-                    "choices": ["Fixed", "Pinned", "Roller"],
-                    "default": "Roller",
-                    "enabled_choices": ["Roller"],
-                    "bind": "right_support_combo",
+                    "fields": 
+                    [{
+                        "id": KEY_SC_RIGHT_SUPPORT, 
+                        "label": "Right Support", 
+                        "type": TYPE_COMBOBOX, 
+                        "choices": ["Fixed", "Pinned", "Roller"],
+                        "enabled_choices": ["Roller"],
+                    }]},
+            ],
+        },
+
+        {
+            "column": 0,
+            "title":  "Bearing Length",
+            "rows": [
+                {
+                    "fields": 
+                    [{
+                        "id": KEY_SC_BEARING_LENGTH,
+                        "label": "Bearing Length Value (mm)",
+                        "type": TYPE_TEXTBOX,
+                        "placeholder": "0 - 600",
+                        "on_text_changed": "_update_support_detail_cad"
+                    }]
                 },
             ],
         },
+
         {
-            "title": "Bearing length",
-            "fields": [
+            "column": 0,
+            "title":  "",
+            "rows": [
                 {
-                    "id": "bearing_length",
-                    "label": "Bearing Length Value (mm)",
-                    "type": "line",
-                    "default": "400.00",
-                    "placeholder": "Length",
-                    "bind": "bearing_length_input",
-                    "validator": {
-                        "type": "double_range",
-                        "bottom": 0.00,
-                        "top": 600.00,
-                        "decimals": 3,
-                    },
-                }
+                    "fields": [
+                        {
+                            "id":           KEY_SC_LEFT_CAD,
+                            "type":         TYPE_DIRECT_WIDGET,
+                            "widget_class": SupportCADWidget,
+                        },
+                        {
+                            "id":             KEY_SC_RIGHT_CAD,
+                            "type":           TYPE_DIRECT_WIDGET,
+                            "widget_class":   SupportDetailCADWidget,
+                        },
+                    ]
+                },
             ],
         },
     ],

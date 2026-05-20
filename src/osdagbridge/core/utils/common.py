@@ -14,7 +14,7 @@ GPa = kilo * MPa
 kPa = kilo * Pa
 g = 9.81
 
-# Constants for input types
+# ========== Type of Fields Start ==========================================================
 TYPE_MODULE = "module"
 TYPE_TITLE = "title"
 TYPE_COMBOBOX = "combobox"
@@ -32,6 +32,8 @@ TYPE_RADIO_GRID = "radio_button_grid"
 TYPE_NOTICE = "notice"
 TYPE_BOUND_BTN = "bounds_dialog_btn"
 TYPE_TABLE_WITH_COUNTER = "table_with_count"
+TYPE_DIRECT_WIDGET = "direct_widget_classes"
+# ========== Type of Fields End ==========================================================
 
 # Keys for inputs (consistent dot notation for object names)
 KEY_MODULE = "Module"
@@ -204,6 +206,17 @@ KEY_WC_LD_LANE_TABLE = "typical_section.lane_details.lane_table"
 KEY_WC_LD_LANE_TABLE_COUNT = "typical_section.lane_details.lane_table_count"
 
 #══════════════TYPICAL-SECTION-TAB-KEY-ENDS═══════════════════════════════════════════════════════
+
+#══════════════SUPPORT-CONDITIONS-KEY-START════════════════════════════════════
+
+KEY_SC_TAB              = "support_conditions.tab"
+KEY_SC_LEFT_SUPPORT     = "support_conditions.left_support"
+KEY_SC_RIGHT_SUPPORT    = "support_conditions.right_support"
+KEY_SC_BEARING_LENGTH   = "support_conditions.bearing_length"
+KEY_SC_LEFT_CAD         = "support_conditions.left_cad"
+KEY_SC_RIGHT_CAD        = "support_conditions.right_cad"
+
+#══════════════SUPPORT-CONDITIONS-KEY-ENDS═════════════════════════════════════
 
 #══════════════DESIGN-OPTIONS-TAB-KEY-START════════════════════════════════════
 

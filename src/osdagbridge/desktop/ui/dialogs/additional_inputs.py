@@ -20,12 +20,21 @@ from osdagbridge.desktop.ui.dialogs.custom_messagebox import CustomMessageBox, M
 from osdagbridge.desktop.ui.dialogs.tabs.typical_section_details import TypicalSectionDetailsTab
 from osdagbridge.desktop.ui.dialogs.tabs.section_properties_tab import SectionPropertiesTab
 from osdagbridge.desktop.ui.dialogs.tabs.loading_tab import LoadingTab
-from osdagbridge.desktop.ui.dialogs.tabs.support_conditions_tab import SupportConditionsTab
 from osdagbridge.desktop.ui.utils.custom_widgets import SmartCursorComboBoxView
+from osdagbridge.desktop.ui.dialogs.tabs.sub_tabs.typical_section.common_ui_builder import UIBuilder
 
 # =================================================================================
 #   MAIN IMPLEMENTATION
 # =================================================================================
+
+ADDITIONAL_INPUTS_SCROLL_STYLE = """
+    QScrollArea { background:transparent; padding:0px 5px; border:none}
+    QScrollArea QScrollBar:vertical { border:none; background:#f0f0f0; width:8px; }
+    QScrollArea QScrollBar::handle:vertical { background:#c0c0c0; border-radius:4px; min-height:20px; }
+    QScrollArea QScrollBar::handle:vertical:hover { background:#a0a0a0; }
+    QScrollArea QScrollBar::add-line:vertical,
+    QScrollArea QScrollBar::sub-line:vertical { border:none; background:none; }
+"""
 
 class AdditionalInputs(QDialog):
     """Main dialog for Additional Inputs with tabbed interface"""
@@ -207,10 +216,7 @@ class AdditionalInputs(QDialog):
         errors = []
 
         for tab in [
-            self.loading_tab,
-            self.support_tab,
-            self.design_options_tab,
-            self.design_options_cont_tab,
+            self.loading_tab
         ]:
             if hasattr(tab, "validate_tab"):
                 tab_errors = tab.validate_tab()
@@ -378,26 +384,27 @@ class AdditionalInputs(QDialog):
         self.loading_tab = LoadingTab()
         self.tabs.addTab(self.loading_tab, "Loading")
         
-        # Sub-Tab 4: Support Conditions
-        self.support_tab = SupportConditionsTab(self)
-        self.tabs.addTab(self.support_tab, "Support Conditions")
+        from osdagbridge.core.bridge_types.plate_girder.ui_fields_additional_input import SUPPORT_CONDITIONS_SCHEMA
+        self._support_scroll = QScrollArea()
+        self._support_scroll.setWidgetResizable(True)
+        self._support_scroll.setFrameShape(QFrame.NoFrame)
+        self._support_scroll.setStyleSheet(ADDITIONAL_INPUTS_SCROLL_STYLE)
+
+        self.support_tab = UIBuilder(
+            owner=self,
+            schema=SUPPORT_CONDITIONS_SCHEMA,
+            card_title="",
+            main_widget_object_name="support_conditions.main",
+            additional_input_instance=self,
+        )
+        self._support_scroll.setWidget(self.support_tab)
+        self.tabs.addTab(self._support_scroll, "Support Conditions")
         
         # Sub-Tab 5: Analysis/Design Options
         from osdagbridge.core.bridge_types.plate_girder.ui_fields_additional_input import (
             DESIGN_OPTIONS_SCHEMA,
             DESIGN_OPTIONS_CONT_SCHEMA,
         )
-        from osdagbridge.desktop.ui.dialogs.tabs.sub_tabs.typical_section.common_ui_builder import UIBuilder
-
-        ADDITIONAL_INPUTS_SCROLL_STYLE = """
-            QScrollArea { background:transparent; padding:0px 5px; border:none}
-            QScrollArea QScrollBar:vertical { border:none; background:#f0f0f0; width:8px; }
-            QScrollArea QScrollBar::handle:vertical { background:#c0c0c0; border-radius:4px; min-height:20px; }
-            QScrollArea QScrollBar::handle:vertical:hover { background:#a0a0a0; }
-            QScrollArea QScrollBar::add-line:vertical,
-            QScrollArea QScrollBar::sub-line:vertical { border:none; background:none; }
-        """
-
         self._design_options_scroll = QScrollArea()
         self._design_options_scroll.setWidgetResizable(True)
         self._design_options_scroll.setFrameShape(QFrame.NoFrame)
@@ -441,6 +448,19 @@ class AdditionalInputs(QDialog):
         # Normalize existing numeric text to 2 decimal places for consistent display
         self._normalize_numeric_texts(2)
 
+    # Update CAD Method for Support Conditions Tab Drawing
+    # This function is implicitly connected using Schema of the Tab
+    def _update_support_detail_cad(self):
+        from osdagbridge.desktop.ui.dialogs.tabs.drawings.support_detail_cad import SupportDetailCADWidget
+        widget = self.findChild(SupportDetailCADWidget, KEY_SC_RIGHT_CAD)
+        if widget is None:
+            return
+        value = self.working_input_dict.get(KEY_SC_BEARING_LENGTH, "400")
+        try:
+            value = float(value)
+        except (ValueError, TypeError):
+            value = 400.0
+        widget.update_params({"bearing_length": value})
 
     def _enforce_decimal_places(self, places=2):
         """Force all QDoubleValidator instances in this dialog to the given decimal places."""
