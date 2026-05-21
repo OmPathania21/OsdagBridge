@@ -231,11 +231,10 @@ class PlateGirderBridge:
             f"{'-'*60}\n"
         )
 
-        self._run_dcr_checks(dataset);                             _lap("_run_dcr_checks")
-        self.result_data = self.grillage_model.get_result_data(); _lap("get_result_data")
+        self._run_dcr_checks(dataset)
+        self.result_data = self.grillage_model.get_result_data()
 
-        self.crossbracing_design_results = self._design_cross_bracing_members(); _lap("_design_cross_bracing_members")
-        _lap("TOTAL")
+        self.crossbracing_design_results = self._design_cross_bracing_members()
 
     def _build_dtos(self) -> None:
         """Construct GrillageGeometry and DeckLayoutProperties DTOs from solved results."""

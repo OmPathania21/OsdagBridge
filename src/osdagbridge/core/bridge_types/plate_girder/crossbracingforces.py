@@ -140,6 +140,7 @@ from osdagbridge.core.utils.common import (
     KEY_GIRDER_DEPTH,
     KEY_GIRDER_TOP_FLANGE_THICKNESS,
     KEY_GIRDER_BOTTOM_FLANGE_THICKNESS,
+    KEY_TS_GIRDER_SPACING,
 )
 
 # ---------------------------------------------------------------------------
@@ -236,10 +237,9 @@ class CrossBracingForces:
     # =======================================================================
 
     def _init_geometry(self, cb_spacing: Optional[float]) -> None:
-        sizing = getattr(self.bridge, "sizing_result", None)
-        geom   = getattr(self.bridge, "grillage_geometry", None)
+        geom = getattr(self.bridge, "grillage_geometry", None)
 
-        if sizing is None or geom is None:
+        if geom is None:
             raise RuntimeError(
                 "CrossBracingForces requires bridge.design() to have been called first."
             )
@@ -258,7 +258,7 @@ class CrossBracingForces:
         self.tf_top = float(inp[KEY_GIRDER_TOP_FLANGE_THICKNESS])
         self.tf_bot = float(inp[KEY_GIRDER_BOTTOM_FLANGE_THICKNESS])
         self.h = self.D * self.depth_ratio
-        self.s = float(sizing.girder_spacing)
+        self.s = float(inp[KEY_TS_GIRDER_SPACING])
 
         if self.brace_type == BRACE_X:
             self.horiz_proj = self.s
