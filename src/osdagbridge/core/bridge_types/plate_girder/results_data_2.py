@@ -302,69 +302,61 @@ def restructure_data(
     }
 
     # ── 2. Results from xarray Dataset ────────────────────────────────
+    # Extract full numpy arrays once per load case instead of one .sel()
+    # call per (element/node × component) — avoids tens of thousands of
+    # individual xarray label lookups.
     for lc in loadcases:
         ds = ds_all.sel(Loadcase=lc)
         str_lc = str(lc)
 
-        # Displacements
+        # Displacements — one .values call → (n_nodes, n_comps) numpy array
         if "displacements" in ds.data_vars:
+            arr  = ds["displacements"].values
+            nids = ds["displacements"].coords["Node"].values
+            cids = [str(c) for c in ds["displacements"].coords["Component"].values]
             data["displacements"][str_lc] = {
-                str(int(node)): {
-                    comp: float(ds["displacements"].sel(
-                        Node=node, Component=comp).values)
-                    for comp in disp_components
-                }
-                for node in ds["displacements"].coords["Node"].values
+                str(int(n)): dict(zip(cids, row.tolist()))
+                for n, row in zip(nids, arr)
             }
 
-        # Beam / Combined Forces
+        # Forces — one .values call → (n_elems, n_comps) numpy array
         if "forces" in ds.data_vars:
+            arr  = ds["forces"].values
+            eids = ds["forces"].coords["Element"].values
+            cids = [str(c) for c in ds["forces"].coords["Component"].values]
             data["forces"][str_lc] = {
-                str(int(elem)): {
-                    comp: float(ds["forces"].sel(
-                        Element=elem, Component=comp).values)
-                    for comp in force_components
-                }
-                for elem in ds["forces"].coords["Element"].values
+                str(int(e)): dict(zip(cids, row.tolist()))
+                for e, row in zip(eids, arr)
             }
 
-        # Reactions
+        # Reactions — one .values call → (n_nodes, n_comps) numpy array
         if "reactions" in ds.data_vars:
-            rx_comps = [str(c)
-                        for c in ds["reactions"].coords["Component"].values]
+            arr  = ds["reactions"].values
+            nids = ds["reactions"].coords["Node"].values
+            cids = [str(c) for c in ds["reactions"].coords["Component"].values]
             data["reactions"][str_lc] = {
-                str(int(node)): {
-                    comp: float(ds["reactions"].sel(
-                        Node=node, Component=comp).values)
-                    for comp in rx_comps
-                }
-                for node in ds["reactions"].coords["Node"].values
+                str(int(n)): dict(zip(cids, row.tolist()))
+                for n, row in zip(nids, arr)
             }
 
-        # Shell Forces (if hybrid model)
+        # Shell Forces — one .values call → (n_elems, n_comps) numpy array
         if "forces_shell" in ds.data_vars:
-            shell_comps = [
-                str(c) for c in ds["forces_shell"].coords["Component"].values]
+            arr  = ds["forces_shell"].values
+            eids = ds["forces_shell"].coords["Element"].values
+            cids = [str(c) for c in ds["forces_shell"].coords["Component"].values]
             data["forces_shell"][str_lc] = {
-                str(int(elem)): {
-                    comp: float(ds["forces_shell"].sel(
-                        Element=elem, Component=comp).values)
-                    for comp in shell_comps
-                }
-                for elem in ds["forces_shell"].coords["Element"].values
+                str(int(e)): dict(zip(cids, row.tolist()))
+                for e, row in zip(eids, arr)
             }
 
-        # Shell Stresses (stress resultants at Gauss points)
+        # Shell Stresses — one .values call → (n_elems, n_stress_comps) numpy array
         if "stresses_shell" in ds.data_vars:
-            stress_comps = [
-                str(c) for c in ds["stresses_shell"].coords["Stress"].values]
+            arr  = ds["stresses_shell"].values
+            eids = ds["stresses_shell"].coords["Element"].values
+            cids = [str(c) for c in ds["stresses_shell"].coords["Stress"].values]
             data["stresses_shell"][str_lc] = {
-                str(int(elem)): {
-                    comp: float(ds["stresses_shell"].sel(
-                        Element=elem, Stress=comp).values)
-                    for comp in stress_comps
-                }
-                for elem in ds["stresses_shell"].coords["Element"].values
+                str(int(e)): dict(zip(cids, row.tolist()))
+                for e, row in zip(eids, arr)
             }
 
     if dev:

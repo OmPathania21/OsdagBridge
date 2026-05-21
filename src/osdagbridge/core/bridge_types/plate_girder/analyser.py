@@ -1500,7 +1500,6 @@ class BridgeGrillageModel:
         model.analyze()
 
         results = model.get_results()
-        self.result_data = self.get_result_data(dev=True)
         return results
 
     def get_result_data(self, dev: bool = False) -> dict:

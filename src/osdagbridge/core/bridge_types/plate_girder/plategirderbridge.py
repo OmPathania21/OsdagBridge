@@ -183,15 +183,20 @@ class PlateGirderBridge:
           5. Apply dead loads
           6. Apply live loads
         """
-        parsed = self._parse_basic_inputs()
-        self._solve_bridge_layout(parsed)
-        self._build_dtos(parsed)
-        self.setup_grillage()
-        self.add_dead_loads()
-        self.add_live_loads()
-        self.add_wind_loads()
-        dataset = self.analyze()
-        dataset = self.create_governing_ll_load_case(dataset, partial_safety_factor=1.0)
+        import time as _t
+        _t0 = _t.perf_counter()
+        def _lap(label):
+            print(f"  [TIMER] {label:<45} {_t.perf_counter() - _t0:>7.2f}s")
+
+        parsed = self._parse_basic_inputs();                       _lap("_parse_basic_inputs")
+        self._solve_bridge_layout(parsed);                         _lap("_solve_bridge_layout")
+        self._build_dtos(parsed);                                  _lap("_build_dtos")
+        self.setup_grillage();                                     _lap("setup_grillage")
+        self.add_dead_loads();                                     _lap("add_dead_loads")
+        self.add_live_loads();                                     _lap("add_live_loads")
+        self.add_wind_loads();                                     _lap("add_wind_loads")
+        dataset = self.analyze();                                  _lap("analyze")
+        dataset = self.create_governing_ll_load_case(dataset, partial_safety_factor=1.0); _lap("create_governing_ll_load_case")
 
         sp = self.section_props
         sr = self.sizing_result
@@ -224,10 +229,11 @@ class PlateGirderBridge:
             f"{'-'*60}\n"
         )
 
-        self._run_dcr_checks(dataset)
-        self.result_data = self.grillage_model.get_result_data()
+        self._run_dcr_checks(dataset);                             _lap("_run_dcr_checks")
+        self.result_data = self.grillage_model.get_result_data(); _lap("get_result_data")
 
-        self.crossbracing_design_results = self._design_cross_bracing_members()
+        self.crossbracing_design_results = self._design_cross_bracing_members(); _lap("_design_cross_bracing_members")
+        _lap("TOTAL")
 
     def _parse_basic_inputs(self) -> dict:
         """Extract and normalise scalar values from ``self.basic_inputs``."""
