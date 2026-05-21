@@ -794,8 +794,8 @@ class PlateGirderBridge:
                     slnd = res.get("slenderness")
                     conn = res.get("connection")  or "—"
 
-                    eff_str  = f"  eff={eff:.2f}" if eff  is not None else ""
-                    slnd_str = f"  λ={slnd:.1f}"  if slnd is not None else ""
+                    eff_str  = f"  eff={float(eff):.2f}" if eff  not in (None, "") else ""
+                    slnd_str = f"  λ={float(slnd):.1f}"  if slnd not in (None, "") else ""
 
                     print(
                         f"    {label:<8} [{force_type:>11}  {force_kn:>8.3f} kN]"
