@@ -236,7 +236,7 @@ class FrontendData:
     def output_values(self, flag=None):
         return [
             # ── Analysis Results ──────────────────────────────────────────────
-            (KEY_SECTION_OUTPUT_ANALYSIS, "Analysis Results",
+            (KEY_SECTION_OUTPUT_ANALYSIS, "Girder Analysis Results",
                 TYPE_TITLE, None, True, "No Validator",
                 {"kind": "analysis"}),
 
@@ -256,14 +256,14 @@ class FrontendData:
             (KEY_ANALYSIS_DISPLAY_OPTIONS, None,  # label goes on the groupbox title instead
                 TYPE_CHECKBOX_ROW, ["Max", "Min"],
                 True, "No Validator",
-                {"exclusive": False, "group_title": "Display Options"}),
+                {"exclusive": False, "group_title": "Display Values"}),
 
             (KEY_ANALYSIS_DISPLAY_OPTIONS, None,  # label goes on the groupbox title instead
                 TYPE_CHECKBOX_ROW, ["All   ", "Summary"],
                 True, "No Validator",
                 {"exclusive": False}),
 
-            (KEY_ANALYSIS_UTILIZATION, "Controlling Utilization Ratio",
+            (KEY_ANALYSIS_UTILIZATION, "Utilization Ratio",
                 TYPE_CHECKBOX, None, True, "No Validator",
                 {"group_end": True}),             # closes the Display Options box
 
