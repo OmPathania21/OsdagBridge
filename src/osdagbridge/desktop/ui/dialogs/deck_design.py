@@ -153,7 +153,7 @@ class DeckDesign(QDialog):
         # Only run deck design if the main design has already been executed
         # (sizing_result is None until the Design button is clicked).
         backend = getattr(self._main_window, "backend", None)
-        if backend is not None and getattr(backend, "sizing_result", None) is not None:
+        if backend is not None and getattr(backend, "grillage_geometry", None) is not None:
             try:
                 from osdagbridge.core.bridge_types.plate_girder.deckdesign import design_deck_slab
                 result = design_deck_slab(backend)

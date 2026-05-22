@@ -251,15 +251,15 @@ def design_deck_slab(bridge) -> dict:
     # ── 1. read bridge parameters ─────────────────────────────────────────────
     basic = getattr(bridge, "basic_inputs", {})
     additional = getattr(bridge, "additional_inputs", {})
-    sizing = getattr(bridge, "sizing_result", None)
 
     span_m = float(basic.get(KEY_SPAN, 30.0))
     cw_m = float(basic.get(KEY_CARRIAGEWAY_WIDTH, 7.5))
     concrete_grade = str(basic.get(KEY_DECK_CONCRETE_GRADE_BASIC, "M30")).strip()
 
-    # girder spacing — from sizing result or fallback
-    if sizing is not None and hasattr(sizing, "girder_spacing"):
-        beam_spacing_m = float(sizing.girder_spacing)
+    # girder spacing — from grillage_geometry or fallback
+    grillage_geom = getattr(bridge, "grillage_geometry", None)
+    if grillage_geom is not None and hasattr(grillage_geom, "ext_to_int_dist"):
+        beam_spacing_m = float(grillage_geom.ext_to_int_dist)
     else:
         beam_spacing_m = 2.5           # sensible default
 
@@ -345,8 +345,8 @@ def design_deck_slab(bridge) -> dict:
 
     # ── 10. deck overhang design ─────────────────────────────────────────────
     overhang_m = 0.0
-    if sizing is not None and hasattr(sizing, "deck_overhang"):
-        overhang_m = float(sizing.deck_overhang or 0.0)
+    if grillage_geom is not None and hasattr(grillage_geom, "edge_dist"):
+        overhang_m = float(grillage_geom.edge_dist or 0.0)
 
     if overhang_m > 0.01:
         # Minimum clearance from kerb face to wheel — IRC 6:2017 Table 3
