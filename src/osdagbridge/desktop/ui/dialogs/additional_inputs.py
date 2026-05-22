@@ -89,6 +89,38 @@ class AdditionalInputs(QDialog):
         # Populate defaults for deck-details text fields from the dict (widgets start empty)
         self._populate_deck_detail_fields(input_dict)
 
+        # Populate schema-driven tabs (Support Conditions, Design Options, etc.)
+        self._populate_schema_tab_fields(input_dict)
+
+    def _populate_schema_tab_fields(self, input_dict: dict) -> None:
+        """Push input_dict values into schema-driven tabs (Support, Design Options, etc.)."""
+        for tab in [
+            getattr(self, "support_tab", None),
+            getattr(self, "design_options_tab", None),
+            getattr(self, "design_options_cont_tab", None),
+        ]:
+            if not tab:
+                continue
+            for widget in tab.findChildren(QWidget):
+                name = widget.objectName()
+                if not name or name not in input_dict:
+                    continue
+                value = input_dict[name]
+                if value is None:
+                    continue
+                if isinstance(widget, QLineEdit):
+                    widget.blockSignals(True)
+                    widget.setText(str(value))
+                    widget.blockSignals(False)
+                elif isinstance(widget, QComboBox):
+                    widget.blockSignals(True)
+                    widget.setCurrentText(str(value))
+                    widget.blockSignals(False)
+                elif isinstance(widget, QCheckBox):
+                    widget.blockSignals(True)
+                    widget.setChecked(bool(value))
+                    widget.blockSignals(False)
+
     def _populate_deck_detail_fields(self, input_dict: dict) -> None:
         """Push deck-detail values from input_dict into the Deck Details widgets."""
         ts = self.typical_section_tab
