@@ -1,12 +1,11 @@
 """
-results_data_2.py
------------------
+results_data.py
+---------------
 Extracts analysis results from an ospgrillage OspGrillage model directly into
 the flat dict format consumed by plot_generator functions.
 
-Unlike result_data.py (which goes through the PlateGirderBridge wrapper),
-this module accepts the OspGrillage model object and its xarray Dataset
-directly, with no bridge-wrapper dependency.
+Accepts the OspGrillage model object and its xarray Dataset directly, with no
+bridge-wrapper dependency.
 """
 
 from __future__ import annotations

@@ -30,7 +30,7 @@ from osdagbridge.core.bridge_types.plate_girder.load_placement import LoadPlacem
 import warnings
 from osdagbridge.core.bridge_types.plate_girder.analysis_results import PlateGirderAnalysisResults
 from osdagbridge.core.bridge_types.plate_girder.dto import (SectionProperties, SteelProperties, MaterialProperties, GrillageGeometry, DeckLayoutProperties)
-from osdagbridge.core.bridge_types.plate_girder.results_data_2 import restructure_data as restructure_data_direct
+from osdagbridge.core.bridge_types.plate_girder.results_data import restructure_data as restructure_data_direct
 
 
 class BridgeGrillageModel:
@@ -1506,7 +1506,7 @@ class BridgeGrillageModel:
         """
         Return the flat result dict for all analysed load cases.
 
-        Delegates to results_data_2.restructure_data(), which reads nodes and
+        Delegates to results_data.restructure_data(), which reads nodes and
         members directly from the live openseespy model rather than through the
         PlateGirderBridge wrapper.
 

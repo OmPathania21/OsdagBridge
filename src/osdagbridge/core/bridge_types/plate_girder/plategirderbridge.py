@@ -742,7 +742,7 @@ class PlateGirderBridge:
         dict — nested by pair → member → force_type → Osdag result.
         """
         from osdagbridge.core.bridge_types.plate_girder.crossbracingforces import CrossBracingForces
-        from osdagbridge.core.bridge_types.plate_girder.results_data_2 import enrich_crossbracing_dump
+        from osdagbridge.core.bridge_types.plate_girder.results_data import enrich_crossbracing_dump
 
         if not self.result_data:
             print("[CrossBracing] No analysis results available — skipping.")
@@ -767,7 +767,7 @@ class PlateGirderBridge:
 
     @staticmethod
     def _print_crossbracing_design_results(forces_dict: dict, pair_designs: dict) -> None:
-        from osdagbridge.core.bridge_types.plate_girder.results_data_2 import _extract_osdag_summary
+        from osdagbridge.core.bridge_types.plate_girder.results_data import _extract_osdag_summary
 
         sep = "=" * 75
         print(f"\n{sep}")
