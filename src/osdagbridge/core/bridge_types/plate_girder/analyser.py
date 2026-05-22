@@ -816,6 +816,160 @@ class BridgeGrillageModel:
         return DL_median
 
     # ============================================================
+    #   Temperature Load
+    # ============================================================
+
+    def create_temperature_load(
+            self,
+            model=None,
+            temperature_load_kN_m2: float | None = None,
+            partial_safety_factor: float = 1.0,
+    ):
+        """
+        Creates a uniform temperature load as a patch load over the full bridge
+        deck footprint (same extents as the deck slab load).
+
+        The load represents the equivalent transverse effect of a temperature
+        differential on the bridge superstructure per IRC:6-2017 Cl.215.
+
+        Parameters
+        ----------
+        temperature_load_kN_m2 : float
+            Temperature load intensity in kN/m² (required).
+        partial_safety_factor : float
+            Partial safety factor applied to the ``"{psf} TL"`` load case.
+            Default is 1.0.
+
+        The created load case is stored on ``self.temperature_load_case``.
+        """
+        model = model or self.model
+        if model is None:
+            raise ValueError("Model is not available. Create model before adding loads.")
+
+        if temperature_load_kN_m2 is None:
+            raise ValueError(
+                "create_temperature_load requires temperature_load_kN_m2 (in kN/m²) "
+                "so the patch load magnitude can be set."
+            )
+
+        tl_mag = temperature_load_kN_m2 * kN / m**2  # N/m²
+        print(f"Temperature load magnitude: {tl_mag:.2f} N/m²")
+
+        # -------------------------------------------------
+        # Get geometry from load manager (full deck footprint)
+        # -------------------------------------------------
+        geom = self.load_manager.deck_load()
+
+        # -------------------------------------------------
+        # Convert geometry → ospgrillage vertices
+        # -------------------------------------------------
+        p1 = og.create_load_vertex(x=geom.p1.x, z=geom.p1.z, p=tl_mag)
+        p2 = og.create_load_vertex(x=geom.p2.x, z=geom.p2.z, p=tl_mag)
+        p3 = og.create_load_vertex(x=geom.p3.x, z=geom.p3.z, p=tl_mag)
+        p4 = og.create_load_vertex(x=geom.p4.x, z=geom.p4.z, p=tl_mag)
+
+        # -------------------------------------------------
+        # Create patch load
+        # -------------------------------------------------
+        temp_load = og.create_load(
+            loadtype="patch",
+            name="temperature load",
+            point1=p1,
+            point2=p2,
+            point3=p3,
+            point4=p4,
+        )
+
+        # -------------------------------------------------
+        # Create & register load case
+        # -------------------------------------------------
+        TL = og.create_load_case(name=f"{partial_safety_factor} TL")
+        TL.add_load(temp_load)
+        model.add_load_case(TL, load_factor=partial_safety_factor)
+
+        # store reference
+        self.temperature_load_case = TL
+
+        return TL
+
+    # ============================================================
+    #   Seismic / Earthquake Load
+    # ============================================================
+
+    def create_seismic_load(
+            self,
+            model=None,
+            seismic_load_kN_m2: float | None = None,
+            partial_safety_factor: float = 1.0,
+    ):
+        """
+        Creates a uniform seismic (earthquake) load as a patch load over the
+        full bridge deck footprint (same extents as the deck slab load).
+
+        The load represents the equivalent horizontal seismic pressure on the
+        bridge superstructure per IRC:6-2017 Cl.219 / IS 1893 (Part 3).
+
+        Parameters
+        ----------
+        seismic_load_kN_m2 : float
+            Seismic load intensity in kN/m² (required).
+        partial_safety_factor : float
+            Partial safety factor applied to the ``"{psf} EL"`` load case.
+            Default is 1.0.
+
+        The created load case is stored on ``self.seismic_load_case``.
+        """
+        model = model or self.model
+        if model is None:
+            raise ValueError("Model is not available. Create model before adding loads.")
+
+        if seismic_load_kN_m2 is None:
+            raise ValueError(
+                "create_seismic_load requires seismic_load_kN_m2 (in kN/m²) "
+                "so the patch load magnitude can be set."
+            )
+
+        el_mag = seismic_load_kN_m2 * kN / m**2  # N/m²
+        print(f"Seismic load magnitude: {el_mag:.2f} N/m²")
+
+        # -------------------------------------------------
+        # Get geometry from load manager (full deck footprint)
+        # -------------------------------------------------
+        geom = self.load_manager.deck_load()
+
+        # -------------------------------------------------
+        # Convert geometry → ospgrillage vertices
+        # -------------------------------------------------
+        p1 = og.create_load_vertex(x=geom.p1.x, z=geom.p1.z, p=el_mag)
+        p2 = og.create_load_vertex(x=geom.p2.x, z=geom.p2.z, p=el_mag)
+        p3 = og.create_load_vertex(x=geom.p3.x, z=geom.p3.z, p=el_mag)
+        p4 = og.create_load_vertex(x=geom.p4.x, z=geom.p4.z, p=el_mag)
+
+        # -------------------------------------------------
+        # Create patch load
+        # -------------------------------------------------
+        seismic_load = og.create_load(
+            loadtype="patch",
+            name="seismic load",
+            point1=p1,
+            point2=p2,
+            point3=p3,
+            point4=p4,
+        )
+
+        # -------------------------------------------------
+        # Create & register load case
+        # -------------------------------------------------
+        EL = og.create_load_case(name=f"{partial_safety_factor} EL")
+        EL.add_load(seismic_load)
+        model.add_load_case(EL, load_factor=partial_safety_factor)
+
+        # store reference
+        self.seismic_load_case = EL
+
+        return EL
+
+    # ============================================================
     #   Wind Load
     # ============================================================
 
@@ -1490,6 +1644,282 @@ class BridgeGrillageModel:
         # of calling model.get_results() which always has duplicates.
         self._deduplicated_results = ds
         return ds
+
+    # ============================================================
+    #   ULS Load Combinations  (IRC:6-2017 Table B.2)
+    # ============================================================
+
+    def create_uls_combinations(self, model=None):
+        """
+        Creates all ULS load combinations per IRC:6-2017 Table B.2.
+
+        Permanent loads (dead_load, surfacing) are applied in **both** directions
+        — adding and relieving — for every combination type so that the full
+        force envelope can be extracted in post-processing.
+
+        Combinations produced
+        ----------------------
+        BASIC_1  … BASIC_6  (6 total)
+            2 permanent directions  ×  3 variable loads as leading
+            Adding   (DL=1.35, Surf=1.75): BASIC_1 LL-lead, BASIC_2 WL-lead, BASIC_3 TL-lead
+            Relieving (DL=1.00, Surf=1.00): BASIC_4 LL-lead, BASIC_5 WL-lead, BASIC_6 TL-lead
+
+        ACCIDENTAL_1  … ACCIDENTAL_6  (6 total)
+            2 permanent directions  ×  3 accidental events  ×  1 valid leading
+            (only live_load leading is valid; wind/thermal leading = None → skipped).
+            DL and Surf adding = relieving = 1.0 for accidental, so pairs are
+            numerically identical but both are registered for consistency.
+            Note: accidental event load cases have no model load case; silently omitted.
+
+        SEISMIC_1  … SEISMIC_4  (4 total)
+            2 permanent directions  ×  2 conditions (service γ=1.5, construction γ=0.75)
+            Adding    (DL=1.35, Surf=1.75): SEISMIC_1 service, SEISMIC_2 construction
+            Relieving  (DL=1.00, Surf=1.00): SEISMIC_3 service, SEISMIC_4 construction
+            Wind load accompanying = None for seismic → omitted.
+
+        Total: 16 ULS combinations.
+
+        Notes
+        -----
+        - Loads with factor = None or 0 are silently skipped.
+        - Missing sub-case load cases raise a warning (except accidental event types).
+        - Call ``analyze()`` again after this method to include the combinations.
+        """
+        model = model or self.model
+        if model is None:
+            raise ValueError("Model is not available. Create model before adding loads.")
+
+        γ = IRC6_2017.table_B2
+
+        LC_ATTR_MAP = {
+            'dead_load':    'dead_load_combination',
+            'surfacing':    'wearing_course_load',
+            'live_load':    'll_load_case',
+            'wind_load':    'wind_load_case',
+            'thermal_load': 'temperature_load_case',
+            'seismic':      'seismic_load_case',
+        }
+        ACCIDENTAL_LOADS = ['vehicle_collision', 'barge_impact', 'floating_bodies']
+        VARIABLE_LOADS   = ['live_load', 'wind_load', 'thermal_load']
+        DIRECTIONS       = ['adding', 'relieving']
+
+        def _lc(key):
+            attr = LC_ATTR_MAP.get(key)
+            return getattr(self, attr, None) if attr else None
+
+        def _copy_loads(target_lc, src_lc, factor):
+            if src_lc is None or factor is None or factor == 0:
+                return 0
+            for entry in src_lc.load_groups:
+                target_lc.add_load(entry["load"], load_factor=float(factor))
+            return len(src_lc.load_groups)
+
+        counters: dict = {}
+        created: list = []
+
+        def _register(prefix, perm_factors, var_factors, seismic_factor=None, label=""):
+            counters[prefix] = counters.get(prefix, 0) + 1
+            lc_name  = f"{prefix}_{counters[prefix]}"
+            combo_lc = og.create_load_case(name=lc_name)
+            n = 0
+            for key, fac in perm_factors.items():
+                n += _copy_loads(combo_lc, _lc(key), fac)
+            for key, fac in var_factors.items():
+                if fac is None or fac == 0:
+                    continue
+                src = _lc(key)
+                if src is None:
+                    warnings.warn(
+                        f"{lc_name}: '{key}' load case not available — "
+                        "create it before calling create_uls_combinations()."
+                    )
+                    continue
+                n += _copy_loads(combo_lc, src, fac)
+            if seismic_factor is not None:
+                src = _lc('seismic')
+                if src is None:
+                    warnings.warn(f"{lc_name}: seismic load case not available.")
+                else:
+                    n += _copy_loads(combo_lc, src, seismic_factor)
+            if n == 0:
+                warnings.warn(f"{lc_name}: no loads added — skipping.")
+                counters[prefix] -= 1
+                return
+            model.add_load_case(combo_lc)
+            created.append(combo_lc)
+            print(f"  Created: {lc_name:<25s}  {label}")
+
+        # ── BASIC (6 combos: 2 directions × 3 leading) ───────────────────────
+        print("ULS Basic combinations:")
+        for direction in DIRECTIONS:
+            dl_f   = γ('dead_load', direction, 'basic')
+            surf_f = γ('surfacing',  direction, 'basic')
+            perm   = {'dead_load': dl_f, 'surfacing': surf_f}
+            for leading in VARIABLE_LOADS:
+                var = {
+                    vl: γ(vl, 'leading' if vl == leading else 'accompanying', 'basic')
+                    for vl in VARIABLE_LOADS
+                }
+                if var[leading] is None:
+                    continue
+                _register('BASIC', perm, var,
+                          label=f"DL={dl_f}({direction})  Surf={surf_f}  {leading} leading")
+
+        # ── ACCIDENTAL (6 combos: 2 directions × 3 events × 1 valid leading) ─
+        print("\nULS Accidental combinations:")
+        for direction in DIRECTIONS:
+            dl_f   = γ('dead_load', direction, 'accidental')
+            surf_f = γ('surfacing',  direction, 'accidental')
+            perm   = {'dead_load': dl_f, 'surfacing': surf_f}
+            for acc in ACCIDENTAL_LOADS:
+                for leading in VARIABLE_LOADS:
+                    var = {
+                        vl: γ(vl, 'leading' if vl == leading else 'accompanying', 'accidental')
+                        for vl in VARIABLE_LOADS
+                    }
+                    if var[leading] is None:
+                        continue
+                    _register('ACCIDENTAL', perm, var,
+                              label=f"DL={dl_f}({direction})  {acc}(no lc)  {leading} leading")
+
+        # ── SEISMIC (4 combos: 2 directions × 2 conditions) ──────────────────
+        print("\nULS Seismic combinations:")
+        var_seis = {vl: γ(vl, 'accompanying', 'seismic') for vl in VARIABLE_LOADS}
+        for direction in DIRECTIONS:
+            dl_f   = γ('dead_load', direction, 'seismic')
+            surf_f = γ('surfacing',  direction, 'seismic')
+            perm   = {'dead_load': dl_f, 'surfacing': surf_f}
+            for condition in ['service', 'construction']:
+                el_f = γ('seismic', condition, 'seismic')
+                _register('SEISMIC', perm, var_seis, seismic_factor=el_f,
+                          label=f"DL={dl_f}({direction})  EL={el_f}({condition})")
+
+        print(f"\nTotal ULS combinations created: {len(created)}")
+        self.uls_combinations = created
+        return created
+
+    # ============================================================
+    #   SLS Load Combinations  (IRC:6-2017 Table B.3)
+    # ============================================================
+
+    def create_sls_combinations(self, model=None):
+        """
+        Creates all SLS load combinations per IRC:6-2017 Table B.3.
+
+        Dead load is always γ=1.0 in SLS regardless of direction.  Surfacing
+        carries different adding (1.2) / relieving (1.0) factors, so both
+        directions are generated to capture the full envelope.
+
+        Combinations produced
+        ----------------------
+        SLS_RARE_1  … SLS_RARE_6  (6 total)
+            2 surfacing directions  ×  3 variable loads as leading
+            Surf adding  (1.2): SLS_RARE_1 LL-lead, SLS_RARE_2 WL-lead, SLS_RARE_3 TL-lead
+            Surf relieving (1.0): SLS_RARE_4 LL-lead, SLS_RARE_5 WL-lead, SLS_RARE_6 TL-lead
+
+        SLS_FREQUENT_1  … SLS_FREQUENT_6  (6 total)
+            Same structure as Rare; factors from the frequent column of Table B.3.
+
+        SLS_QP_1, SLS_QP_2  (2 total)
+            Quasi-permanent: all variable loads accompanying.
+            LL=0 and WL=0 → omitted.  Only TL contributes (γ=0.5).
+            SLS_QP_1: Surf adding  (1.2)   DL=1.0  TL=0.5
+            SLS_QP_2: Surf relieving (1.0)  DL=1.0  TL=0.5
+
+        Total: 14 SLS combinations.
+
+        Notes
+        -----
+        - Loads with factor = None or 0 are silently skipped.
+        - Missing sub-case load cases raise a warning.
+        - Call ``analyze()`` again after this method to include the combinations.
+        """
+        model = model or self.model
+        if model is None:
+            raise ValueError("Model is not available. Create model before adding loads.")
+
+        γ = IRC6_2017.table_B3
+
+        LC_ATTR_MAP = {
+            'dead_load':    'dead_load_combination',
+            'surfacing':    'wearing_course_load',
+            'live_load':    'll_load_case',
+            'wind_load':    'wind_load_case',
+            'thermal_load': 'temperature_load_case',
+        }
+        VARIABLE_LOADS = ['live_load', 'wind_load', 'thermal_load']
+        DIRECTIONS     = ['adding', 'relieving']
+
+        def _lc(key):
+            attr = LC_ATTR_MAP.get(key)
+            return getattr(self, attr, None) if attr else None
+
+        def _copy_loads(target_lc, src_lc, factor):
+            if src_lc is None or factor is None or factor == 0:
+                return 0
+            for entry in src_lc.load_groups:
+                target_lc.add_load(entry["load"], load_factor=float(factor))
+            return len(src_lc.load_groups)
+
+        counters: dict = {}
+        created: list = []
+
+        def _register(prefix, dl_f, surf_f, var_factors, label=""):
+            counters[prefix] = counters.get(prefix, 0) + 1
+            lc_name  = f"{prefix}_{counters[prefix]}"
+            combo_lc = og.create_load_case(name=lc_name)
+            n = 0
+            n += _copy_loads(combo_lc, _lc('dead_load'), dl_f)
+            n += _copy_loads(combo_lc, _lc('surfacing'),  surf_f)
+            for key, fac in var_factors.items():
+                if fac is None or fac == 0:
+                    continue
+                src = _lc(key)
+                if src is None:
+                    warnings.warn(
+                        f"{lc_name}: '{key}' load case not available — "
+                        "create it before calling create_sls_combinations()."
+                    )
+                    continue
+                n += _copy_loads(combo_lc, src, fac)
+            if n == 0:
+                warnings.warn(f"{lc_name}: no loads added — skipping.")
+                counters[prefix] -= 1
+                return
+            model.add_load_case(combo_lc)
+            created.append(combo_lc)
+            print(f"  Created: {lc_name:<30s}  {label}")
+
+        # ── RARE & FREQUENT (6 + 6 combos) ───────────────────────────────────
+        for combo_type, prefix in [('rare', 'SLS_RARE'), ('frequent', 'SLS_FREQUENT')]:
+            print(f"SLS {combo_type.capitalize()} combinations:")
+            dl_f = γ('dead_load', None, combo_type)       # always 1.0 in SLS
+            for direction in DIRECTIONS:
+                surf_f = γ('surfacing', direction, combo_type)
+                for leading in VARIABLE_LOADS:
+                    var = {
+                        vl: γ(vl, 'leading' if vl == leading else 'accompanying', combo_type)
+                        for vl in VARIABLE_LOADS
+                    }
+                    if var[leading] is None:
+                        continue
+                    _register(prefix, dl_f, surf_f, var,
+                              label=f"DL={dl_f}  Surf={surf_f}({direction})  {leading} leading")
+            print()
+
+        # ── QUASI-PERMANENT (2 combos: adding & relieving surfacing) ─────────
+        print("SLS Quasi-permanent combinations:")
+        dl_f   = γ('dead_load', None, 'quasi_permanent')
+        var_qp = {vl: γ(vl, 'accompanying', 'quasi_permanent') for vl in VARIABLE_LOADS}
+        # live_load=0, wind_load=0 → skipped by _copy_loads; thermal_load=0.5 → included
+        for direction in DIRECTIONS:
+            surf_f = γ('surfacing', direction, 'quasi_permanent')
+            _register('SLS_QP', dl_f, surf_f, var_qp,
+                      label=f"DL={dl_f}  Surf={surf_f}({direction})  TL=0.5")
+
+        print(f"\nTotal SLS combinations created: {len(created)}")
+        self.sls_combinations = created
+        return created
 
     def analyze(self, model=None):
 

@@ -198,8 +198,14 @@ class PlateGirderBridge:
         self.add_dead_loads()
         self.add_live_loads()
         self.add_wind_loads()
+        self.add_temperature_load()
+        self.add_seismic_load()
         dataset = self.analyze()
         dataset = self.create_governing_ll_load_case(dataset, partial_safety_factor=1.0)
+
+        self.create_uls_combinations()
+        self.create_sls_combinations()
+        dataset = self._reanalyze_with_dedup()
 
         inp = self.input_dict
         print(
@@ -517,6 +523,54 @@ class PlateGirderBridge:
             partial_safety_factor=1.0,
         )
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # Temperature and seismic loads
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def add_temperature_load(self) -> None:
+        """
+        Apply temperature load to the grillage model as a patch load over the
+        full deck footprint per IRC:6-2017 Cl.215.
+
+        The load intensity is read from ``self.additional_inputs`` using the key
+        ``"temperature_load_kN_m2"``.  If the key is absent or zero the load is
+        silently skipped (temperature load is optional).
+
+        Delegates to BridgeGrillageModel.create_temperature_load().
+        """
+        tl_raw = self.additional_inputs.get("temperature_load_kN_m2")
+        if not tl_raw:
+            return
+        tl_kN_m2 = float(tl_raw)
+        if tl_kN_m2 == 0.0:
+            return
+        self.grillage_model.create_temperature_load(
+            temperature_load_kN_m2=tl_kN_m2,
+            partial_safety_factor=1.0,
+        )
+
+    def add_seismic_load(self) -> None:
+        """
+        Apply seismic (earthquake) load to the grillage model as a patch load
+        over the full deck footprint per IRC:6-2017 Cl.219 / IS 1893 (Part 3).
+
+        The load intensity is read from ``self.additional_inputs`` using the key
+        ``"seismic_load_kN_m2"``.  If the key is absent or zero the load is
+        silently skipped (seismic load is optional).
+
+        Delegates to BridgeGrillageModel.create_seismic_load().
+        """
+        el_raw = self.additional_inputs.get("seismic_load_kN_m2")
+        if not el_raw:
+            return
+        el_kN_m2 = float(el_raw)
+        if el_kN_m2 == 0.0:
+            return
+        self.grillage_model.create_seismic_load(
+            seismic_load_kN_m2=el_kN_m2,
+            partial_safety_factor=1.0,
+        )
+
     def vehicle_lane_coordinates(self) -> list:
         """
         Return vehicle-to-coordinate mappings for all IRC:6-2017 Table 6A
@@ -627,6 +681,76 @@ class PlateGirderBridge:
             dataset=dataset,
             partial_safety_factor=partial_safety_factor,
         )
+
+    def _reanalyze_with_dedup(self):
+        """
+        Re-run the OpenSees analysis, deduplicate the Loadcase axis (ospgrillage
+        appends results on every analyze() call), cache the clean dataset on the
+        grillage model, and return it.
+
+        Called by design() after load combinations have been registered so that
+        combination results are included in the final results dataset.
+        """
+        m = self.grillage_model.model
+        m.analyze()
+        ds = m.get_results()
+
+        lc_vals = ds.coords["Loadcase"].values
+        seen: set = set()
+        unique_idx = []
+        for i, val in enumerate(lc_vals):
+            if val not in seen:
+                seen.add(val)
+                unique_idx.append(i)
+        if len(unique_idx) < len(lc_vals):
+            ds = ds.isel(Loadcase=unique_idx)
+
+        self.grillage_model._deduplicated_results = ds
+        return ds
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Load combinations
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def create_uls_combinations(self) -> list:
+        """
+        Create all ULS load combinations per IRC:6-2017 Table B.2.
+
+        Produces 16 combinations:
+          BASIC_1 … BASIC_6        — 2 permanent directions × 3 variable leaders
+          ACCIDENTAL_1 … ACCIDENTAL_6 — 2 directions × 3 events × 1 valid leader
+          SEISMIC_1 … SEISMIC_4    — 2 directions × 2 seismic conditions
+
+        Must be called after create_governing_ll_load_case() so that the LL
+        load case (``ll_load_case``) is available for combination.
+
+        Delegates to BridgeGrillageModel.create_uls_combinations().
+
+        Returns
+        -------
+        list — ospgrillage load-case objects registered with the model.
+        """
+        return self.grillage_model.create_uls_combinations()
+
+    def create_sls_combinations(self) -> list:
+        """
+        Create all SLS load combinations per IRC:6-2017 Table B.3.
+
+        Produces 14 combinations:
+          SLS_RARE_1 … SLS_RARE_6          — 2 surfacing directions × 3 variable leaders
+          SLS_FREQUENT_1 … SLS_FREQUENT_6  — same structure, frequent-column factors
+          SLS_QP_1, SLS_QP_2               — quasi-permanent; only TL (0.5) contributes
+
+        Must be called after create_governing_ll_load_case() so that the LL
+        load case is available for combination.
+
+        Delegates to BridgeGrillageModel.create_sls_combinations().
+
+        Returns
+        -------
+        list — ospgrillage load-case objects registered with the model.
+        """
+        return self.grillage_model.create_sls_combinations()
 
     # ─────────────────────────────────────────────────────────────────────────
     # DCR checks
