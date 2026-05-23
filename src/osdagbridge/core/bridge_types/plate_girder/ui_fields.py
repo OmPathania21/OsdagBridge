@@ -276,7 +276,7 @@ class FrontendData:
 
             (KEY_STEELDESIGN_MEMBER_ID, "Member",
                 TYPE_COMBOBOX, ["All"], True, "No Validator", 
-                {"group_title": "Steel Design"}),
+                {"group_title": "Girder Design"}),
 
             (KEY_STEELDESIGN_LOAD_COMBINATION, "Load Case /\nCombination",
                 TYPE_COMBOBOX, ["Envelope"], True, "No Validator", {}),

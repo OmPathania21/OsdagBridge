@@ -247,14 +247,14 @@ KEY_DS_STUD_TRANSVERSE_SPACING    = "design_options.shear_studs.transverse_spaci
 KEY_DO_TAB                  = "design_options_cont.tab"
 
 # Partial Factor
-KEY_DO_GAMMA_C_BASIC        = "design_options_cont.partial_factor.gamma_c_basic"
-KEY_DO_GAMMA_C_ACCIDENTAL   = "design_options_cont.partial_factor.gamma_c_accidental"
-KEY_DO_GAMMA_M0             = "design_options_cont.partial_factor.gamma_m0"
-KEY_DO_GAMMA_M1             = "design_options_cont.partial_factor.gamma_m1"
-KEY_DO_GAMMA_S              = "design_options_cont.partial_factor.gamma_s"
-KEY_DO_GAMMA_V              = "design_options_cont.partial_factor.gamma_v"
-KEY_DO_GAMMA_FLT            = "design_options_cont.partial_factor.gamma_flt"
-KEY_DO_GAMMA_MF             = "design_options_cont.partial_factor.gamma_mf"
+KEY_DO_GAMMA_C_BASIC        = "design_options_cont.partial_factor.concrete_basic.gamma_c_basic"
+KEY_DO_GAMMA_C_ACCIDENTAL   = "design_options_cont.partial_factor.concrete_accidental.gamma_c_accidental"
+KEY_DO_GAMMA_M0             = "design_options_cont.partial_factor.yielding_and_buckling.gamma_m0"
+KEY_DO_GAMMA_M1             = "design_options_cont.partial_factor.ultimate_stress.gamma_m1"
+KEY_DO_GAMMA_S              = "design_options_cont.partial_factor.reinforcing_steel.gamma_s"
+KEY_DO_GAMMA_V              = "design_options_cont.partial_factor.shear_connectors.gamma_v"
+KEY_DO_GAMMA_FLT            = "design_options_cont.partial_factor.fatigue_load.gamma_flt"
+KEY_DO_GAMMA_MF             = "design_options_cont.partial_factor.fatigue_strength.gamma_mf"
 
 # Fatigue
 KEY_DO_LOAD_CYCLES          = "design_options_cont.fatigue.load_cycles"

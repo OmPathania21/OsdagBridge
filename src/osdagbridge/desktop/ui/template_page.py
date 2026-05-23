@@ -404,6 +404,12 @@ class CustomWindow(QWidget):
         # To Update the Input Dictionary before opening it
         dlg.set_input_dictionary(self.input_dict)
 
+        # Restore UI widgets from the input dictionary to show updated defaults
+        dlg.set_properties_data({
+            KEY_DS_STUD_DIAMETER: self.input_dict.get(KEY_DS_STUD_DIAMETER),
+            KEY_DS_STUD_COUNT: self.input_dict.get(KEY_DS_STUD_COUNT),
+        })
+
         # Update Internal 2D CAD State
         # Single Source of Truth = _last_mapped_params dict in BridgeDualCADWidget
         dlg.typical_section_tab.update_internal_cad_state(self.cad_comp_widget._last_mapped_params)

@@ -200,9 +200,9 @@ def _update_design_options_defaults(input_dict: dict) -> None:
     _update(KEY_DS_SIDE_CLEAR_COVER,        "50")
     _update(KEY_DS_STUD_YIELD_STRENGTH,     "400")
     _update(KEY_DS_STUD_ULTIMATE_STRENGTH,  "400")
-    _update(KEY_DS_STUD_DIAMETER,           "12")
+    _update(KEY_DS_STUD_DIAMETER,           "16")
     _update(KEY_DS_STUD_HEIGHT,             "10")
-    _update(KEY_DS_STUD_COUNT,              "1")
+    _update(KEY_DS_STUD_COUNT,              "2")
     _update(KEY_DS_STUD_TRANSVERSE_SPACING, "10")
 
 def _update_design_options_cont_defaults(input_dict: dict) -> None:
