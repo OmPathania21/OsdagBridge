@@ -3,7 +3,7 @@ Osdag Bridge Input Validators
 Validates Basic and Additional Inputs
 """
 
-from math import isclose
+from math import isclose, floor, ceil
 
 from osdagbridge.core.utils.codes.keyfile import *
 from osdagbridge.core.utils.codes.irc5_2015 import IRC5_2015
@@ -79,9 +79,37 @@ class BridgeInputValidator:
         Returns (corrected_value, message) or None if valid.
         """
         # ═══TYPICAL-SECTION-TAB-VALIDATORS-STARTS═════════════════════════════════════════════════════════
-        
+
+        # ── Layout Fields ──────────────────────────────────────────────────────
+        if key == KEY_TS_GIRDER_SPACING:
+            v = self._to_float(inputs.get(key))
+            overall = self._to_float(inputs.get(KEY_TS_OVERALL_WIDTH))
+            max_gs = (overall / 2) if overall else None
+            if v is None: return 0.5, "Girder spacing must be a numeric value."
+            if v < 0.5:   return 0.5, "Girder spacing is outside the practical range allowed in the software."
+            if max_gs is not None and v > max_gs:
+                return max_gs, "Girder spacing is outside the practical range allowed in the software."
+
+        elif key == KEY_TS_NO_OF_GIRDERS:
+            v = self._to_int(inputs.get(key))
+            overall = self._to_float(inputs.get(KEY_TS_OVERALL_WIDTH))
+            max_ng = ceil(2 * overall) if overall else None
+            if v is None: return 2, "No. of girders must be an integer value."
+            if v < 2:     return 2, "No. of girders is outside the practical range allowed in the software."
+            if max_ng is not None and v > max_ng:
+                return max_ng, "No. of girders is outside the practical range allowed in the software."
+
+        elif key == KEY_TS_DECK_OVERHANG:
+            v = self._to_float(inputs.get(key))
+            overall = self._to_float(inputs.get(KEY_TS_OVERALL_WIDTH))
+            max_ov = (overall / 2) if overall else None
+            if v is None: return 0.0, "Deck overhang width must be a numeric value."
+            if v < 0.0:   return 0.0, "Deck overhang width is outside the practical range allowed in the software."
+            if max_ov is not None and v > max_ov:
+                return max_ov, "Deck overhang width is outside the practical range allowed in the software."
+
         # ── Deck Details ───────────────────────────────────────────────────────
-        if key == KEY_TS_DECK_THICKNESS:
+        elif key == KEY_TS_DECK_THICKNESS:
             v = self._to_float(inputs.get(key))
             if v is None: return 200, "Deck thickness must be a numeric value."
             if v < 100:   return 100, "Deck thickness must be at least 100 mm."
@@ -100,12 +128,139 @@ class BridgeInputValidator:
             if v < 100:   return 100, "Footpath thickness must be at least 100 mm."
             if v > 500:   return 500, "Footpath thickness must not exceed 500 mm."
 
+        # ── Crash Barrier ──────────────────────────────────────────────────────
+        elif key == KEY_CB_WIDTH:
+            v = self._to_float(inputs.get(key))
+            overall = self._to_float(inputs.get(KEY_TS_OVERALL_WIDTH))
+            max_cbw = (overall / 2) if overall else None
+            if v is None: return 0.0, "Crash barrier width must be a numeric value."
+            if v < 0.0:   return 0.0, "Crash barrier width is outside the practical range allowed in the software."
+            if max_cbw is not None and v > max_cbw:
+                return max_cbw, "Crash barrier width is outside the practical range allowed in the software."
+
+        elif key == KEY_CB_HEIGHT:
+            v = self._to_float(inputs.get(key))
+            if v is None: return 0.0, "Crash barrier height must be a numeric value."
+            if v < 0.0:   return 0.0, "Crash barrier height is outside the practical range allowed in the software."
+            if v > 10.0:  return 10.0, "Crash barrier height is outside the practical range allowed in the software."
+
+        elif key == KEY_CB_LOAD:
+            v = self._to_float(inputs.get(key))
+            if v is None: return 0.0, "Crash barrier load must be a numeric value."
+            if v < 0.0:   return 0.0, "Crash barrier load is outside the practical range allowed in the software."
+            if v > 100.0: return 100.0, "Crash barrier load is outside the practical range allowed in the software."
+
+        elif key == KEY_CB_POST_SPACING:
+            v = self._to_float(inputs.get(key))
+            span = self._to_float(inputs.get(KEY_SPAN))
+            if v is None: return 0.1, "Crash barrier post spacing must be a numeric value."
+            if v < 0.1:   return 0.1, "Crash barrier post spacing is outside the practical range allowed in the software."
+            if span is not None and v > span:
+                return span, "Crash barrier post spacing is outside the practical range allowed in the software."
+
+        # ── Median ─────────────────────────────────────────────────────────────
+        elif key == KEY_MD_WIDTH:
+            v = self._to_float(inputs.get(key))
+            overall = self._to_float(inputs.get(KEY_TS_OVERALL_WIDTH))
+            max_mdw = (overall / 2) if overall else None
+            if v is None: return 0.0, "Median width must be a numeric value."
+            if v < 0.0:   return 0.0, "Median width is outside the practical range allowed in the software."
+            if max_mdw is not None and v > max_mdw:
+                return max_mdw, "Median width is outside the practical range allowed in the software."
+
+        elif key == KEY_MD_HEIGHT:
+            v = self._to_float(inputs.get(key))
+            if v is None: return 0.0, "Median height must be a numeric value."
+            if v < 0.0:   return 0.0, "Median height is outside the practical range allowed in the software."
+            if v > 10.0:  return 10.0, "Median height is outside the practical range allowed in the software."
+
+        elif key == KEY_MD_LOAD:
+            v = self._to_float(inputs.get(key))
+            if v is None: return 0.0, "Median load must be a numeric value."
+            if v < 0.0:   return 0.0, "Median load is outside the practical range allowed in the software."
+            if v > 100.0: return 100.0, "Median load is outside the practical range allowed in the software."
+
+        elif key == KEY_MD_POST_SPACING:
+            v = self._to_float(inputs.get(key))
+            span = self._to_float(inputs.get(KEY_SPAN))
+            if v is None: return 0.1, "Median post spacing must be a numeric value."
+            if v < 0.1:   return 0.1, "Median post spacing is outside the practical range allowed in the software."
+            if span is not None and v > span:
+                return span, "Median post spacing is outside the practical range allowed in the software."
+
         # ── Railing ────────────────────────────────────────────────────────────
         elif key == KEY_RL_HEIGHT:
             v = self._to_float(inputs.get(key))
             if v is None:              return MIN_RAILING_HEIGHT, "Railing height must be a numeric value."
             if v < MIN_RAILING_HEIGHT: return MIN_RAILING_HEIGHT, f"Minimum railing height is {MIN_RAILING_HEIGHT} m as per IRC 5 Cl.109.7.2."
             if v > 3.0:                return 3.0, "Railing height must not exceed 3.0 m."
+
+        elif key == KEY_RL_WIDTH:
+            v = self._to_float(inputs.get(key))
+            overall = self._to_float(inputs.get(KEY_TS_OVERALL_WIDTH))
+            max_rlw = (overall / 2) if overall else None
+            if v is None: return 0.0, "Railing width must be a numeric value."
+            if v < 0.0:   return 0.0, "Railing width is outside the practical range allowed in the software."
+            if max_rlw is not None and v > max_rlw:
+                return max_rlw, "Railing width is outside the practical range allowed in the software."
+
+        elif key == KEY_RL_LOAD_VALUE:
+            v = self._to_float(inputs.get(key))
+            if v is None: return 0.0, "Railing load must be a numeric value."
+            if v < 0.0:   return 0.0, "Railing load is outside the practical range allowed in the software."
+            if v > 100.0: return 100.0, "Railing load is outside the practical range allowed in the software."
+
+        # ── Wearing Course ─────────────────────────────────────────────────────
+        elif key == KEY_WC_DENSITY:
+            v = self._to_float(inputs.get(key))
+            if v is None: return 0.0, "Wearing course density must be a numeric value."
+            if v < 0.0:   return 0.0, "Wearing course density is outside the practical range allowed in the software."
+            if v > 10.0:  return 10.0, "Wearing course density is outside the practical range allowed in the software."
+
+        elif key == KEY_WC_THICKNESS:
+            v = self._to_float(inputs.get(key))
+            if v is None: return 0.0, "Wearing course thickness must be a numeric value."
+            if v < 0.0:   return 0.0, "Wearing course thickness is outside the practical range allowed in the software."
+            if v > 10.0:  return 10.0, "Wearing course thickness is outside the practical range allowed in the software."
+
+        # ── Lane Details ───────────────────────────────────────────────────────
+        elif key == KEY_WC_LD_LANE_TABLE_COUNT:
+            carriageway = self._to_float(inputs.get(KEY_CARRIAGEWAY_WIDTH))
+            v = self._to_int(inputs.get(key))
+            max_lanes = max(1, min(6, int(floor(carriageway / 3.5)))) if carriageway else 6
+            if v is None: return 1, "No. of lanes must be an integer value."
+            if v < 1:     return 1, "Lane count is outside the practical range allowed in the software (IRC 5 Cl.104.3.1)."
+            if v > max_lanes:
+                return max_lanes, "Lane count is outside the practical range allowed in the software (IRC 5 Cl.104.3.1)."
+
+        elif key == KEY_WC_LD_LANE_TABLE:
+            rows = inputs.get(key)
+            if not isinstance(rows, list) or len(rows) == 0:
+                return None
+            carriageway = self._to_float(inputs.get(KEY_CARRIAGEWAY_WIDTH))
+            corrected = []
+            start = 0.0
+            total = 0.0
+            changed = False
+            for row in rows:
+                if not isinstance(row, (list, tuple)) or len(row) < 3:
+                    corrected.append(row)
+                    continue
+                w = self._to_float(row[2])
+                if w is None or w < 3.5:
+                    w = 3.5
+                    changed = True
+                corrected_start = round(start, 6)
+                existing_start = self._to_float(row[1])
+                if existing_start is None or abs(existing_start - corrected_start) > 1e-3:
+                    changed = True
+                corrected.append([row[0], corrected_start, w])
+                start += w
+                total += w
+            if changed:
+                return corrected, "Lane widths must be at least 3.5 m (IRC 5 Cl.104.3.1) and start positions must be continuous from 0 m."
+            if carriageway and total - carriageway > 1e-6:
+                return rows, f"Sum of lane widths ({total:.2f} m) exceeds carriageway width ({carriageway:.2f} m). Adjust per IRC 5 Cl.104.3.1."
 
         # ═══TYPICAL-SECTION-TAB-VALIDATORS-ENDS═══════════════════════════════════════════════════════════
 
