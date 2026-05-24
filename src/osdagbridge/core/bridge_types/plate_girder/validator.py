@@ -271,12 +271,168 @@ class BridgeInputValidator:
 
 
         # ═══ANALYSIS/DESIGN-OPTIONS-TAB-VALIDATORS-STARTS═════════════════════════════════════════════════════
-        
+
+        # ── Reinforcement Bounds ────────────────────────────────────────────────
+        elif key == KEY_DS_REINF_BOUNDS:
+            bounds = inputs.get(key)
+            if not isinstance(bounds, dict):
+                return {"lower": 8, "upper": 40}, "Reinforcement size bounds must be specified with integer lower and upper bar diameters."
+            lower = self._to_int(bounds.get("lower"))
+            upper = self._to_int(bounds.get("upper"))
+            corrected = dict(bounds)
+            changed = False
+            if lower is None: lower = 8;  changed = True
+            if upper is None: upper = 40; changed = True
+            if lower < 8:    lower = 8;  changed = True
+            if lower > 40:   lower = 40; changed = True
+            if upper < 8:    upper = 8;  changed = True
+            if upper > 40:   upper = 40; changed = True
+            if upper < lower: upper = lower; changed = True
+            if changed:
+                corrected["lower"] = lower
+                corrected["upper"] = upper
+                return corrected, "Reinforcement bar diameter bounds must be integers between 8 and 40 mm, with upper bound not less than lower bound."
+
+        # ── Clear Covers ────────────────────────────────────────────────────────
+        elif key == KEY_DS_TOP_CLEAR_COVER:
+            v = self._to_float(inputs.get(key))
+            if v is None: return 40, "Top clear cover must be a numeric value."
+            if v < 40:    return 40, "Top clear cover must be between 40 and 75 mm."
+            if v > 75:    return 75, "Top clear cover must be between 40 and 75 mm."
+
+        elif key == KEY_DS_BOTTOM_CLEAR_COVER:
+            v = self._to_float(inputs.get(key))
+            if v is None: return 35, "Bottom clear cover must be a numeric value."
+            if v < 35:    return 35, "Bottom clear cover must be between 35 and 75 mm."
+            if v > 75:    return 75, "Bottom clear cover must be between 35 and 75 mm."
+
+        elif key == KEY_DS_SIDE_CLEAR_COVER:
+            v = self._to_float(inputs.get(key))
+            if v is None: return 35, "Side clear cover must be a numeric value."
+            if v < 35:    return 35, "Side clear cover must be between 35 and 75 mm."
+            if v > 75:    return 75, "Side clear cover must be between 35 and 75 mm."
+
+        # ── Shear Stud Properties ───────────────────────────────────────────────
+        elif key == KEY_DS_STUD_YIELD_STRENGTH:
+            v = self._to_float(inputs.get(key))
+            if v is None: return 350, "Yield strength must be a numeric value."
+            if v < 350:   return 350, "Yield strength must be between 350 and 600 MPa."
+            if v > 600:   return 600, "Yield strength must be between 350 and 600 MPa."
+
+        elif key == KEY_DS_STUD_ULTIMATE_STRENGTH:
+            v = self._to_float(inputs.get(key))
+            if v is None: return 350, "Ultimate strength must be a numeric value."
+            if v < 350:   return 350, "Ultimate strength must be between 350 and 600 MPa."
+            if v > 600:   return 600, "Ultimate strength must be between 350 and 600 MPa."
+
+        elif key == KEY_DS_STUD_HEIGHT:
+            v      = self._to_float(inputs.get(key))
+            d      = self._to_float(inputs.get(KEY_DS_STUD_DIAMETER))
+            deck_t = self._to_float(inputs.get(KEY_TS_DECK_THICKNESS))
+            min_h  = (4.0 * d) if d is not None else None
+            max_h  = (deck_t - 25.0) if deck_t is not None else None
+            if v is None:
+                return (min_h if min_h is not None else 0), "Stud height must be a numeric value."
+            if min_h is not None and v < min_h:
+                return min_h, f"Stud height must be between {min_h:.0f} mm (4× stud diameter) and {max_h:.0f} mm (deck thickness − 25 mm)."
+            if max_h is not None and v > max_h:
+                return max_h, f"Stud height must be between {min_h:.0f} mm (4× stud diameter) and {max_h:.0f} mm (deck thickness − 25 mm)."
+
+        elif key == KEY_DS_STUD_COUNT:
+            v         = self._to_int(inputs.get(key))
+            d         = self._to_float(inputs.get(KEY_DS_STUD_DIAMETER))
+            flange_m  = self._to_float(inputs.get(KEY_GIRDER_TOP_FLANGE_WIDTH))
+            flange_mm = flange_m * 1000.0 if flange_m is not None else None
+            max_n     = int(ceil((flange_mm - 50.0) / (2.5 * d))) if (flange_mm is not None and d) else None
+            if max_n is not None: max_n = max(max_n, 1)
+            if v is None: return 1, "No. of studs per section must be an integer value."
+            if v < 1:     return 1, "No. of studs per section is outside the practical range allowed in the software."
+            if max_n is not None and v > max_n:
+                return max_n, "No. of studs per section is outside the practical range allowed in the software."
+
+        elif key == KEY_DS_STUD_TRANSVERSE_SPACING:
+            v         = self._to_float(inputs.get(key))
+            d         = self._to_float(inputs.get(KEY_DS_STUD_DIAMETER))
+            flange_m  = self._to_float(inputs.get(KEY_GIRDER_TOP_FLANGE_WIDTH))
+            flange_mm = flange_m * 1000.0 if flange_m is not None else None
+            n         = self._to_int(inputs.get(KEY_DS_STUD_COUNT))
+            min_sp    = (2.5 * d) if d is not None else None
+            max_sp    = (flange_mm - 50.0 - d * (n - 1)) if (flange_mm is not None and d is not None and n is not None) else None
+            if v is None:
+                return (min_sp if min_sp is not None else 0), "Transverse spacing must be a numeric value."
+            if min_sp is not None and v < min_sp:
+                return min_sp, f"Transverse spacing must be between {min_sp:.1f} mm and {max_sp:.1f} mm."
+            if max_sp is not None and v > max_sp:
+                return max_sp, f"Transverse spacing must be between {min_sp:.1f} mm and {max_sp:.1f} mm."
+
         # ═══ANALYSIS/DESIGN-OPTIONS-TAB-VALIDATORS-ENDS═══════════════════════════════════════════════════════
 
 
         # ═══DESIGN-OPTIONS-CONT-TAB-VALIDATORS-STARTS═════════════════════════════════════════════════════
-        
+
+        # ── Partial Factors ─────────────────────────────────────────────────────
+        elif key == KEY_DO_GAMMA_C_BASIC:
+            v = self._to_float(inputs.get(key))
+            if v is None: return 1.0, "Partial factor γc (basic) must be a numeric value."
+            if v < 1.0:   return 1.0, "Partial factor γc (basic) must be between 1.0 and 2.0."
+            if v > 2.0:   return 2.0, "Partial factor γc (basic) must be between 1.0 and 2.0."
+
+        elif key == KEY_DO_GAMMA_C_ACCIDENTAL:
+            v = self._to_float(inputs.get(key))
+            if v is None: return 1.0, "Partial factor γc (accidental) must be a numeric value."
+            if v < 1.0:   return 1.0, "Partial factor γc (accidental) must be between 1.0 and 2.0."
+            if v > 2.0:   return 2.0, "Partial factor γc (accidental) must be between 1.0 and 2.0."
+
+        elif key == KEY_DO_GAMMA_M0:
+            v = self._to_float(inputs.get(key))
+            if v is None: return 1.0, "Partial factor γm0 must be a numeric value."
+            if v < 1.0:   return 1.0, "Partial factor γm0 must be between 1.0 and 2.0."
+            if v > 2.0:   return 2.0, "Partial factor γm0 must be between 1.0 and 2.0."
+
+        elif key == KEY_DO_GAMMA_M1:
+            v = self._to_float(inputs.get(key))
+            if v is None: return 1.0, "Partial factor γm1 must be a numeric value."
+            if v < 1.0:   return 1.0, "Partial factor γm1 must be between 1.0 and 2.0."
+            if v > 2.0:   return 2.0, "Partial factor γm1 must be between 1.0 and 2.0."
+
+        elif key == KEY_DO_GAMMA_S:
+            v = self._to_float(inputs.get(key))
+            if v is None: return 1.0, "Partial factor γs must be a numeric value."
+            if v < 1.0:   return 1.0, "Partial factor γs must be between 1.0 and 2.0."
+            if v > 2.0:   return 2.0, "Partial factor γs must be between 1.0 and 2.0."
+
+        elif key == KEY_DO_GAMMA_V:
+            v = self._to_float(inputs.get(key))
+            if v is None: return 1.0, "Partial factor γv must be a numeric value."
+            if v < 1.0:   return 1.0, "Partial factor γv must be between 1.0 and 2.0."
+            if v > 2.0:   return 2.0, "Partial factor γv must be between 1.0 and 2.0."
+
+        elif key == KEY_DO_GAMMA_FLT:
+            v = self._to_float(inputs.get(key))
+            if v is None: return 1.0, "Partial factor γFlt must be a numeric value."
+            if v < 1.0:   return 1.0, "Partial factor γFlt must be between 1.0 and 2.0."
+            if v > 2.0:   return 2.0, "Partial factor γFlt must be between 1.0 and 2.0."
+
+        elif key == KEY_DO_GAMMA_MF:
+            v = self._to_float(inputs.get(key))
+            if v is None: return 1.0, "Partial factor γMf must be a numeric value."
+            if v < 1.0:   return 1.0, "Partial factor γMf must be between 1.0 and 2.0."
+            if v > 2.0:   return 2.0, "Partial factor γMf must be between 1.0 and 2.0."
+
+        # ── Fatigue ─────────────────────────────────────────────────────────────
+        elif key == KEY_DO_LOAD_CYCLES:
+            v = self._to_float(inputs.get(key))
+            if v is None:       return 100000, "No. of load cycles must be a numeric value."
+            if v < 100000:      return 100000, "No. of load cycles must be between 100,000 and 100,000,000."
+            if v > 100000000:   return 100000000, "No. of load cycles must be between 100,000 and 100,000,000."
+
+        # ── Deflection ──────────────────────────────────────────────────────────
+        elif key == KEY_DO_DEFLECTION_LIMIT:
+            v = self._to_float(inputs.get(key))
+            if v is None: return 300, "Deflection limit denominator must be a numeric value."
+            if v < 300:   return 300, "Deflection limit denominator must be between 300 and 800."
+            if v > 800:   return 800, "Deflection limit denominator must be between 300 and 800."
+
         # ═══DESIGN-OPTIONS-CONT-TAB-VALIDATORS-ENDS═══════════════════════════════════════════════════════
 
 
