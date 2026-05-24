@@ -1326,24 +1326,27 @@ class TypicalSectionDetailsTab(QWidget):
     # ----- Global reset --------------------------------------------------------
 
     def reset_defaults(self):
-        # Layout defaults
-        if hasattr(self, "girder_spacing"):
-            self.girder_spacing.setText(f"{DEFAULT_GIRDER_SPACING:.2f}")
-        if hasattr(self, "deck_overhang"):
-            self.deck_overhang.setText(f"{0.35 * DEFAULT_GIRDER_SPACING:.2f}")
-        if hasattr(self, "no_of_girders"):
-            self.no_of_girders.setText("2")
+        # NB: girder spacing / no. of girders / deck overhang are intentionally
+        # preserved — they come from defaults.solve_extend_basic_input_dict based
+        # on the user's basic inputs, and resetting them to arbitrary constants
+        # would discard that work.
         self._clear_adjust_notice()
-        self._resolve_layout("spacing")
 
         # Crash barrier defaults
         self._reset_crash_barrier_defaults()
 
-        # Median defaults
-        median_type_w = self._find_median_widget(KEY_MD_TYPE)
-        if median_type_w:
-            median_type_w.setCurrentText("IRC 5 - Raised Kerb")
-            self._apply_median_defaults(median_type_w.currentText(), force=True)
+        # Median defaults — only apply when median is actually included
+        # (otherwise we'd force median_present=True into the CAD preview).
+        include_median = "No"
+        if self.additional_input_instance is not None:
+            include_median = str(
+                self.additional_input_instance.working_input_dict.get(KEY_INCLUDE_MEDIAN, "No")
+            ).strip()
+        if include_median == "Yes":
+            median_type_w = self._find_median_widget(KEY_MD_TYPE)
+            if median_type_w:
+                median_type_w.setCurrentText("IRC 5 - Raised Kerb")
+                self._apply_median_defaults(median_type_w.currentText(), force=True)
 
         # Railing defaults
         railing_type_w = self._find_railing_widget(KEY_RL_TYPE)

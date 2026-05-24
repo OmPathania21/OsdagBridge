@@ -297,7 +297,9 @@ class BridgeDualCADWidget(QWidget):
                 params['median_present'] = bool(input_dict[KEY_INCLUDE_MEDIAN] == "Yes")
                 # When enabling median from homepage and no median_type was set yet,
                 # provide a sensible default so the CAD can draw a shape.
-                if params['median_present'] and KEY_MD_TYPE not in input_dict:
+                # NB: solve_extend_basic_input_dict writes KEY_MD_TYPE=None when
+                # include_median was previously "No", so treat None as "missing".
+                if params['median_present'] and input_dict.get(KEY_MD_TYPE) is None:
                     default_type = "IRC 5 - Raised Kerb"
                     params[KEY_MD_TYPE] = default_type
                     geom = MedianGeometry.get_geometry(default_type)

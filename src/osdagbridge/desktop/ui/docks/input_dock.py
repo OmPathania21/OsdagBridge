@@ -597,7 +597,15 @@ class InputDock(QWidget):
     def _on_footpath_changed(self, value=None):
         if value is None:
             value = self._text(KEY_FOOTPATH)
+        # Footpath toggle changes overall bridge width — force defaults re-solve
+        # on next Additional Inputs open so the dict has the new geometry.
+        self.is_require_field_changed = True
         self.parent.notify_additional_inputs_footpath(value)
+
+    def _on_include_median_changed(self, value=None):
+        # Median toggle also changes overall bridge width and the Median sub-tab's
+        # enabled state — flag so solve_extend_basic_input_dict runs on next open.
+        self.is_require_field_changed = True
 
     def _on_design_mode_changed(self, mode_text: str = ""):
         self._current_design_mode = str(mode_text or "Optimized").strip()

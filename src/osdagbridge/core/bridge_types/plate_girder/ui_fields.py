@@ -155,6 +155,7 @@ class FrontendData:
                     "on_changed":      [
                         "_update_carriageway_placeholder",
                         "_validate_carriageway_width_silent",
+                        "_on_include_median_changed",
                     ],
                 }),
 

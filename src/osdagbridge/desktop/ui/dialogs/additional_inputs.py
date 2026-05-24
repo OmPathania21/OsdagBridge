@@ -1013,6 +1013,11 @@ class AdditionalInputs(QDialog):
         accordingly (e.g., both sides, left only, or none).
         """
         self.footpath_value = footpath_value
+        # Sync into the working dict so _resolve_layout sees the new n_footpaths.
+        # default_input_dict shares the reference with template_page.input_dict,
+        # which the input dock already updates — no need to touch it here.
+        if self.working_input_dict is not None:
+            self.working_input_dict[KEY_FOOTPATH] = footpath_value
         self.typical_section_tab.update_footpath_value(footpath_value)
 
 
