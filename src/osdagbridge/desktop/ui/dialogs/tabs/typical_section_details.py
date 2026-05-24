@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal, QTimer
 
-from osdagbridge.core.bridge_types.plate_girder.bridge_geometry import CrossSectionLayout
+from osdagbridge.core.bridge_types.plate_girder.initial_sizing import BridgeConfigurationSolver
 from osdagbridge.core.utils.common import *
 from osdagbridge.desktop.ui.dialogs.tabs.common import apply_field_style
 from osdagbridge.desktop.ui.dialogs.custom_messagebox import CustomMessageBox, MessageBoxType
@@ -48,19 +48,9 @@ class TypicalSectionDetailsTab(QWidget):
         self._initial_cad_state = {}
         self.carriageway_width = carriageway_width
         self.updating_fields = False
-        self._updating_overall_width_display = False
         self._updating_lane_table = False
         self._lane_cell_signal_connected = False
-        # Track last known numeric values to avoid spurious recalculations on text-only edits
-        self._last_spacing_value: float | None = None
-        self._last_overhang_value: float | None = None
-        self._last_girders_value: int | None = None
         self.crash_barrier_count = 2  # Assume two crash barriers at carriageway edges
-        self.overall_bridge_width_formula = (
-            "OverallBridgeWidth = CrossSectionLayout.total_width = (2 x CarriagewayWidth if Median else CarriagewayWidth) + "
-            "2 x CrashBarrierWidth + MedianWidth + (NoOfFootpaths x FootpathWidth) + "
-            "(NoOfFootpaths x RailingWidth)"
-        )
         self.init_ui()
 
     def update_internal_cad_state(self, cad_state):
@@ -248,7 +238,6 @@ class TypicalSectionDetailsTab(QWidget):
         self._initialize_lane_defaults()
         if self.deck_thickness:
             self.deck_thickness.textChanged.connect(self.update_footpath_thickness)
-        self.recalculate_girders()
 
         crash_barrier_type = self._find_crash_barrier_widget(KEY_CB_TYPE)
         if crash_barrier_type:
@@ -324,55 +313,9 @@ class TypicalSectionDetailsTab(QWidget):
             return 1
         return 0
 
-    def _get_flange_width_limit(self):
-        # Widths are defined elsewhere (Girder Details) in mm; if unavailable, assume 0
-        top_width_mm = getattr(self, "top_flange_width_mm", 0) or 0
-        bottom_width_mm = getattr(self, "bottom_flange_width_mm", 0) or 0
-        return max(top_width_mm, bottom_width_mm) / 1000.0
-
-    def _parse_length_value(self, field, default=0.0, scale=1.0):
-        try:
-            text = field.text().strip() if field else ""
-            if text:
-                return float(text) / scale
-        except (ValueError, AttributeError):
-            pass
-        return default
-
     # --------------------- Lane Details sub-tab functionality  START ---------------------
 
     _LANE_WIDTH_M = 3.5  # IRC 5 Clause 104.3.1 minimum design lane width
-
-    def _calculate_overall_bridge_width(self):
-        carriageway_width = float(self.carriageway_width) if self.carriageway_width else 0.0
-        crash_barrier_width = self._parse_length_value(
-            self._find_crash_barrier_widget(KEY_CB_WIDTH),
-            default=DEFAULT_CRASH_BARRIER_WIDTH,
-        )
-        footpath_width = self._parse_length_value(
-            getattr(self, "footpath_width", None),
-            default=0.0,
-        )
-        railing_width = self._parse_length_value(
-            self._find_railing_widget(KEY_RL_WIDTH),
-            default=DEFAULT_RAILING_WIDTH,
-            scale=1000.0,
-        )
-        median_width = self._parse_length_value(
-            self._find_median_widget(KEY_MD_WIDTH),
-            default=0.0,
-        )
-        footpath_count = self._get_footpath_count()
-
-        layout = CrossSectionLayout(
-            carriageway_width=carriageway_width,
-            crash_barrier_width=crash_barrier_width,
-            railing_width=railing_width,
-            footpath_width=footpath_width,
-            median_width=median_width,
-            no_of_footpaths=footpath_count,
-        )
-        return layout.total_width
 
     def _clear_adjust_notice(self):
         if hasattr(self, "layout_adjust_notice"):
@@ -397,10 +340,6 @@ class TypicalSectionDetailsTab(QWidget):
             ):
                 if field is not None:
                     field.clear()
-            # Reset tracked values
-            self._last_spacing_value = None
-            self._last_overhang_value = None
-            self._last_girders_value = None
         finally:
             self.updating_fields = False
         self._clear_adjust_notice()
@@ -433,16 +372,14 @@ class TypicalSectionDetailsTab(QWidget):
             else:
                 self.layout_notice_container.hide()
 
-    def _set_layout_fields(self, spacing, overhang, girders):
+    def _set_layout_fields(self, spacing, overhang, girders, overall_width=None):
         self.updating_fields = True
         try:
             self.girder_spacing.setText(f"{spacing:.2f}")
             self.deck_overhang.setText(f"{overhang:.2f}")
             self.no_of_girders.setText(str(int(girders)))
-            # Update tracked values to prevent spurious recalculations
-            self._last_spacing_value = spacing
-            self._last_overhang_value = overhang
-            self._last_girders_value = int(girders)
+            if overall_width is not None and hasattr(self, "overall_bridge_width_display"):
+                self.overall_bridge_width_display.setText(f"{overall_width:.2f}")
             try:
                 self.girder_count_changed.emit(int(girders))
             except Exception:
@@ -450,445 +387,165 @@ class TypicalSectionDetailsTab(QWidget):
         finally:
             self.updating_fields = False
 
-    def _spacing_candidates_for_overhang(self, overall_width, overhang, spacing_bounds):
-        """Find best (n, spacing) combination for a FIXED overhang.
-        
-        When user changes overhang, we keep overhang fixed and only adjust
-        girder spacing and number of girders.
-        
-        Formula: overall_width = 2 * overhang + (n - 1) * spacing
-        => spacing = (overall_width - 2 * overhang) / (n - 1)  for n >= 2
-        """
-        spacing_min, spacing_max = spacing_bounds
-        max_n = int(math.floor(overall_width / spacing_min) + 2) if spacing_min > 0 else 50
-        
-        best = None
-        for n in range(2, max(2, max_n) + 1):
-            # For n >= 2: spacing = (overall_width - 2 * overhang) / (n - 1)
-            raw_spacing = (overall_width - 2.0 * overhang) / (n - 1)
-            if raw_spacing <= 0:
-                continue
-            
-            # Round spacing to 2 decimal places for display
-            s_rounded = round(raw_spacing, 2)
-            
-            # Check if rounded spacing is within valid bounds
-            if s_rounded < spacing_min - 1e-6 or s_rounded > spacing_max + 1e-6:
-                continue
-            
-            s_rounded = max(spacing_min, min(spacing_max, s_rounded))
-            
-            # Prefer n values that result in overhang being 0.35-0.5 of spacing (ideal range)
-            ideal_min = 0.35 * s_rounded
-            ideal_max = 0.5 * s_rounded
-            if ideal_min <= overhang <= ideal_max:
-                score = (0, n)  # Ideal range, prefer lower n
-            else:
-                # Not in ideal range but still valid
-                score = (1, n)
-            
-            if best is None or score < best[0]:
-                best = (score, s_rounded, overhang, n)
-        
-        return best
+    def _resolve_layout(self, changed_field: str) -> None:
+        """Run BridgeConfigurationSolver._solve_layout via working_input_dict.
 
-    def _pick_n_for_spacing(self, overall_width, spacing, spacing_bounds):
-        """Find best (n, overhang) combination for a FIXED spacing.
-        
-        When user changes spacing, we keep spacing fixed and only adjust
-        number of girders and overhang.
-        
-        Formula: overall_width = 2 * overhang + (n - 1) * spacing
-        => overhang = (overall_width - (n - 1) * spacing) / 2
-        
-        Ideally overhang should be 0.35 to 0.5 of spacing. If not possible,
-        allow overhang to vary between 0 and overall_width/2.
+        changed_field: 'spacing' | 'overhang' | 'girders'.
+        Width-affecting field edits (CB / footpath / railing / median width)
+        call this with 'girders' so n stays fixed and spacing/overhang refresh.
         """
-        spacing_min, spacing_max = spacing_bounds
-        spacing = max(spacing_min, min(spacing_max, round(spacing, 2)))
-        
-        o_min, o_max = (0.0, 0.0) if overall_width <= 0 else (0.0, overall_width / 2.0)
-        max_n = int(math.floor(overall_width / spacing) + 2) if spacing > 0 else 1
-        
-        # Ideal overhang range: 0.35 to 0.5 of spacing
-        ideal_overhang_min = 0.35 * spacing
-        ideal_overhang_max = 0.5 * spacing
-        
-        best = None
-        for n in range(2, max(2, max_n) + 1):
-            if (n - 1) * spacing > overall_width + 1e-6:
-                break
-            
-            overhang = (overall_width - (n - 1) * spacing) / 2.0
-            
-            # Check if overhang is within valid range (0 to overall_width/2)
-            if overhang < o_min - 1e-6 or overhang > o_max + 1e-6:
-                continue
-            
-            # Score: prefer overhang in ideal range (0.35-0.5 of spacing)
-            if ideal_overhang_min <= overhang <= ideal_overhang_max:
-                # In ideal range
-                score = (0, abs(overhang - (ideal_overhang_min + ideal_overhang_max) / 2), n)
-            elif overhang <= spacing:
-                # Not in ideal range but overhang <= spacing (acceptable)
-                score = (1, abs(overhang - ideal_overhang_max), n)
-            else:
-                # Overhang > spacing (less desirable but valid)
-                score = (2, overhang - spacing, n)
-            
-            if best is None or score < best[0]:
-                best = (score, n, spacing, overhang)
-        
-        return best
-
-    def _solve_layout(self, changed_field="width"):
         if self.updating_fields:
             return
         self._clear_adjust_notice()
-        overall_width = self.get_overall_bridge_width()
-        if overall_width <= 0:
-            CustomMessageBox(
-                title="Layout",
-                text="Overall bridge width must be positive.",
-                buttons=["OK"],
-                dialogType=MessageBoxType.Warning,
-            ).exec()
+
+        d = self.additional_input_instance.working_input_dict if self.additional_input_instance else {}
+        # Bail out if the dialog hasn't been initialised with input_dict yet
+        # (e.g. during construction, before set_input_dictionary runs).
+        if not d.get(KEY_CARRIAGEWAY_WIDTH):
             return
 
-        _flange_lim = (max(getattr(self,"top_flange_width_mm",0) or 0, getattr(self,"bottom_flange_width_mm",0) or 0)) / 1000.0
-        spacing_bounds = (1.0, max(1.0, overall_width - _flange_lim))
-        spacing_input = self._parse_length_value(self.girder_spacing, default=DEFAULT_GIRDER_SPACING)
-        overhang_input = self._parse_length_value(self.deck_overhang, default=0.35 * spacing_input)
-        girders_input = None
-        if self.no_of_girders.text().strip():
+        def _f(key, default=0.0):
+            v = d.get(key)
+            if v is None or v == "":
+                return default
             try:
-                girders_input = int(self.no_of_girders.text().strip())
-            except ValueError:
-                girders_input = None
+                return float(v)
+            except (TypeError, ValueError):
+                return default
 
-        o_min, o_max = (0.0, 0.0) if overall_width <= 0 else (0.0, overall_width / 2.0)
-
-        if changed_field == "spacing":
-            pick = self._pick_n_for_spacing(overall_width, spacing_input, spacing_bounds)
-            if not pick:
-                CustomMessageBox(
-                    title="Layout",
-                    text="Cannot satisfy constraints with the selected girder spacing.",
-                    buttons=["OK"],
-                    dialogType=MessageBoxType.Warning,
-                ).exec()
-                self._update_overall_bridge_width_display()
-                return
-            _, n, spacing_use, overhang_use = pick
-            # Capture old values BEFORE setting new ones
-            old_girders = girders_input
-            old_overhang = overhang_input
-            old_spacing = spacing_input
-            self._set_layout_fields(spacing_use, overhang_use, n)
-            reason_parts = []
-            # Spacing should be kept as user specified (only minor rounding allowed)
-            if abs(spacing_use - old_spacing) > 0.01:
-                reason_parts.append(f"spacing {old_spacing:.2f}→{spacing_use:.2f}")
-            if abs(overhang_use - old_overhang) > 1e-6:
-                reason_parts.append(f"overhang {old_overhang:.2f}→{overhang_use:.2f}")
-            if old_girders is not None and n != old_girders:
-                reason_parts.append(f"girders {old_girders}→{n}")
-            
-            # Check if overhang exceeds girder spacing and show warning
-            warning_msg = None
-            if overhang_use > spacing_use + 1e-6:
-                warning_msg = f"Overhang ({overhang_use:.2f} m) exceeds girder spacing ({spacing_use:.2f} m)"
-            
-            if reason_parts:
-                self._show_adjust_notice(", ".join(reason_parts), warning_msg)
-            elif warning_msg:
-                self._show_adjust_notice(None, warning_msg)
-            self._update_overall_bridge_width_display()
-            return
-
-        if changed_field == "overhang":
-            # Check if user entered a value exceeding the maximum possible overhang
-            if overhang_input < o_min - 1e-6 or overhang_input > o_max + 1e-6:
-                CustomMessageBox(
-                    title="Deck Overhang Width Error",
-                    text=f"Deck overhang width must be between {o_min:.2f} m and {o_max:.2f} m "
-                        f"(half of Overall Bridge Width).\n\n"
-                        f"Valid range: {o_min:.2f} m to {o_max:.2f} m\n"
-                        f"You entered: {overhang_input:.2f} m\n\n"
-                        "To change deck overhang limits, you need to adjust the Overall Bridge Width "
-                        "(by modifying carriageway width, crash barriers, footpaths, etc.).",
-                    buttons=["OK"],
-                    dialogType=MessageBoxType.Warning,
-                ).exec()
-                self._update_overall_bridge_width_display()
-                return
-            
-            # Keep overhang fixed as user specified
-            overhang_use = overhang_input
-            pick = self._spacing_candidates_for_overhang(overall_width, overhang_use, spacing_bounds)
-            if not pick:
-                CustomMessageBox(
-                    title="Layout",
-                    text="Cannot satisfy constraints with the selected deck overhang.",
-                    buttons=["OK"],
-                    dialogType=MessageBoxType.Warning,
-                ).exec()
-                self._update_overall_bridge_width_display()
-                return
-            _, spacing_use, _, n = pick
-            # Capture old values for comparison
-            old_overhang = overhang_input
-            old_spacing = spacing_input
-            old_girders = girders_input
-            self._set_layout_fields(spacing_use, overhang_use, n)
-            reason_parts = []
-            # Overhang should not change since user specified it
-            if abs(spacing_use - old_spacing) > 1e-6:
-                reason_parts.append(f"spacing {old_spacing:.2f}→{spacing_use:.2f}")
-            if old_girders is not None and n != old_girders:
-                reason_parts.append(f"girders {old_girders}→{n}")
-            
-            # Check if overhang exceeds girder spacing and show warning
-            warning_msg = None
-            if overhang_use > spacing_use + 1e-6:
-                warning_msg = f"Overhang ({overhang_use:.2f} m) exceeds girder spacing ({spacing_use:.2f} m)"
-            
-            if reason_parts:
-                self._show_adjust_notice(", ".join(reason_parts), warning_msg)
-            elif warning_msg:
-                self._show_adjust_notice(None, warning_msg)
-            self._update_overall_bridge_width_display()
-            return
-
-        if changed_field == "girders":
-            if girders_input is None or girders_input < 2:
-                CustomMessageBox(
-                    title="Layout",
-                    text="Number of girders must be an integer greater than or equal to 2.",
-                    buttons=["OK"],
-                    dialogType=MessageBoxType.Warning,
-                ).exec()
-                if girders_input is None:
-                    return
-                girders_input = 2
-                self._set_layout_fields(spacing_input, overhang_input, girders_input)
-            n = girders_input
-            # Capture old values for comparison
-            old_overhang = overhang_input
-            old_spacing = spacing_input
-
-            # If the selected number of girders cannot fit within the current
-            # overall bridge width, clamp to the maximum feasible count.
-            # With minimum spacing and non-negative overhang:
-            # overall_width >= (n-1) * spacing_min  =>  n_max = floor(overall_width/spacing_min) + 1
+        def _i(key, default=0):
+            v = d.get(key)
+            if v is None or v == "":
+                return default
             try:
-                spacing_min = float(spacing_bounds[0])
-            except Exception:
-                spacing_min = 1.0
-            if spacing_min <= 0:
-                spacing_min = 1.0
-            n_max = int(math.floor((overall_width + 1e-9) / spacing_min) + 1)
-            n_max = max(2, n_max)
-            if n > n_max:
-                # Clamp and proceed with a valid solution rather than leaving
-                # the UI with an impossible n value.
-                n = n_max
+                return int(float(v))
+            except (TypeError, ValueError):
+                return default
 
-            # For n >= 2: overall_width = 2*overhang + (n-1)*spacing
-            # Keep n fixed, try to find spacing and overhang such that overhang is in ideal range
-            # Ideal overhang = 0.35 to 0.5 of spacing
-            
-            # Try to keep overhang in ideal range (0.35-0.5 of spacing)
-            # From formula: spacing = (overall_width - 2*overhang) / (n-1)
-            # If overhang = 0.35*spacing => spacing = overall_width / (n-1 + 0.7)
-            # If overhang = 0.5*spacing => spacing = overall_width / (n-1 + 1.0) = overall_width / n
-            
-            # Try target spacing that gives overhang in ideal range
-            ideal_spacing_for_0_35 = overall_width / (n - 1 + 0.7)
-            ideal_spacing_for_0_50 = overall_width / n
-            
-            # Pick spacing that's in the middle of the ideal range
-            target_spacing = (ideal_spacing_for_0_35 + ideal_spacing_for_0_50) / 2.0
-            spacing_use = max(spacing_bounds[0], min(spacing_bounds[1], round(target_spacing, 2)))
-            overhang_use = (overall_width - (n - 1) * spacing_use) / 2.0
-            
-            # Check if overhang is within valid range
-            if overhang_use < o_min - 1e-6 or overhang_use > o_max + 1e-6:
-                CustomMessageBox(
-                    title="Layout",
-                    text="Cannot satisfy constraints with the selected number of girders. "
-                    f"For the current overall width ({overall_width:.2f} m) and minimum spacing ({spacing_min:.2f} m), "
-                    f"maximum feasible girders is {n_max}.",
-                    buttons=["OK"],
-                    dialogType=MessageBoxType.Warning,
-                )
-                # Revert to a safe fallback (previous value if available, else 2)
-                fallback_n = int(getattr(self, "_last_girders_value", 2) or 2)
-                fallback_n = max(2, min(fallback_n, n_max))
-                pick = self._pick_n_for_spacing(overall_width, spacing_use, spacing_bounds)
-                if pick:
-                    _, fallback_n2, spacing_f, overhang_f = pick
-                    fallback_n = max(2, min(int(fallback_n2), n_max))
-                    self._set_layout_fields(spacing_f, overhang_f, fallback_n)
-                else:
-                    self._set_layout_fields(max(spacing_bounds[0], min(spacing_bounds[1], spacing_use)), max(o_min, min(o_max, max(0.0, overhang_use))), fallback_n)
-                self._update_overall_bridge_width_display()
-                return
-            
-            self._set_layout_fields(spacing_use, overhang_use, n)
-            reason_parts = []
-            if abs(spacing_use - old_spacing) > 0.01:
-                reason_parts.append(f"spacing {old_spacing:.2f}→{spacing_use:.2f}")
-            if abs(overhang_use - old_overhang) > 1e-6:
-                reason_parts.append(f"overhang {old_overhang:.2f}→{overhang_use:.2f}")
-            if girders_input is not None and n != girders_input:
-                reason_parts.append(f"girders {girders_input}→{n}")
-            
-            # Check if overhang exceeds girder spacing and show warning
-            warning_msg = None
-            if overhang_use > spacing_use + 1e-6:
-                warning_msg = f"Overhang ({overhang_use:.2f} m) exceeds girder spacing ({spacing_use:.2f} m)"
-            
-            if reason_parts:
-                self._show_adjust_notice(", ".join(reason_parts), warning_msg)
-            elif warning_msg:
-                self._show_adjust_notice(None, warning_msg)
-            self._update_overall_bridge_width_display()
-            return
+        # Railing width may be stored in mm (Additional Inputs) or m — same logic as defaults.py
+        rl_raw = _f(KEY_RL_WIDTH, DEFAULT_RAILING_WIDTH)
+        railing_width = rl_raw / 1000.0 if rl_raw > 10 else rl_raw
 
-        # Default / overall width change: try to keep current spacing if feasible
-        # Capture old values for comparison
-        old_spacing = spacing_input
-        old_overhang = overhang_input
-        old_girders = girders_input
-        pick = self._pick_n_for_spacing(overall_width, old_spacing, spacing_bounds)
-        if not pick:
-            # Fallback to default spacing
-            pick = self._pick_n_for_spacing(overall_width, DEFAULT_GIRDER_SPACING, spacing_bounds)
-        if pick:
-            _, n, spacing_use, overhang_use = pick
-            self._set_layout_fields(spacing_use, overhang_use, n)
-            reason_parts = []
-            if abs(spacing_use - old_spacing) > 0.01:
-                reason_parts.append(f"spacing {old_spacing:.2f}→{spacing_use:.2f}")
-            if abs(overhang_use - old_overhang) > 1e-6:
-                reason_parts.append(f"overhang {old_overhang:.2f}→{overhang_use:.2f}")
-            if old_girders is not None and n != old_girders:
-                reason_parts.append(f"girders {old_girders}→{n}")
-            
-            # Check if overhang exceeds girder spacing and show warning
-            warning_msg = None
-            if overhang_use > spacing_use + 1e-6:
-                warning_msg = f"Overhang ({overhang_use:.2f} m) exceeds girder spacing ({spacing_use:.2f} m)"
-            
-            if reason_parts:
-                self._show_adjust_notice(", ".join(reason_parts), warning_msg)
-            elif warning_msg:
-                self._show_adjust_notice(None, warning_msg)
+        footpath_str = str(d.get(KEY_FOOTPATH, "None")).strip()
+        if footpath_str in ("None", ""):
+            n_footpaths = 0
+        elif "Both" in footpath_str:
+            n_footpaths = 2
         else:
+            n_footpaths = 1
+
+        solver = BridgeConfigurationSolver(
+            carriageway_width=_f(KEY_CARRIAGEWAY_WIDTH, float(self.carriageway_width or 0.0)),
+            crash_barrier_width=_f(KEY_CB_WIDTH, DEFAULT_CRASH_BARRIER_WIDTH),
+            footpath_width=_f(KEY_TS_FOOTPATH_WIDTH, 0.0),
+            railing_width=railing_width,
+            median_width=_f(KEY_MD_WIDTH, 0.0),
+            n_footpaths=n_footpaths,
+        )
+
+        spacing_old = _f(KEY_TS_GIRDER_SPACING, DEFAULT_GIRDER_SPACING)
+        overhang_old = _f(KEY_TS_DECK_OVERHANG, 0.0)
+        girders_old = _i(KEY_TS_NO_OF_GIRDERS, 2)
+
+        try:
+            result = solver._solve_layout(
+                no_of_girders=girders_old,
+                girder_spacing=spacing_old,
+                deck_overhang=overhang_old,
+                changed_field=changed_field,
+            )
+        except ValueError as exc:
             CustomMessageBox(
                 title="Layout",
-                text="Cannot satisfy layout constraints for the current overall width.",
+                text=str(exc),
                 buttons=["OK"],
                 dialogType=MessageBoxType.Warning,
             ).exec()
-        self._update_overall_bridge_width_display()
-
-    def get_overall_bridge_width(self):
-        try:
-            return self._calculate_overall_bridge_width()
-        except:
-            return self.carriageway_width
-
-    def _update_overall_bridge_width_display(self):
-        if hasattr(self, "overall_bridge_width_display"):
-            try:
-                overall_width = self.get_overall_bridge_width()
-                self._updating_overall_width_display = True
-                self.overall_bridge_width_display.setText(f"{overall_width:.2f}")
-                self._updating_overall_width_display = False
-            except:
-                self._updating_overall_width_display = False
-                self.overall_bridge_width_display.clear()
-
-    def _reject_overall_width_override(self, text):
-        if self._updating_overall_width_display:
             return
-        try:
-            entered_value = float(text) if text else None
-        except ValueError:
-            entered_value = None
 
-        expected_value = self._calculate_overall_bridge_width()
-        if entered_value is None or abs(expected_value - entered_value) > 1e-6:
-            if self.overall_bridge_width_display.hasFocus():
-                CustomMessageBox(
-                    title="Overall Bridge Width Locked",
-                    text="Overall Bridge Width is auto-calculated using:\n"
-                         f"{self.overall_bridge_width_formula}",
-                    buttons=["OK"],
-                    dialogType=MessageBoxType.Warning,
-                ).exec()
-            self._update_overall_bridge_width_display()
+        self._set_layout_fields(
+            result.girder_spacing,
+            result.deck_overhang,
+            result.no_of_girders,
+            overall_width=result.overall_width,
+        )
+
+        # Keep working_input_dict in sync with the resolved layout
+        d[KEY_TS_GIRDER_SPACING] = result.girder_spacing
+        d[KEY_TS_DECK_OVERHANG]  = result.deck_overhang
+        d[KEY_TS_NO_OF_GIRDERS]  = result.no_of_girders
+        d[KEY_TS_OVERALL_WIDTH]  = result.overall_width
+        d[KEY_TS_NO_OF_FOOTPATHS] = n_footpaths
+
+        # User-feedback notice if values were nudged, plus overhang>spacing warning
+        reason_parts = []
+        if abs(result.girder_spacing - spacing_old) > 0.01:
+            reason_parts.append(f"spacing {spacing_old:.2f}→{result.girder_spacing:.2f}")
+        if abs(result.deck_overhang - overhang_old) > 1e-6:
+            reason_parts.append(f"overhang {overhang_old:.2f}→{result.deck_overhang:.2f}")
+        if result.no_of_girders != girders_old:
+            reason_parts.append(f"girders {girders_old}→{result.no_of_girders}")
+
+        warning_msg = None
+        if result.deck_overhang > result.girder_spacing + 1e-6:
+            warning_msg = (
+                f"Overhang ({result.deck_overhang:.2f} m) exceeds girder spacing "
+                f"({result.girder_spacing:.2f} m)"
+            )
+
+        if reason_parts:
+            self._show_adjust_notice(", ".join(reason_parts), warning_msg)
+        elif warning_msg:
+            self._show_adjust_notice(None, warning_msg)
 
     def recalculate_girders(self):
-        self._update_overall_bridge_width_display()
-        self._solve_layout("width")
+        self._resolve_layout("girders")
 
     def on_girder_spacing_changed(self):
         if self.updating_fields:
             return
         if not self.girder_spacing.text().strip():
-            self._clear_layout_entry_fields("Girder spacing, deck overhang, and number of girders are linked. Please enter all three.")
-            self._last_spacing_value = None
+            self._clear_layout_entry_fields(
+                "Girder spacing, deck overhang, and number of girders are linked. Please enter all three."
+            )
             return
         try:
-            new_val = float(self.girder_spacing.text().strip())
+            float(self.girder_spacing.text().strip())
         except ValueError:
             return
-        # Skip recalculation if numeric value unchanged (e.g., "2.50" -> "2.5")
-        if self._last_spacing_value is not None and abs(new_val - self._last_spacing_value) < 1e-6:
-            return
-        self._last_spacing_value = new_val
-        self._solve_layout("spacing")
+        self._resolve_layout("spacing")
 
     def on_deck_overhang_changed(self):
         if self.updating_fields:
             return
         if not self.deck_overhang.text().strip():
-            self._clear_layout_entry_fields("Girder spacing, deck overhang, and number of girders are linked. Please enter all three.")
-            self._last_overhang_value = None
+            self._clear_layout_entry_fields(
+                "Girder spacing, deck overhang, and number of girders are linked. Please enter all three."
+            )
             return
         try:
-            new_val = float(self.deck_overhang.text().strip())
+            float(self.deck_overhang.text().strip())
         except ValueError:
             return
-        # Skip recalculation if numeric value unchanged (e.g., "1.31" -> "1.310")
-        if self._last_overhang_value is not None and abs(new_val - self._last_overhang_value) < 1e-6:
-            return
-        self._last_overhang_value = new_val
-        self._solve_layout("overhang")
+        self._resolve_layout("overhang")
 
     def on_no_of_girders_changed(self):
         if self.updating_fields:
             return
         if not self.no_of_girders.text().strip():
-            self._clear_layout_entry_fields("Girder spacing, deck overhang, and number of girders are linked. Please enter all three.")
-            self._last_girders_value = None
+            self._clear_layout_entry_fields(
+                "Girder spacing, deck overhang, and number of girders are linked. Please enter all three."
+            )
             return
         try:
-            new_val = int(float(self.no_of_girders.text().strip()))
+            int(float(self.no_of_girders.text().strip()))
         except ValueError:
             return
-        # Skip recalculation if numeric value unchanged (e.g., "2.00" -> "2")
-        if self._last_girders_value is not None and new_val == self._last_girders_value:
-            return
-        self._last_girders_value = new_val
-        self._solve_layout("girders")
+        self._resolve_layout("girders")
 
     def on_footpath_width_changed(self):
         if not self.updating_fields:
-            self.recalculate_girders()
+            self._resolve_layout("girders")
 
     def update_footpath_value(self, footpath_value):
         fp_map = {"Both Sides": "both", "Single Side": "left", "None": "none"}
@@ -1677,7 +1334,7 @@ class TypicalSectionDetailsTab(QWidget):
         if hasattr(self, "no_of_girders"):
             self.no_of_girders.setText("2")
         self._clear_adjust_notice()
-        self._solve_layout("spacing")
+        self._resolve_layout("spacing")
 
         # Crash barrier defaults
         self._reset_crash_barrier_defaults()

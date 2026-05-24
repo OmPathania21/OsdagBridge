@@ -363,7 +363,7 @@ TYPICAL_SECTION_SCHEMA = {
                         "label": "Girder Spacing (m):",
                         "type": TYPE_TEXTBOX,
                         "bind": "girder_spacing",
-                        "on_text_changed": "on_girder_spacing_changed",
+                        "on_editing_finished": "on_girder_spacing_changed",
                     },
                     {
                         "id": KEY_TS_NO_OF_GIRDERS,
@@ -381,7 +381,7 @@ TYPICAL_SECTION_SCHEMA = {
                         "label": "Deck Overhang Width (m):",
                         "type": TYPE_TEXTBOX,
                         "bind": "deck_overhang",
-                        "on_text_changed": "on_deck_overhang_changed",
+                        "on_editing_finished": "on_deck_overhang_changed",
                     },
                     {
                         "id": KEY_TS_OVERALL_WIDTH,
@@ -389,7 +389,6 @@ TYPICAL_SECTION_SCHEMA = {
                         "type": TYPE_TEXTBOX,
                         "read_only": True,
                         "bind": "overall_bridge_width_display",
-                        "on_text_changed": "_reject_overall_width_override",
                     },
                 ],
             },

@@ -141,6 +141,20 @@ class AdditionalInputs(QDialog):
         _set_text(KEY_TS_FOOTPATH_WIDTH,     "{:.2f}")
         _set_text(KEY_TS_FOOTPATH_THICKNESS, "{:.0f}")
 
+        # Primary fields — initial values come from defaults.solve_extend_basic_input_dict
+        _set_text(KEY_TS_GIRDER_SPACING, "{:.2f}")
+        _set_text(KEY_TS_NO_OF_GIRDERS,  "{:.0f}")
+        _set_text(KEY_TS_DECK_OVERHANG,  "{:.2f}")
+        _set_text(KEY_TS_OVERALL_WIDTH,  "{:.2f}")
+
+        # Sync downstream girder count after primary fields are populated
+        try:
+            n_text = ts.no_of_girders.text() if hasattr(ts, "no_of_girders") else ""
+            if n_text:
+                ts.girder_count_changed.emit(int(float(n_text)))
+        except (ValueError, TypeError):
+            pass
+
     #-------------Field Change Handling and Validation Logic-Start-------------------------
     def _on_field_edited(self, key: str, widget: QLineEdit | str | dict):
         """
