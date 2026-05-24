@@ -55,15 +55,14 @@ from osdagbridge.core.utils.common import (
     KEY_DECK_CONCRETE_GRADE_BASIC,
     KEY_PROJECT_LOCATION,
     KEY_STRUCTURE_TYPE,
-    KEY_GIRDER_SPACING,
-    KEY_NO_OF_GIRDERS,
-    KEY_DECK_THICKNESS,
-    KEY_FOOTPATH_WIDTH,
-    KEY_WEARING_COAT_MATERIAL,
-    KEY_WEARING_COAT_THICKNESS,
-    KEY_CRASH_BARRIER_LOAD,
-    KEY_RAILING_LOAD,
-    KEY_DECK_OVERHANG,
+    KEY_TS_GIRDER_SPACING,
+    KEY_TS_NO_OF_GIRDERS,
+    KEY_TS_DECK_THICKNESS,
+    KEY_TS_FOOTPATH_WIDTH,
+    KEY_WC_MATERIAL,
+    KEY_WC_THICKNESS,
+    KEY_CB_LOAD,
+    KEY_TS_DECK_OVERHANG,
 )
 
 logger = logging.getLogger(__name__)
@@ -355,11 +354,11 @@ This section provides a concise summary of the bridge design, key inputs, govern
 \hline
 \textbf{No. of Traffic Lanes} & """ + (_v(input_dict, 'num_lanes') or _ph('No. of Lanes')) + r""" \\
 \hline
-\textbf{No. of Girders} & """ + (_v(input_dict, KEY_NO_OF_GIRDERS) or _ph('No. of Girders')) + r""" \\
+\textbf{No. of Girders} & """ + (_v(input_dict, KEY_TS_NO_OF_GIRDERS) or _ph('No. of Girders')) + r""" \\
 \hline
-\textbf{Girder Spacing} & """ + (_v(input_dict, KEY_GIRDER_SPACING) or _ph('Girder Spacing')) + r""" \\
+\textbf{Girder Spacing} & """ + (_v(input_dict, KEY_TS_GIRDER_SPACING) or _ph('Girder Spacing')) + r""" \\
 \hline
-\textbf{Deck Thickness} & """ + (_v(input_dict, KEY_DECK_THICKNESS) or _ph('Deck Thickness')) + r""" \\
+\textbf{Deck Thickness} & """ + (_v(input_dict, KEY_TS_DECK_THICKNESS) or _ph('Deck Thickness')) + r""" \\
 \hline
 \textbf{Overall Design Status} & """ + (_v(output_dict, 'overall_design_status') or _ph('PASS / FAIL')) + r""" \\
 \hline
@@ -571,15 +570,15 @@ Where the user has modified additional inputs, those values are reported here. W
 \hline
 \textbf{Overall Bridge Width (m)} & """ + (_v(input_dict,'overall_bridge_width') or _ph('Calculated')) + r""" \\[6pt]
 \hline
-\textbf{No. of Girders} & """ + (_v(input_dict, KEY_NO_OF_GIRDERS) or _ph('n')) + r""" [SOFTWARE DEFAULT / USER] \\[6pt]
+\textbf{No. of Girders} & """ + (_v(input_dict, KEY_TS_NO_OF_GIRDERS) or _ph('n')) + r""" [SOFTWARE DEFAULT / USER] \\[6pt]
 \hline
-\textbf{Girder Spacing (m)} & """ + (_v(input_dict, KEY_GIRDER_SPACING,' m') or _ph('s') + ' m') + r""" [SOFTWARE DEFAULT: 2.5 m] \\[6pt]
+\textbf{Girder Spacing (m)} & """ + (_v(input_dict, KEY_TS_GIRDER_SPACING,' m') or _ph('s') + ' m') + r""" [SOFTWARE DEFAULT: 2.5 m] \\[6pt]
 \hline
-\textbf{Deck Overhang Width (m)} & """ + (_v(input_dict, KEY_DECK_OVERHANG,' m') or _ph(r'd\_oh') + ' m') + r""" [SOFTWARE DEFAULT: 0.35 x spacing] \\[6pt]
+\textbf{Deck Overhang Width (m)} & """ + (_v(input_dict, KEY_TS_DECK_OVERHANG,' m') or _ph(r'd\_oh') + ' m') + r""" [SOFTWARE DEFAULT: 0.35 x spacing] \\[6pt]
 \hline
-\textbf{Deck Thickness (mm)} & """ + (_v(input_dict, KEY_DECK_THICKNESS,' mm') or _ph('dt') + ' mm') + r""" [SOFTWARE DEFAULT: 200 mm] \\[6pt]
+\textbf{Deck Thickness (mm)} & """ + (_v(input_dict, KEY_TS_DECK_THICKNESS,' mm') or _ph('dt') + ' mm') + r""" [SOFTWARE DEFAULT: 200 mm] \\[6pt]
 \hline
-\textbf{Footpath Width (m)} & """ + (_v(input_dict, KEY_FOOTPATH_WIDTH,' m') or _ph('$f_w$') + ' m') + r""" (IRC 5 Cl. 104.3.6 min: 1.5 m) \\[6pt]
+\textbf{Footpath Width (m)} & """ + (_v(input_dict, KEY_TS_FOOTPATH_WIDTH,' m') or _ph('$f_w$') + ' m') + r""" (IRC 5 Cl. 104.3.6 min: 1.5 m) \\[6pt]
 \hline
 \textbf{No. of Traffic Lanes} & """ + (_v(input_dict,'num_lanes') or _ph(r'n\_lanes')) + r""" (per IRC 5 Cl. 104.3.1) \\[6pt]
 \hline
@@ -595,7 +594,7 @@ Where the user has modified additional inputs, those values are reported here. W
 \hline
 \textbf{Crash Barrier Type} & """ + (_v(input_dict,'crash_barrier_type') or _ph('IRC 5 RCC / Metallic / Custom')) + r""" \\[6pt]
 \hline
-\textbf{Crash Barrier Load (kN/m)} & """ + (_v(input_dict, KEY_CRASH_BARRIER_LOAD) or _ph('Load')) + r""" \\[6pt]
+\textbf{Crash Barrier Load (kN/m)} & """ + (_v(input_dict, KEY_CB_LOAD) or _ph('Load')) + r""" \\[6pt]
 \hline
 \textbf{Median Type} & """ + (_v(input_dict,'median_type') or _ph('IRC 5 Raised Kerb / N/A')) + r""" \\[6pt]
 \hline
@@ -603,9 +602,9 @@ Where the user has modified additional inputs, those values are reported here. W
 \hline
 \textbf{Railing Load (kN/m)} & 1.5 kN/m [SOFTWARE DEFAULT per IRC 6 Cl. 206.5] \\[6pt]
 \hline
-\textbf{Wearing Course Material} & """ + (_v(input_dict, KEY_WEARING_COAT_MATERIAL) or _ph('Bituminous / Concrete')) + r""" \\[6pt]
+\textbf{Wearing Course Material} & """ + (_v(input_dict, KEY_WC_MATERIAL) or _ph('Bituminous / Concrete')) + r""" \\[6pt]
 \hline
-\textbf{Wearing Course Thickness (mm)} & """ + (_v(input_dict, KEY_WEARING_COAT_THICKNESS,' mm') or _ph(r'wc\_t') + ' mm') + r""" [SOFTWARE DEFAULT: 80 mm] \\[6pt]
+\textbf{Wearing Course Thickness (mm)} & """ + (_v(input_dict, KEY_WC_THICKNESS,' mm') or _ph(r'wc\_t') + ' mm') + r""" [SOFTWARE DEFAULT: 80 mm] \\[6pt]
 \hline
 \end{tabularx}
 \end{table}
@@ -829,9 +828,9 @@ This section summarizes all loads applied to the bridge and the load combination
 \vspace{-6pt}
 \begin{tabularx}{\textwidth}{|L{5.5cm}|X|}
 \hline
-\textbf{Wearing Course Load} & """ + (_v(input_dict, KEY_WEARING_COAT_MATERIAL) or _ph('Density')) + r""" x """ + (_v(input_dict, KEY_WEARING_COAT_THICKNESS) or _ph('Thickness')) + r""" \\[6pt]
+\textbf{Wearing Course Load} & """ + (_v(input_dict, KEY_WC_MATERIAL) or _ph('Density')) + r""" x """ + (_v(input_dict, KEY_WC_THICKNESS) or _ph('Thickness')) + r""" \\[6pt]
 \hline
-\textbf{Additional SIDL (Crash Barrier)} & """ + (_v(input_dict, KEY_CRASH_BARRIER_LOAD) or _ph('Load')) + r""" kN/m per barrier \\[6pt]
+\textbf{Additional SIDL (Crash Barrier)} & """ + (_v(input_dict, KEY_CB_LOAD) or _ph('Load')) + r""" kN/m per barrier \\[6pt]
 \hline
 \textbf{Railing Load} & 1.5 kN/m per railing [IRC 6 Cl. 206.5] \\[6pt]
 \hline
