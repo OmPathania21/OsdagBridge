@@ -562,7 +562,11 @@ class DemandExtractor:
                            "steel", "wet_concrete")
         construction_lcs = [lc for lc in dead_lcs
                             if any(p in str(lc).lower() for p in _const_patterns)]
-        sdl_lcs = [lc for lc in dead_lcs if lc not in set(construction_lcs)]
+        _sdl_patterns = ("dw", "footpath", "barrier", "crash", "railing", "median",
+                         "wearing", "overlay", "kerb", "curb", "parapet")
+        sdl_lcs = [lc for lc in dead_lcs
+                   if lc not in set(construction_lcs)
+                   and any(p in str(lc).lower() for p in _sdl_patterns)]
 
         delta_construction_m = 0.0
         delta_sdl_m = 0.0
