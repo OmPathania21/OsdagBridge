@@ -1,5 +1,6 @@
 from __future__ import annotations
 import sqlite3
+import types
 from pathlib import Path
 from .ui_fields import FrontendData
 from .dto import (
@@ -139,6 +140,9 @@ class PlateGirderBridge:
         self.basic_inputs: dict = {}
         self.additional_inputs: dict = {}
         self._frontend = FrontendData()
+        # Immutable snapshot of input_dict captured at the start of design().
+        # All 3D CAD / IFC methods read from this instead of the live input_dict.
+        self.output_dict: types.MappingProxyType = types.MappingProxyType({})
 
         # Results populated by design()
         self.grillage_geometry: GrillageGeometry | None = None
@@ -193,6 +197,7 @@ class PlateGirderBridge:
           5. Apply dead loads
           6. Apply live loads
         """
+        self.output_dict = dict(self.input_dict)   # mutable until end of design()
         self._build_dtos()
         self.setup_grillage()
         self.add_dead_loads()
@@ -241,6 +246,20 @@ class PlateGirderBridge:
         self.result_data = self.grillage_model.get_result_data()
 
         self.crossbracing_design_results = self._design_cross_bracing_members()
+        self.output_dict["crossbracing_design_results"] = self.crossbracing_design_results
+
+        # Freeze output_dict — no further writes allowed after this point
+        self.output_dict = types.MappingProxyType(self.output_dict)
+        import pprint
+        sep = "=" * 60
+        print(f"\n{sep}\n  OUTPUT DICT (frozen) — {len(self.output_dict)} keys\n{sep}")
+        for k, v in self.output_dict.items():
+            if k == "crossbracing_design_results":
+                print(f"  {k!r} :")
+                pprint.pprint(v, indent=4, width=120)
+            else:
+                print(f"  {k!r:50s} : {v!r}")
+        print(sep)
 
     def _build_dtos(self) -> None:
         """Construct GrillageGeometry and DeckLayoutProperties DTOs from solved results."""
@@ -781,6 +800,15 @@ class PlateGirderBridge:
         stress_dcr = max(dcr_by_id.get(10, 0.0), dcr_by_id.get(11, 0.0), dcr_by_id.get(12, 0.0))
         self._frontend.set_output_value(KEY_UTIL_STRESS_LIMITATION, stress_dcr * 100)
 
+        self.output_dict[KEY_UTIL_FLEXURE]           = dcr_by_id.get(1,  0.0) * 100
+        self.output_dict[KEY_UTIL_SHEAR]             = dcr_by_id.get(2,  0.0) * 100
+        self.output_dict[KEY_UTIL_INTERACTION]       = dcr_by_id.get(3,  0.0) * 100
+        self.output_dict[KEY_UTIL_LTB]               = dcr_by_id.get(5,  0.0) * 100
+        self.output_dict[KEY_UTIL_DEFLECTION_CRACK]  = defl_dcr * 100
+        self.output_dict[KEY_UTIL_FATIGUE]           = fatigue_dcr * 100
+        self.output_dict[KEY_UTIL_LONG_TRANS_SHEAR]  = trans_shear_dcr * 100
+        self.output_dict[KEY_UTIL_STRESS_LIMITATION] = stress_dcr * 100
+
     def _design_cross_bracing_members(self) -> dict:
         """
         Run Osdag member designs for cross-bracing diagonals and chords.
@@ -912,20 +940,19 @@ class PlateGirderBridge:
         """
         Build a BridgeParametersDTO for 3D CAD rendering.
 
-        Values sourced from:
-        - section_props / input_dict — girder geometry (populated after design())
-        - basic_inputs  — span, carriageway width, footpath, median, skew angle
-        - additional_inputs — deck thickness
-        Fields not yet exposed through additional inputs default to sensible values.
+        All values are read from ``self.output_dict`` — the immutable snapshot of
+        ``input_dict`` captured at the start of ``design()``.  This includes girder
+        geometry, span, carriageway width, footpath/median/skew settings, and
+        additional-input keys such as deck thickness.
 
         Must be called after design() has fully run.
         """
-        inp = self.input_dict
+        inp = self.output_dict
 
-        steel_grade    = str(self.basic_inputs.get(KEY_GIRDER)).strip()
-        concrete_grade = str(self.basic_inputs.get(KEY_DECK_CONCRETE_GRADE_BASIC)).strip()
+        steel_grade    = str(self.output_dict.get(KEY_GIRDER)).strip()
+        concrete_grade = str(self.output_dict.get(KEY_DECK_CONCRETE_GRADE_BASIC)).strip()
 
-        # input_dict values are in SI metres; BridgeParametersDTO expects mm
+        # output_dict values are in SI metres; BridgeParametersDTO expects mm
         D       = inp[KEY_GIRDER_DEPTH]                   * 1e3
         tw      = inp[KEY_GIRDER_WEB_THICKNESS]           * 1e3
         B_top   = inp[KEY_GIRDER_TOP_FLANGE_WIDTH]        * 1e3
@@ -933,12 +960,13 @@ class PlateGirderBridge:
         B_bot   = inp[KEY_GIRDER_BOTTOM_FLANGE_WIDTH]     * 1e3
         t_f_bot = inp[KEY_GIRDER_BOTTOM_FLANGE_THICKNESS] * 1e3
 
-        span_mm = float(self.basic_inputs[KEY_SPAN]) * 1e3
-        cw_each_way_m = float(self.basic_inputs[KEY_CARRIAGEWAY_WIDTH])
-        skew = self._to_float(KEY_SKEW_ANGLE, 0.0)
+        span_mm = float(self.output_dict[KEY_SPAN]) * 1e3
+        cw_each_way_m = float(self.output_dict[KEY_CARRIAGEWAY_WIDTH])
+        _skew_raw = self.output_dict.get(KEY_SKEW_ANGLE)
+        skew = 0.0 if (_skew_raw is None or str(_skew_raw).strip().lower() in ("", "none")) else float(_skew_raw)
 
-        footpath_str   = str(self.basic_inputs.get(KEY_FOOTPATH,       "None")).strip()
-        include_median = str(self.basic_inputs.get(KEY_INCLUDE_MEDIAN, "No")).strip().lower() == "yes"
+        footpath_str   = str(self.output_dict.get(KEY_FOOTPATH,       "None")).strip()
+        include_median = str(self.output_dict.get(KEY_INCLUDE_MEDIAN, "No")).strip().lower() == "yes"
 
         if footpath_str in ("None", ""):
             footpath_config   = "NONE"
@@ -958,7 +986,7 @@ class PlateGirderBridge:
         cw_m = (2.0 * cw_each_way_m) if include_median else cw_each_way_m
         cw_mm = cw_m * 1e3
 
-        deck_t_mm = deck_thickness_from_inputs(self.additional_inputs, _DEFAULT_DECK_THICKNESS_MM) * 1e3
+        deck_t_mm = deck_thickness_from_inputs(self.output_dict, _DEFAULT_DECK_THICKNESS_MM) * 1e3
         cross_bracing_mm = DEFAULT_CROSS_BRACING_SPACING * 1e3
 
         girder_segment = GirderSegmentDTO(
@@ -974,7 +1002,7 @@ class PlateGirderBridge:
         _angle_dims = SectionDimsDTO(leg_h=100, leg_w=50, connection_type="LONGER_LEG")
         _small_dims = SectionDimsDTO(leg_h=80,  leg_w=40, connection_type="LONGER_LEG")
 
-        raw_cb_value = self.input_dict.get(KEY_CB_TYPE, ["IRC 5 - RCC Crash Barrier"])
+        raw_cb_value = self.output_dict.get(KEY_CB_TYPE, ["IRC 5 - RCC Crash Barrier"])
         raw_cb_string = raw_cb_value[0] if isinstance(raw_cb_value, list) else raw_cb_value
         if raw_cb_string == "IRC 5 - RCC Crash Barrier":
             resolved_barrier_type = KEY_CRASH_BARRIER_TYPE[2]               # "Rigid"
@@ -993,7 +1021,7 @@ class PlateGirderBridge:
             resolved_barrier_type = "Rigid"
             resolved_cb_subtype = "IRC-5R"
 
-        raw_rl_value = self.input_dict.get(KEY_RL_TYPE, ["IRC 5 RCC railing"])
+        raw_rl_value = self.output_dict.get(KEY_RL_TYPE, ["IRC 5 RCC railing"])
         raw_rl_string = raw_rl_value[0] if isinstance(raw_rl_value, list) else raw_rl_value
         if raw_rl_string == "IRC 5 - RCC Railing":
             resolved_railing_value = KEY_RAILING_TYPE[0]
@@ -1020,7 +1048,7 @@ class PlateGirderBridge:
         # generator so Single W-Beam and Double W-Beam median barriers can be preserved
         # separately instead of being reduced to the broad metallic category.
 
-        raw_md_value = self.input_dict.get(KEY_MD_TYPE,["IRC 5 - RCC Crash Barrier"])
+        raw_md_value = self.output_dict.get(KEY_MD_TYPE, ["IRC 5 - RCC Crash Barrier"])
         raw_md_string = raw_md_value[0] if isinstance(raw_md_value, list) else raw_md_value
         raw_md_string = str(raw_md_string or "").strip()
 
@@ -1038,8 +1066,8 @@ class PlateGirderBridge:
         
         print("DEBUG railing raw:", raw_rl_string)
         print("DEBUG railing resolved:", resolved_railing_value)
-        print("DEBUG girder spacing input m:", self.input_dict[KEY_TS_GIRDER_SPACING])
-        print("DEBUG girder spacing dto mm:", self.input_dict[KEY_TS_GIRDER_SPACING] * 1e3)
+        print("DEBUG girder spacing input m:", self.output_dict[KEY_TS_GIRDER_SPACING])
+        print("DEBUG girder spacing dto mm:", self.output_dict[KEY_TS_GIRDER_SPACING] * 1e3)
 
         return BridgeParametersDTO(
             # --- Material Grades ---
@@ -1054,8 +1082,8 @@ class PlateGirderBridge:
             girder_section_tf=t_f_top,
             girder_section_tf_b=t_f_bot,
             girder_section_tw=tw,
-            num_girders=self.input_dict[KEY_TS_NO_OF_GIRDERS],
-            girder_spacing=self.input_dict[KEY_TS_GIRDER_SPACING] * 1e3,
+            num_girders=self.output_dict[KEY_TS_NO_OF_GIRDERS],
+            girder_spacing=self.output_dict[KEY_TS_GIRDER_SPACING] * 1e3,
             # --- Geometry ---
             skew_angle=skew,
             # --- Deck ---
@@ -1263,7 +1291,7 @@ class PlateGirderBridge:
 
     def get_edge_dist(self) -> float:
         """Return the deck overhang distance (0.0 when no overhang)."""
-        return self.input_dict.get(KEY_TS_DECK_OVERHANG) or 0.0
+        return self.output_dict.get(KEY_TS_DECK_OVERHANG) or 0.0
 
     def build_figure_sfd(self, ds, force_key: str):
         """Build and return a matplotlib Figure for the SFD of the given dataset slice."""
