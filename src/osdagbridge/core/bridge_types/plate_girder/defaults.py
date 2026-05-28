@@ -358,44 +358,8 @@ def _on_no_of_girders_changed(working_input_dict: dict, count: int) -> None:
 
     try:
         solve_extend_basic_input_dict(working_input_dict)
-    except Exception as e:
-        print(f"[DEBUG] _on_girder_count_changed: solve failed: {e}")
+    except Exception:
         return
-
-    girder_keys = {
-        k: v for k, v in working_input_dict.items()
-        if k.startswith("member_properties.girder_details.") and "_G" in k
-    }
-    print(f"\n[DEBUG] Girder keys updated → {count} girder(s), total keys: {len(girder_keys)}")
-    for girder_idx in range(1, count + 1):
-        print(f"\n  --- Girder G{girder_idx} ---")
-        for k, v in girder_keys.items():
-            if f"_G{girder_idx}M" in k:
-                print(f"    {k} = {v}")
-
-    stiffener_keys = {
-        k: v for k, v in working_input_dict.items()
-        if k.startswith("member_properties.stiffener_details.") and "_G" in k
-    }
-    print(f"\n[DEBUG] Stiffener keys updated → {count} girder(s), total keys: {len(stiffener_keys)}")
-    for girder_idx in range(1, count + 1):
-        print(f"\n  --- Stiffener G{girder_idx} ---")
-        for k, v in stiffener_keys.items():
-            if f"_G{girder_idx}M" in k:
-                print(f"    {k} = {v}")  
-
-    # --- DEBUG: Print updated cross bracing keys grouped by girder pair ---
-    cb_keys = {
-        k: v for k, v in working_input_dict.items()
-        if k.startswith("member_properties.cross_bracing_details.") and "_G" in k
-    }
-    print(f"\n[DEBUG] Cross bracing keys updated → {count} girder(s), {count - 1} pair(s), total keys: {len(cb_keys)}")
-    for girder_idx in range(1, count):
-        g_pair = f"G{girder_idx}G{girder_idx + 1}"
-        print(f"\n  --- Cross Bracing {g_pair} ---")
-        for k, v in cb_keys.items():
-            if f"_{g_pair}_" in k:
-                print(f"    {k} = {v}")                         
 
 
 def solve_extend_basic_input_dict(basic_input_dict: dict) -> None:
@@ -466,9 +430,6 @@ def solve_extend_basic_input_dict(basic_input_dict: dict) -> None:
         KEY_TS_GIRDER_SPACING:  sizing_result.girder_spacing,
         KEY_TS_DECK_OVERHANG:   sizing_result.deck_overhang,
     })
-    print("\n--- Full basic_input_dict ---")
-    for k, v in basic_input_dict.items():
-        print(f"  {k} = {v}")
     # --- Remove all stale dynamic girder keys first (handles girder count change) ---
     # Match on the common prefix of all KEY_MP_GIRDER_* values from common.py
     # which all start with "member_properties.girder_details." and contain "_G"
@@ -516,15 +477,6 @@ def solve_extend_basic_input_dict(basic_input_dict: dict) -> None:
                 dynamic_key = f"{base_key}_G{girder_idx}M{member_id}"
                 basic_input_dict[dynamic_key] = value
 
-    # --- DEBUG: Print all dynamic girder keys grouped by girder ---
-    print(f"\n[DEBUG] Dynamic girder keys for {no_of_girders} girder(s):")
-    for girder_idx in range(1, no_of_girders + 1):
-        print(f"\n  --- Girder G{girder_idx} ---")
-        for member_id in [1]:
-            for base_key, _ in MP_GIRDER_PROPS:
-                dynamic_key = f"{base_key}_G{girder_idx}M{member_id}"
-                print(f"    {dynamic_key} = {basic_input_dict[dynamic_key]}") 
-
     # --- Remove all stale dynamic stiffener keys (handles girder count change) ---
     stale_stiffener_keys = [
         k for k in basic_input_dict
@@ -553,15 +505,6 @@ def solve_extend_basic_input_dict(basic_input_dict: dict) -> None:
             for base_key, defaults_key in MP_STIFFENER_PROPS:
                 dynamic_key = f"{base_key}_G{girder_idx}M{member_id}"
                 basic_input_dict[dynamic_key] = STIFFENER_DETAILS_DEFAULTS[defaults_key]
-
-    # --- DEBUG: Print all dynamic stiffener keys grouped by girder ---
-    print(f"\n[DEBUG] Dynamic stiffener keys for {no_of_girders} girder(s):")
-    for girder_idx in range(1, no_of_girders + 1):
-        print(f"\n  --- Stiffener G{girder_idx} ---")
-        for member_id in [1]:
-            for base_key, defaults_key, in MP_STIFFENER_PROPS:
-                dynamic_key = f"{base_key}_G{girder_idx}M{member_id}"
-                print(f"    {dynamic_key} = {basic_input_dict[dynamic_key]}")  
 
     # --- Remove all stale dynamic cross bracing keys ---
     stale_cb_keys = [
@@ -605,19 +548,6 @@ def solve_extend_basic_input_dict(basic_input_dict: dict) -> None:
                     basic_input_dict[dynamic_key] = member_id_value
                 else:
                     basic_input_dict[dynamic_key] = CROSS_BRACING_DEFAULTS[defaults_key]
-
-    # --- DEBUG: Print all dynamic cross bracing keys ---
-    print(f"\n[DEBUG] Dynamic cross bracing keys for {no_of_girders} girder(s), {no_of_girders - 1} pair(s):")
-    for girder_idx in range(1, no_of_girders):
-        g_pair = f"G{girder_idx}G{girder_idx + 1}"
-        print(f"\n  --- Cross Bracing {g_pair} ---")
-        for member_id in range(1, no_of_members + 1):
-            b_member = f"B1M{member_id}"
-            suffix = f"_{g_pair}_{b_member}"
-            print(f"\n    --- {b_member} ---")
-            for base_key, _ in MP_CB_PROPS:
-                dynamic_key = f"{base_key}{suffix}"
-                print(f"      {dynamic_key} = {basic_input_dict[dynamic_key]}") 
 
     # --- Remove all stale dynamic end diaphragm keys ---
     stale_ed_keys = [
@@ -674,16 +604,3 @@ def solve_extend_basic_input_dict(basic_input_dict: dict) -> None:
                     basic_input_dict[dynamic_key] = member_id_value
                 else:
                     basic_input_dict[dynamic_key] = _ED_DEFAULTS[defaults_key]
-
-    # --- DEBUG: Print all dynamic end diaphragm keys ---
-    print(f"\n[DEBUG] Dynamic end diaphragm keys for {no_of_girders} girder(s), {no_of_girders - 1} pair(s):")
-    for girder_idx in range(1, no_of_girders):
-        g_pair = f"G{girder_idx}G{girder_idx + 1}"
-        print(f"\n  --- End Diaphragm {g_pair} ---")
-        for member_id in range(1, no_of_ed_members + 1):
-            e_member = f"E1M{member_id}"
-            suffix = f"_{g_pair}_{e_member}"
-            print(f"\n    --- {e_member} ---")
-            for base_key, _ in MP_ED_PROPS:
-                dynamic_key = f"{base_key}{suffix}"
-                print(f"      {dynamic_key} = {basic_input_dict[dynamic_key]}")                                               
