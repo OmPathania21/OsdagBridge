@@ -843,7 +843,18 @@ class IRC6_2017:
         
         # Final transverse wind load per unit length
         FT_LL = Pz * A1 * G * CD
-        return round(FT_LL, 3)
+
+        # Longitudinal wind load on live load = 25% of transverse (IRC:6-2017 Cl.209.3.6)
+        # Both loads applied simultaneously at 1.5 m above the roadway
+        FL_LL = 0.25 * FT_LL
+        application_height_m = 1.5
+
+        return {
+            'FT_LL': round(FT_LL, 3),
+            'FL_LL': round(FL_LL, 3),
+            'application_height_m': application_height_m,
+            'clause': 'IRC 6:2017 - 209.3.6'
+        }
     
     @staticmethod
     def cl_209_3_7(wind_speed):
@@ -1198,20 +1209,37 @@ class IRC6_2017:
         )
 
     @staticmethod
-    def cl_218_3_seismic_combinations(r1, r2, r3):
+    def cl_218_3_vertical_seismic_component(Ah):
         """
-        Returns the design seismic force combinations as per IRC:6-2017 Clause 218.3.
-        
+        Returns the vertical seismic coefficient as per IRC:6-2017 Clause 218.3.
+
+        Two horizontal components are taken as of equal magnitude, and the vertical
+        component is taken as two-thirds of the horizontal component.
+
+        Parameters:
+            Ah (float): Horizontal seismic coefficient
+
+        Returns:
+            float: Vertical seismic coefficient Av = (2/3) * Ah
+        """
+        Av = (2.0 / 3.0) * Ah
+        return round(Av, 4)
+
+    @staticmethod
+    def cl_218_4_seismic_combinations(r1, r2, r3):
+        """
+        Returns the design seismic force combinations as per IRC:6-2017 Clause 218.4.
+
         The design seismic force resultants shall be combined as:
         a) ± r1 ± 0.3*r2 ± 0.3*r3
         b) ± 0.3*r1 ± r2 ± 0.3*r3
         c) ± 0.3*r1 ± 0.3*r2 ± r3
-        
+
         Parameters:
             r1 (float): Seismic force resultant in direction 1 (longitudinal)
             r2 (float): Seismic force resultant in direction 2 (transverse)
             r3 (float): Seismic force resultant in direction 3 (vertical)
-            
+
         Returns:
             list: List of dictionaries containing all combinations
         """
