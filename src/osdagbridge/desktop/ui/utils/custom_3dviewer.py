@@ -21,13 +21,18 @@ class CustomViewer3d(qtViewer3d):
 
         self.model_ais_objects = {}
         self.model_hover_labels = {}
+        self.model_hover_labels_by_ais = {}
+        self._node_hover_data = []
+        self._node_pick_px = 14
 
         self.current_hovered_model = None
+        self.current_hovered_label = None
         self.current_highlighted_ais_list = []
         self.current_highlighted_owner = None
 
         self.hover_timer = QTimer(self)
         self.hover_timer.setSingleShot(True)
+        self.hover_timer.setInterval(40)
         self.hover_timer.timeout.connect(self.show_tooltip)
         self.hover_position = None
 
@@ -157,6 +162,83 @@ class CustomViewer3d(qtViewer3d):
                     self.navcube.raise_()
         return super().eventFilter(watched, event)
 
+    def set_node_hover_data(self, nodes: list | None) -> None:
+        self._node_hover_data = nodes or []
+
+    def _project_to_screen(self, x: float, y: float, z: float):
+        """Project a 3D world point to screen pixel coordinates.
+
+        OCC's V3d_View.Convert(X3d, Y3d, Z3d) returns (Xp, Yp) where Yp is
+        measured from the **bottom** of the window (OpenGL convention).
+        Qt mouse events use Y from the **top**, so we return the OCC value as-is
+        and compare against the Y-flipped cursor coordinate in _pick_node_label.
+        """
+        if not self.view:
+            return None
+        # Primary: V3d_View.Convert – maps world 3D → window pixel (Y from bottom)
+        try:
+            res = self.view.Convert(x, y, z)
+            if isinstance(res, (tuple, list)) and len(res) >= 2:
+                sx, sy = float(res[0]), float(res[1])
+                if abs(sx) > 0.0 or abs(sy) > 0.0:
+                    return sx, sy
+        except Exception:
+            pass
+        # Fallback: V3d_View.Project – returns normalised device coords
+        try:
+            res = self.view.Project(x, y, z)
+            if isinstance(res, (tuple, list)) and len(res) >= 2:
+                vw = float(self.width()) * self.devicePixelRatioF()
+                vh = float(self.height()) * self.devicePixelRatioF()
+                sx = (float(res[0]) + 1.0) * 0.5 * vw
+                sy = (float(res[1]) + 1.0) * 0.5 * vh
+                return sx, sy
+        except Exception:
+            pass
+        return None
+
+    def _pick_node_label(self, phys_x: float, phys_y: float,
+                         log_x: float, log_y: float) -> str | None:
+        """Find the closest grillage node using screen-space projection.
+
+        OCC's Convert() returns Y from the bottom, so we compare against
+        (h_phys - phys_y) which mirrors Qt’s top-origin cursor Y into OCC’s
+        bottom-origin space. We try both physical and logical pixel variants.
+        """
+        if not self._node_hover_data:
+            return None
+
+        threshold_sq = self._node_pick_px * self._node_pick_px
+        best_label = None
+        best_d2 = threshold_sq
+
+        h_phys = float(self.height()) * self.devicePixelRatioF()
+        h_log  = float(self.height())
+
+        # OCC Convert Y is from bottom → use (h - y) to flip Qt’s top-origin Y
+        candidates = [
+            (phys_x, h_phys - phys_y),   # physical pixels, OCC Y convention ✓
+            (log_x,  h_log  - log_y),    # logical pixels,  OCC Y convention
+            (phys_x, phys_y),             # physical, Qt convention (fallback)
+            (log_x,  log_y),              # logical,  Qt convention (fallback)
+        ]
+
+        for node in self._node_hover_data:
+            try:
+                sx_sy = self._project_to_screen(node["x"], node["y"], node["z"])
+                if not sx_sy:
+                    continue
+                sx, sy = sx_sy
+                for cx, cy in candidates:
+                    d2 = (sx - cx) ** 2 + (sy - cy) ** 2
+                    if d2 < best_d2:
+                        best_d2 = d2
+                        best_label = node["label"]
+            except Exception:
+                continue
+
+        return best_label
+
     # ------------------------------------------------------------------
     # Mouse Move Event
     # ------------------------------------------------------------------
@@ -191,19 +273,44 @@ class CustomViewer3d(qtViewer3d):
 
         try:
             pixel_ratio = self.devicePixelRatioF()
-            x = int(event.position().x() * pixel_ratio)
-            y = int(event.position().y() * pixel_ratio)
+            x_log = float(event.position().x())
+            y_log = float(event.position().y())
+            x = int(x_log * pixel_ratio)
+            y = int(y_log * pixel_ratio)
 
             self.context.MoveTo(x, y, self.view, True)
 
             hovered_model = None
+            hovered_label = None
 
             if self.context.HasDetected():
-                detected = self.context.DetectedInteractive()
+                detected = None
+                detected_list = []
 
-                # ------------------------------------------------------
-                # STANDARD MODEL HIGHLIGHTING
-                # ------------------------------------------------------
+                if hasattr(self.context, "InitDetected"):
+                    try:
+                        self.context.InitDetected()
+                        while self.context.MoreDetected():
+                            detected_list.append(self.context.DetectedInteractive())
+                            self.context.NextDetected()
+                    except Exception:
+                        detected_list = []
+
+                if not detected_list:
+                    detected_list = [self.context.DetectedInteractive()]
+
+                is_node_hit = False
+                for cand in detected_list:
+                    if cand in self.model_hover_labels_by_ais:
+                        detected = cand
+                        hovered_label = self.model_hover_labels_by_ais.get(cand)
+                        is_node_hit = True
+                        break
+
+                if detected is None and detected_list:
+                    detected = detected_list[0]
+
+                # Standard model highlighting
                 for model_name, ais_list in self.model_ais_objects.items():
                     for ais in ais_list:
                         if detected == ais:
@@ -214,11 +321,12 @@ class CustomViewer3d(qtViewer3d):
 
                 objects_to_highlight = []
 
-                if hovered_model in ("Bolt", "Nut"):
-                    objects_to_highlight.extend(self.model_ais_objects.get("Bolt", []))
-                    objects_to_highlight.extend(self.model_ais_objects.get("Nut", []))
-                elif detected:
-                    objects_to_highlight.append(detected)
+                if not is_node_hit:
+                    if hovered_model in ("Bolt", "Nut"):
+                        objects_to_highlight.extend(self.model_ais_objects.get("Bolt", []))
+                        objects_to_highlight.extend(self.model_ais_objects.get("Nut", []))
+                    elif detected:
+                        objects_to_highlight.append(detected)
 
                 if set(objects_to_highlight) != set(self.current_highlighted_ais_list):
                     for obj in self.current_highlighted_ais_list:
@@ -239,6 +347,9 @@ class CustomViewer3d(qtViewer3d):
 
                     self.view.Redraw()
 
+                if hovered_label is None and detected in self.model_hover_labels_by_ais:
+                    hovered_label = self.model_hover_labels_by_ais.get(detected)
+
             else:
                 # Nothing detected → cleanup
                 if self.current_highlighted_ais_list:
@@ -250,11 +361,34 @@ class CustomViewer3d(qtViewer3d):
                     self.current_highlighted_ais_list = []
                     self.view.Redraw()
 
+            # Screen-space node hover fallback
+            fallback_label = self._pick_node_label(x, y, x_log, y_log)
+            if fallback_label:
+                hovered_label = fallback_label
+                hovered_model = None
+                if self.current_highlighted_ais_list:
+                    for obj in self.current_highlighted_ais_list:
+                        try:
+                            self.context.Unhilight(obj, False)
+                        except Exception:
+                            pass
+                    self.current_highlighted_ais_list = []
+                    self.view.Redraw()
+                if self.hover_position and hovered_label != self.current_hovered_label:
+                    self.current_hovered_label = hovered_label
+                    self.hover_timer.stop()
+                    QToolTip.showText(self.hover_position, hovered_label, self)
+
             self.hover_position = event.globalPosition().toPoint()
-            if hovered_model != self.current_hovered_model:
+            if (hovered_model != self.current_hovered_model or
+                    hovered_label != self.current_hovered_label):
                 self.current_hovered_model = hovered_model
-                self.hover_timer.start(100)
-            elif hovered_model is None:
+                self.current_hovered_label = hovered_label
+                if self.current_hovered_model or self.current_hovered_label:
+                    self.hover_timer.start(100)
+                else:
+                    QToolTip.hideText()
+            elif hovered_model is None and hovered_label is None:
                 QToolTip.hideText()
 
         except Exception as e:
@@ -267,10 +401,16 @@ class CustomViewer3d(qtViewer3d):
     # Tooltip
     # ------------------------------------------------------------------
     def show_tooltip(self):
+        if not self.hover_position:
+            return
+
+        if self.current_hovered_label:
+            QToolTip.showText(self.hover_position, self.current_hovered_label, self)
+            return
+
         if (
             self.current_hovered_model
             and self.current_hovered_model in self.model_hover_labels
-            and self.hover_position
         ):
             QToolTip.showText(
                 self.hover_position,
@@ -284,6 +424,7 @@ class CustomViewer3d(qtViewer3d):
     def leaveEvent(self, event):
         self.hover_timer.stop()
         self.current_hovered_model = None
+        self.current_hovered_label = None
 
         if self.current_highlighted_ais_list:
             for obj in self.current_highlighted_ais_list:
@@ -335,6 +476,8 @@ class CustomViewer3d(qtViewer3d):
         
         # Clear hover labels
         self.model_hover_labels.clear()
+        self.model_hover_labels_by_ais.clear()
+        self._node_hover_data = []
         
         # NOTE: Do NOT call gc.collect() here!
         # The gdb backtrace shows the crash happens during GC when trying to clean up
@@ -430,7 +573,8 @@ class CustomViewer3d(qtViewer3d):
     def _show_navcube_when_ready(self):
         self._resize_navcube()
         self._position_navcube()
-        self.navcube.mark_ready()
+        if hasattr(self.navcube, "mark_ready"):
+            self.navcube.mark_ready()
         self.navcube.update()
 
     # ------------------------------------------------------------------
