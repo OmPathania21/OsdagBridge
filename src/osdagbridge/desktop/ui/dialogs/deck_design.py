@@ -419,12 +419,11 @@ class DeckDesign(QDialog):
             if widgets["is_overhang"]:
                 widgets["bar"].setVisible(has_overhang)
 
-            # raw = output_dict.get(key)
-            # if raw is None:
-            #     widgets["bar"].set_value(0.0)
-            # else:
-            #     ratio = float(raw)
-            #     widgets["bar"].set_value(ratio)
+            raw = output_dict.get(key)
+            if raw is None:
+                widgets["bar"].set_value(0.0)
+            else:
+                widgets["bar"].set_value(float(raw) * 100.0)
 
         # ── Design check text ─────────────────────────────────────────────────
         dc_schema = self.schema.get("design_check_card", {})
