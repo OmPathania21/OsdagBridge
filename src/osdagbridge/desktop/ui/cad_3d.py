@@ -58,9 +58,12 @@ except ImportError:
         _Z_TOP = None
 
 try:
-    from OCC.Core.Aspect import Aspect_TODT_SUBTITLE as _TODT_SUBTITLE
+    from OCC.Core.Aspect import Aspect_TODT_NORMAL as _TODT_NORMAL
 except ImportError:
-    _TODT_SUBTITLE = 1  # numeric fallback
+    try:
+        from OCC.Core.Aspect import Aspect_TODT_SUBTITLE as _TODT_NORMAL
+    except ImportError:
+        _TODT_NORMAL = 0  # numeric fallback
 
 
 class CAD3DWindow(QWidget):
@@ -385,8 +388,11 @@ class CAD3DWindow(QWidget):
 
     def _render_node_numbers(self) -> None:
         """
-        Display N{nid} billboard labels with a black subtitle box.
-        Labels always face the camera and are drawn on the topmost Z-layer.
+        Display node-id labels without any background box.
+        Text is rendered in 3D world space (height in mm) so it scales
+        proportionally with the model as the user zooms in/out.
+        Text is dark (near-black) for legibility on the light deck.
+        Labels face the camera and are drawn on the topmost Z-layer.
         """
         if not self._is_display_ready() or not self._node_data:
             return
@@ -398,8 +404,8 @@ class CAD3DWindow(QWidget):
             except Exception:
                 pass
 
-        text_color = Quantity_Color(1.0, 1.0, 1.0, Quantity_TOC_RGB)  # white text
-        box_color  = Quantity_Color(0.0, 0.0, 0.0, Quantity_TOC_RGB)  # black box
+        # Very dark charcoal — visible against the light deck without a box
+        text_color = Quantity_Color(0.05, 0.05, 0.05, Quantity_TOC_RGB)
 
         label_ais_list = []
 
@@ -410,13 +416,15 @@ class CAD3DWindow(QWidget):
                     txt.SetText(str(nid))
                     txt.SetPosition(gp_Pnt(d["x"], d["y"], d["z"] + 80.0))
                     txt.SetColor(text_color)
-                    txt.SetColorSubTitle(box_color)
+                    # NORMAL display type — no subtitle/background box
                     try:
-                        txt.SetDisplayType(_TODT_SUBTITLE)
+                        txt.SetDisplayType(_TODT_NORMAL)
                     except Exception:
                         pass
+                    # 3D world-space height (mm) — scales with the model on zoom.
+                    # 350 mm ≈ a comfortable fraction of typical node spacing.
                     try:
-                        txt.SetHeight(26.0)
+                        txt.SetHeight(30.0)
                     except Exception:
                         pass
                     try:
@@ -433,7 +441,7 @@ class CAD3DWindow(QWidget):
                 except Exception:
                     pass
         else:
-            # Fallback: coloured sphere when AIS_TextLabel unavailable
+            # Fallback: small coloured sphere when AIS_TextLabel unavailable
             for nid, d in self._node_data.items():
                 try:
                     r = (int(nid) * 37 % 200 + 55) / 255.0
