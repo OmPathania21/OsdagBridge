@@ -642,9 +642,12 @@ class CustomViewer3d(qtViewer3d):
         self.active_nav_mode = mode
 
     def _can_start_navigation(self):
-        if not self.context.HasDetected():
-            return False
-        return True
+        # Pan can start from anywhere in the viewport (even empty space).
+        # Rotate keeps the original check so accidental drags in void
+        # don't spin the model unexpectedly.
+        if self.active_nav_mode == NavMode.PAN:
+            return True
+        return self.context.HasDetected()
 
 
 class NavMode:

@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QCheckBox,
     QPushButton,
+    QFrame,
 )
 from PySide6.QtCore import QTimer, Qt
 
@@ -687,6 +688,40 @@ class BridgeComponentCheckbox(QWidget):
             layout.addWidget(cb)
             self._checkboxes.append(cb)
 
+        # ── Pan toggle ────────────────────────────────────────────────────────
+        sep = QFrame(self)
+        sep.setFrameShape(QFrame.VLine)
+        sep.setFrameShadow(QFrame.Sunken)
+        sep.setFixedWidth(2)
+        layout.addWidget(sep)
+
+        self._pan_btn = QPushButton("Pan", self)
+        self._pan_btn.setObjectName("pan_toggle")
+        self._pan_btn.setCheckable(True)
+        self._pan_btn.setCursor(Qt.PointingHandCursor)
+        self._pan_btn.setToolTip(
+            "Pan mode — hold left-click and drag to pan the view"
+        )
+        self._pan_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 11px; font-weight: bold;
+                background-color: white;
+                border: 1px solid #bdbdbd;
+                border-radius: 3px;
+                padding: 2px 10px;
+                color: #444;
+            }
+            QPushButton:checked {
+                background-color: #4A90C4;
+                color: white;
+                border-color: #3a7ab4;
+            }
+            QPushButton:hover:!checked { background-color: #e6e6e6; }
+            QPushButton:pressed        { background-color: #d0d0d0; }
+        """)
+        self._pan_btn.toggled.connect(self._on_pan_toggled)
+        layout.addWidget(self._pan_btn)
+
         layout.addStretch()
 
         # Default: Model checked; Node + Node Numbers unchecked
@@ -767,6 +802,13 @@ class BridgeComponentCheckbox(QWidget):
     def apply_selection(self):
         self._apply()
 
+    def _on_pan_toggled(self, checked: bool) -> None:
+        """Enable / disable pan navigation mode on the 3-D viewer."""
+        from osdagbridge.desktop.ui.utils.custom_3dviewer import NavMode
+        viewer = self._cad.viewer
+        if viewer is not None:
+            viewer.set_navigation_mode(NavMode.PAN if checked else None)
+
     def reset(self):
         """Reset to default: Model checked, all others unchecked."""
         for cb in self._checkboxes:
@@ -776,6 +818,13 @@ class BridgeComponentCheckbox(QWidget):
         self._checkboxes[0].blockSignals(True)
         self._checkboxes[0].setChecked(True)
         self._checkboxes[0].blockSignals(False)
+        # Also clear pan mode
+        if hasattr(self, "_pan_btn"):
+            self._pan_btn.blockSignals(True)
+            self._pan_btn.setChecked(False)
+            self._pan_btn.blockSignals(False)
+        if self._cad.viewer is not None:
+            self._cad.viewer.set_navigation_mode(None)
 
 
 # ── STANDALONE TESTING ────────────────────────────────────────────────────────
