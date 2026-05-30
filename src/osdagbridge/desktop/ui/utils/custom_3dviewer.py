@@ -1,7 +1,6 @@
 """
 Custom 3D CAD Viewer with stable hover highlighting for models and ViewCube.
 """
-import math
 from PySide6.QtCore import QEvent, QPoint, QRect, QSize, QTimer, Qt
 from PySide6.QtWidgets import QApplication, QRubberBand, QToolTip
 
@@ -11,6 +10,7 @@ backend.load_backend("pyside6")
 from OCC.Display.qtDisplay import qtViewer3d
 from navcube import NavCubeOverlay, NavCubeStyle
 from navcube.connectors.occ import OCCNavCubeSync
+
 
 class CustomViewer3d(qtViewer3d):
     def __init__(self, parent=None):
@@ -51,9 +51,10 @@ class CustomViewer3d(qtViewer3d):
         self.active_nav_mode = None      # NavMode.ROTATE / PAN / ZOOM_WINDOW
         self.is_dragging_nav = False
         self.last_mouse_pos = None
+        self._auto_rotate_timer: QTimer | None = None   # turntable timer
 
         # ---------------- Zoom-window rubber band ----------------
-        self._zoom_win_start: QPoint | None = None   # logical pixel start
+        self._zoom_win_start: QPoint | None = None
         self._zoom_win_active: bool = False
         self._rubber_band = QRubberBand(QRubberBand.Rectangle, self)
 
@@ -91,11 +92,10 @@ class CustomViewer3d(qtViewer3d):
             screen = app.primaryScreen()
         dpr = max(1.0, screen.devicePixelRatio()) if screen is not None else 1.0
 
-        # Use physical viewport size so the cube fraction is DPI-independent.
         physical_dpi = max(72.0, min(screen.physicalDotsPerInch(), 400.0)) if screen else 96.0
         vp_physical = vp_logical * dpr
         ref_size = max(40, min(round(vp_physical * 0.08 * 96.0 / physical_dpi), 90))
-        ref_padding = round(10 * 96.0 / physical_dpi)   # consistent logical pad across DPIs
+        ref_padding = round(10 * 96.0 / physical_dpi)
         ref_scale = round(25.0 * ref_size / 100.0, 2)
 
         if (nc._style.size == ref_size and nc._style.padding == ref_padding
@@ -207,7 +207,7 @@ class CustomViewer3d(qtViewer3d):
         """Find the closest grillage node using screen-space projection.
 
         OCC's Convert() returns Y from the bottom, so we compare against
-        (h_phys - phys_y) which mirrors Qt’s top-origin cursor Y into OCC’s
+        (h_phys - phys_y) which mirrors Qt's top-origin cursor Y into OCC's
         bottom-origin space. We try both physical and logical pixel variants.
         """
         if not self._node_hover_data:
@@ -220,7 +220,7 @@ class CustomViewer3d(qtViewer3d):
         h_phys = float(self.height()) * self.devicePixelRatioF()
         h_log  = float(self.height())
 
-        # OCC Convert Y is from bottom → use (h - y) to flip Qt’s top-origin Y
+        # OCC Convert Y is from bottom → use (h - y) to flip Qt's top-origin Y
         candidates = [
             (phys_x, h_phys - phys_y),   # physical pixels, OCC Y convention ✓
             (log_x,  h_log  - log_y),    # logical pixels,  OCC Y convention
@@ -251,28 +251,18 @@ class CustomViewer3d(qtViewer3d):
 
         # ---------------- NAVIGATION MOVE ----------------
         if self.is_dragging_nav and self.active_nav_mode:
-            pixel_ratio = self.devicePixelRatioF()
-
-            x = int(event.position().x() * pixel_ratio)
-            y = int(event.position().y() * pixel_ratio)
-
-            last_x = int(self.last_mouse_pos.x() * pixel_ratio)
-            last_y = int(self.last_mouse_pos.y() * pixel_ratio)
-
-            dx = x - last_x
-            dy = y - last_y
-
-            if self.active_nav_mode == NavMode.ROTATE:
-                self.view.Rotation(x, y)
-
-            elif self.active_nav_mode == NavMode.PAN:
-                self.view.Pan(dx, -dy)
+            if self.active_nav_mode == NavMode.PAN:
+                pr = self.devicePixelRatioF()
+                x      = int(event.position().x() * pr)
+                y      = int(event.position().y() * pr)
+                last_x = int(self.last_mouse_pos.x() * pr)
+                last_y = int(self.last_mouse_pos.y() * pr)
+                self.view.Pan(x - last_x, -(y - last_y))
 
             elif self.active_nav_mode == NavMode.ZOOM_WINDOW:
                 if self._zoom_win_active and self._zoom_win_start is not None:
-                    cur = event.position().toPoint()
                     self._rubber_band.setGeometry(
-                        QRect(self._zoom_win_start, cur).normalized()
+                        QRect(self._zoom_win_start, event.position().toPoint()).normalized()
                     )
 
             self.last_mouse_pos = event.position()
@@ -284,11 +274,11 @@ class CustomViewer3d(qtViewer3d):
             return
 
         try:
-            pixel_ratio = self.devicePixelRatioF()
+            pr    = self.devicePixelRatioF()
             x_log = float(event.position().x())
             y_log = float(event.position().y())
-            x = int(x_log * pixel_ratio)
-            y = int(y_log * pixel_ratio)
+            x     = int(x_log * pr)
+            y     = int(y_log * pr)
 
             self.context.MoveTo(x, y, self.view, True)
 
@@ -344,7 +334,7 @@ class CustomViewer3d(qtViewer3d):
                     for obj in self.current_highlighted_ais_list:
                         try:
                             self.context.Unhilight(obj, False)
-                        except:
+                        except Exception:
                             pass
 
                     self.current_highlighted_ais_list = objects_to_highlight
@@ -354,7 +344,7 @@ class CustomViewer3d(qtViewer3d):
                             self.context.HilightWithColor(
                                 obj, self.context.HighlightStyle(), False
                             )
-                        except:
+                        except Exception:
                             pass
 
                     self.view.Redraw()
@@ -368,7 +358,7 @@ class CustomViewer3d(qtViewer3d):
                     for obj in self.current_highlighted_ais_list:
                         try:
                             self.context.Unhilight(obj, False)
-                        except:
+                        except Exception:
                             pass
                     self.current_highlighted_ais_list = []
                     self.view.Redraw()
@@ -442,55 +432,41 @@ class CustomViewer3d(qtViewer3d):
             for obj in self.current_highlighted_ais_list:
                 try:
                     self.context.Unhilight(obj, False)
-                except:
+                except Exception:
                     pass
             self.current_highlighted_ais_list = []
-            self.view.Redraw()
+            if self.view:
+                self.view.Redraw()
 
         QToolTip.hideText()
-
-        # restore holding cursor so cursor can update
-        self.unsetCursor()
-        QApplication.restoreOverrideCursor()
-        self.releaseMouse()
         super().leaveEvent(event)
 
     def cleanup_for_new_model(self):
         """
         Clean up all internal state before displaying a new model.
         This prevents memory corruption from stale OCC object references.
-        
+
         Uses IsDisplayed/IsHilighted checks for OS-independent safety:
         - Windows requires explicit Remove before EraseAll for AIS_ViewCube
         - Linux crashes with double-free if Remove is called on already-freed objects
         - Checking first avoids both issues.
         """
-        
-        # Clear highlighted objects list - use IsHilighted check for OS-independent safety
         if self.current_highlighted_ais_list and self.context:
             for obj in self.current_highlighted_ais_list:
                 try:
-                    # Only unhilight if confirmed still highlighted
                     if self.context.IsHilighted(obj):
                         self.context.Unhilight(obj, False)
                 except Exception:
-                    pass  # Object may already be unhighlighted or invalid
-            self.current_highlighted_ais_list = []
-        elif self.current_highlighted_ais_list:
-            # Context not available, just clear the list
-            self.current_highlighted_ais_list = []
-        
+                    pass
+        self.current_highlighted_ais_list = []
         self.current_highlighted_owner = None
         self.current_hovered_model = None
-        
-        # Clear the model AIS objects dictionary
+
         self.model_ais_objects.clear()
-        
-        # Clear hover labels
         self.model_hover_labels.clear()
         self.model_hover_labels_by_ais.clear()
         self._node_hover_data = []
-        
+
         # NOTE: Do NOT call gc.collect() here!
         # The gdb backtrace shows the crash happens during GC when trying to clean up
         # Shiboken MetaObjectBuilder objects. Let Python handle GC naturally.
@@ -498,7 +474,6 @@ class CustomViewer3d(qtViewer3d):
     # ------------------------------------------------------------------
     # NaviCube teardown
     # ------------------------------------------------------------------
-
     def _teardown_navcube(self):
         """
         Called via self.destroyed signal when this viewer's C++ object is
@@ -517,47 +492,40 @@ class CustomViewer3d(qtViewer3d):
         try:
             nc = getattr(self, "navcube", None)
             if nc is not None:
-                nc._tmr.stop()   # stop navicube's own animation timer
+                nc._tmr.stop()
                 nc.hide()
         except Exception:
             pass
+        self._stop_auto_rotate()
 
     # ------------------------------------------------------------------
     # View Cube Display
     # ------------------------------------------------------------------
-
     def display_view_cube(self):
         """Displays the custom Qt NaviCube overlay after CAD init."""
         if not (hasattr(self, "navcube") and self.navcube and self.view):
             return
 
-        # Engineering-neutral — matches Osdag's UI language
-        #   faces   → warm white / light grey (matches panel backgrounds)
-        #   edges   → slightly deeper grey bevel
-        #   corners → lightest grey bevel
-        #   hover   → Osdag blue (#4A90C4)
-        #   gizmo   → standard CAD red/green/blue
         style = NavCubeStyle(
             # size=65: 96-dpi-reference pixels.  _resize_navcube overrides this
             # to exactly 9 % of the viewport, but 65 keeps the fallback small on
-            # screens whose physicalDotsPerInch > 96 (would inflate size=100 → 137px).
+            # screens whose physicalDotsPerInch > 96.
             size=65,
             theme="light",
-            face_color=(242, 244, 247),          # warm white-grey — matches panel bg
-            edge_color=(218, 224, 232),          # slightly darker bevel
-            corner_color=(228, 232, 238),        # light corner bevel
-            text_color=(45, 55, 72),             # dark slate — readable, not harsh
-            border_color=(30, 30, 30),           # black lines
+            face_color=(242, 244, 247),
+            edge_color=(218, 224, 232),
+            corner_color=(228, 232, 238),
+            text_color=(45, 55, 72),
+            border_color=(30, 30, 30),
             border_secondary_color=(80, 80, 80),
             border_width_main=1.6,
             border_width_secondary=0.9,
-            hover_color=(145, 176, 20, 235),     # Osdag green #91b014
+            hover_color=(145, 176, 20, 235),
             hover_text_color=(255, 255, 255),
             dot_color=(60, 60, 60, 180),
             shadow_color=(20, 20, 20, 45),
             shadow_offset_x=2.0,
             shadow_offset_y=2.5,
-            # dark-theme mirrors
             face_color_dark=(52, 62, 76),
             edge_color_dark=(42, 52, 65),
             corner_color_dark=(47, 57, 70),
@@ -566,15 +534,13 @@ class CustomViewer3d(qtViewer3d):
             border_secondary_color_dark=(130, 130, 130),
             hover_color_dark=(145, 176, 20, 235),
             show_gizmo=False,
-            # feel
             inactive_opacity=0.70,
             animation_ms=300,
             light_direction=(-0.5, -1.0, -1.5),
         )
         self.navcube.set_style(style)
-        self._resize_navcube()   # set size from viewport (may return early if width=0)
+        self._resize_navcube()
 
-        # Create the OCC sync bridge the first time the view is ready.
         if self._navcube_sync is None:
             self._navcube_sync = OCCNavCubeSync(self.view, self.navcube)
         self._position_navcube()
@@ -600,35 +566,26 @@ class CustomViewer3d(qtViewer3d):
         if self._navcube_sync is not None:
             self._navcube_sync.set_interaction_active(True)
 
-        pixel_ratio = self.devicePixelRatioF()
-        x = int(event.position().x() * pixel_ratio)
-        y = int(event.position().y() * pixel_ratio)
+        pr = self.devicePixelRatioF()
+        x  = int(event.position().x() * pr)
+        y  = int(event.position().y() * pr)
 
         self.context.MoveTo(x, y, self.view, True)
 
         # ---------------- NAVIGATION START ----------------
+        # Rotate is timer-driven (auto-spin); only PAN and ZOOM_WINDOW use mouse drag.
         if (
             event.button() == Qt.LeftButton
-            and self.active_nav_mode
+            and self.active_nav_mode in (NavMode.PAN, NavMode.ZOOM_WINDOW)
             and self._can_start_navigation()
         ):
             self.is_dragging_nav = True
             self.last_mouse_pos = event.position()
 
-            pixel_ratio = self.devicePixelRatioF()
-            x = int(event.position().x() * pixel_ratio)
-            y = int(event.position().y() * pixel_ratio)
-
-            if self.active_nav_mode == NavMode.ROTATE:
-                self.view.StartRotation(x, y)
-
-            elif self.active_nav_mode == NavMode.ZOOM_WINDOW:
-                # Start rubber-band rectangle
+            if self.active_nav_mode == NavMode.ZOOM_WINDOW:
                 self._zoom_win_start = event.position().toPoint()
                 self._zoom_win_active = True
-                self._rubber_band.setGeometry(
-                    QRect(self._zoom_win_start, QSize())
-                )
+                self._rubber_band.setGeometry(QRect(self._zoom_win_start, QSize()))
                 self._rubber_band.show()
 
             event.accept()
@@ -643,10 +600,8 @@ class CustomViewer3d(qtViewer3d):
         if self._navcube_sync is not None:
             self._navcube_sync.set_interaction_active(False)
 
-        # ---------------- NAVIGATION END ----------------
         if self.is_dragging_nav and event.button() == Qt.LeftButton:
-
-            # ── Zoom Window: execute the fit ────────────────────────────────
+            # Zoom Window: execute the fit on release
             if (
                 self.active_nav_mode == NavMode.ZOOM_WINDOW
                 and self._zoom_win_active
@@ -654,11 +609,9 @@ class CustomViewer3d(qtViewer3d):
             ):
                 self._rubber_band.hide()
                 self._zoom_win_active = False
-
-                end = event.position().toPoint()
+                end  = event.position().toPoint()
                 rect = QRect(self._zoom_win_start, end).normalized()
                 self._zoom_win_start = None
-
                 if rect.width() > 4 and rect.height() > 4:
                     self._execute_zoom_window(rect)
 
@@ -667,7 +620,6 @@ class CustomViewer3d(qtViewer3d):
             event.accept()
             return
 
-        # restore holding cursor so cursor can update
         self.unsetCursor()
         QApplication.restoreOverrideCursor()
         self.releaseMouse()
@@ -691,14 +643,12 @@ class CustomViewer3d(qtViewer3d):
             return
 
         pr = self.devicePixelRatioF()
-
-        # Logical Qt rect  →  physical-pixel coords (Y from top, no flip)
         x1 = int(rect.left()   * pr)
         y1 = int(rect.top()    * pr)
         x2 = int(rect.right()  * pr)
         y2 = int(rect.bottom() * pr)
 
-        # 1. pythonocc display wrapper  (highest-level, always present after InitDriver)
+        # 1. pythonocc display wrapper (highest-level, always present after InitDriver)
         disp = getattr(self, "_display", None)
         if disp is not None:
             try:
@@ -707,7 +657,7 @@ class CustomViewer3d(qtViewer3d):
             except Exception:
                 pass
 
-        # 2. V3d_View.WindowFit  (available in pythonocc-core ≥ 7.4)
+        # 2. V3d_View.WindowFit (pythonocc-core >= 7.4)
         try:
             self.view.WindowFit(x1, y1, x2, y2)
             self.view.Redraw()
@@ -719,20 +669,81 @@ class CustomViewer3d(qtViewer3d):
         try:
             self.view.WindowFitAll(x1, y1, x2, y2)
             self.view.Redraw()
-            return
         except Exception:
             pass
 
-    def set_navigation_mode(self, mode):
-        """
-        mode: NavMode.ROTATE | NavMode.PAN | None
-        """
+    # ------------------------------------------------------------------
+    # Navigation mode + turntable auto-rotation
+    # ------------------------------------------------------------------
+    _AUTO_ROTATE_SPEED_PX: int = 3   # virtual horizontal drag per frame (px)
+    _AUTO_ROTATE_FPS:      int = 60  # frames per second
+
+    def set_navigation_mode(self, mode) -> None:
+        """Set the active nav mode, starting / stopping auto-rotate as needed."""
+        prev = self.active_nav_mode
         self.active_nav_mode = mode
 
-    def _can_start_navigation(self):
-        # Pan and Zoom-Window can start anywhere in the viewport.
-        # Rotate keeps the original check so accidental drags in void
-        # don't spin the model unexpectedly.
+        if prev == NavMode.ROTATE and mode != NavMode.ROTATE:
+            self._stop_auto_rotate()
+        if mode == NavMode.ROTATE:
+            self._start_auto_rotate()
+
+    def _start_auto_rotate(self) -> None:
+        """Begin continuous horizontal (turntable) rotation at ~60 fps."""
+        self._stop_auto_rotate()
+        if not self.view:
+            return
+
+        cx = self.width()  // 2
+        cy = self.height() // 2
+        disp = getattr(self, "_display", None)
+        try:
+            if disp is not None:
+                disp.StartRotation(cx, cy)
+            else:
+                self.view.StartRotation(cx, cy)
+        except Exception:
+            pass
+
+        self._auto_rotate_timer = QTimer(self)
+        self._auto_rotate_timer.setInterval(1000 // self._AUTO_ROTATE_FPS)
+        self._auto_rotate_timer.timeout.connect(self._auto_rotate_step)
+        self._auto_rotate_timer.start()
+
+    def _stop_auto_rotate(self) -> None:
+        """Kill the turntable timer if running."""
+        if self._auto_rotate_timer is not None:
+            self._auto_rotate_timer.stop()
+            self._auto_rotate_timer = None
+
+    def _auto_rotate_step(self) -> None:
+        """Apply one frame of horizontal rotation.
+
+        Re-initialises the OCC trackball pivot at the viewport centre every
+        frame, then applies a fixed virtual horizontal drag of
+        ``_AUTO_ROTATE_SPEED_PX`` pixels — giving a constant angular delta per
+        tick regardless of accumulated position.
+        """
+        if not self.view:
+            return
+
+        cx   = self.width()  // 2
+        cy   = self.height() // 2
+        step = self._AUTO_ROTATE_SPEED_PX
+        disp = getattr(self, "_display", None)
+        try:
+            if disp is not None:
+                disp.StartRotation(cx, cy)
+                disp.Rotation(cx + step, cy)   # Rotation() includes Redraw internally
+            else:
+                self.view.StartRotation(cx, cy)
+                self.view.Rotation(cx + step, cy)
+                self.view.Redraw()
+        except Exception:
+            pass
+
+    def _can_start_navigation(self) -> bool:
+        """Return True if a navigation drag may begin at the current cursor position."""
         if self.active_nav_mode in (NavMode.PAN, NavMode.ZOOM_WINDOW):
             return True
         return self.context.HasDetected()

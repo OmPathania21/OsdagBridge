@@ -695,6 +695,33 @@ class BridgeComponentCheckbox(QWidget):
         sep.setFixedWidth(2)
         layout.addWidget(sep)
 
+        self._rotate_btn = QPushButton("Rotate", self)
+        self._rotate_btn.setObjectName("rotate_toggle")
+        self._rotate_btn.setCheckable(True)
+        self._rotate_btn.setCursor(Qt.PointingHandCursor)
+        self._rotate_btn.setToolTip(
+            "Rotate mode — left-click and drag anywhere to rotate the model"
+        )
+        self._rotate_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 11px; font-weight: bold;
+                background-color: white;
+                border: 1px solid #bdbdbd;
+                border-radius: 3px;
+                padding: 2px 10px;
+                color: #444;
+            }
+            QPushButton:checked {
+                background-color: #27ae60;
+                color: white;
+                border-color: #1e8449;
+            }
+            QPushButton:hover:!checked { background-color: #e6e6e6; }
+            QPushButton:pressed        { background-color: #d0d0d0; }
+        """)
+        self._rotate_btn.toggled.connect(self._on_rotate_toggled)
+        layout.addWidget(self._rotate_btn)
+
         self._pan_btn = QPushButton("Pan", self)
         self._pan_btn.setObjectName("pan_toggle")
         self._pan_btn.setCheckable(True)
@@ -829,6 +856,23 @@ class BridgeComponentCheckbox(QWidget):
     def apply_selection(self):
         self._apply()
 
+    def _on_rotate_toggled(self, checked: bool) -> None:
+        """Enable / disable rotate navigation mode on the 3-D viewer."""
+        from osdagbridge.desktop.ui.utils.custom_3dviewer import NavMode
+        viewer = self._cad.viewer
+        if viewer is None:
+            return
+        if checked:
+            # Deactivate Pan and Zoom Window if either was on
+            for btn in (self._pan_btn, self._zoom_win_btn):
+                if btn.isChecked():
+                    btn.blockSignals(True)
+                    btn.setChecked(False)
+                    btn.blockSignals(False)
+            viewer.set_navigation_mode(NavMode.ROTATE)
+        else:
+            viewer.set_navigation_mode(None)
+
     def _on_pan_toggled(self, checked: bool) -> None:
         """Enable / disable pan navigation mode on the 3-D viewer."""
         from osdagbridge.desktop.ui.utils.custom_3dviewer import NavMode
@@ -836,11 +880,12 @@ class BridgeComponentCheckbox(QWidget):
         if viewer is None:
             return
         if checked:
-            # Deactivate Zoom Window if it was on
-            if self._zoom_win_btn.isChecked():
-                self._zoom_win_btn.blockSignals(True)
-                self._zoom_win_btn.setChecked(False)
-                self._zoom_win_btn.blockSignals(False)
+            # Deactivate Rotate and Zoom Window if either was on
+            for btn in (self._rotate_btn, self._zoom_win_btn):
+                if btn.isChecked():
+                    btn.blockSignals(True)
+                    btn.setChecked(False)
+                    btn.blockSignals(False)
             viewer.set_navigation_mode(NavMode.PAN)
         else:
             viewer.set_navigation_mode(None)
@@ -852,11 +897,12 @@ class BridgeComponentCheckbox(QWidget):
         if viewer is None:
             return
         if checked:
-            # Deactivate Pan if it was on
-            if self._pan_btn.isChecked():
-                self._pan_btn.blockSignals(True)
-                self._pan_btn.setChecked(False)
-                self._pan_btn.blockSignals(False)
+            # Deactivate Rotate and Pan if either was on
+            for btn in (self._rotate_btn, self._pan_btn):
+                if btn.isChecked():
+                    btn.blockSignals(True)
+                    btn.setChecked(False)
+                    btn.blockSignals(False)
             viewer.set_navigation_mode(NavMode.ZOOM_WINDOW)
         else:
             viewer.set_navigation_mode(None)
@@ -870,8 +916,8 @@ class BridgeComponentCheckbox(QWidget):
         self._checkboxes[0].blockSignals(True)
         self._checkboxes[0].setChecked(True)
         self._checkboxes[0].blockSignals(False)
-        # Also clear pan / zoom-window modes
-        for btn in ("_pan_btn", "_zoom_win_btn"):
+        # Also clear rotate / pan / zoom-window modes
+        for btn in ("_rotate_btn", "_pan_btn", "_zoom_win_btn"):
             b = getattr(self, btn, None)
             if b is not None:
                 b.blockSignals(True)
