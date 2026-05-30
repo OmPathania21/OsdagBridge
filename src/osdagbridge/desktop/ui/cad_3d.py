@@ -587,6 +587,12 @@ class CAD3DWindow(QWidget):
             QPushButton:hover   { background-color: #e6e6e6; }
             QPushButton:pressed { background-color: #d6d6d6; }
         """
+        _fit_style = """
+            QPushButton { font-size: 13px; font-weight: bold;
+                          background-color: white; border: 1px solid #bdbdbd; }
+            QPushButton:hover   { background-color: #e6e6e6; }
+            QPushButton:pressed { background-color: #d6d6d6; }
+        """
 
         self.zoom_in_btn = QPushButton("+", self.viewer)
         self.zoom_in_btn.setFixedSize(self._zoom_btn_size, self._zoom_btn_size)
@@ -600,12 +606,25 @@ class CAD3DWindow(QWidget):
         self.zoom_out_btn.clicked.connect(lambda: self.display.ZoomFactor(1 / 1.1))
         self.zoom_out_btn.setStyleSheet(_style)
 
+        self.zoom_fit_btn = QPushButton("Fit", self.viewer)
+        self.zoom_fit_btn.setFixedSize(self._zoom_btn_size, self._zoom_btn_size)
+        self.zoom_fit_btn.setCursor(Qt.PointingHandCursor)
+        self.zoom_fit_btn.setToolTip("Zoom Fit — fit all geometry in view")
+        self.zoom_fit_btn.clicked.connect(self._zoom_fit)
+        self.zoom_fit_btn.setStyleSheet(_fit_style)
+
         self.zoom_in_btn.show()
         self.zoom_out_btn.show()
+        self.zoom_fit_btn.show()
         self._position_zoom_buttons()
 
         self._orig_resize_event = self.viewer.resizeEvent
         self.viewer.resizeEvent = self._cad_resize_proxy
+
+    def _zoom_fit(self):
+        """Reset the view to fit all visible geometry."""
+        if self._is_display_ready():
+            self.display.FitAll()
 
     def _position_zoom_buttons(self):
         if not hasattr(self, "zoom_in_btn"):
@@ -617,6 +636,7 @@ class CAD3DWindow(QWidget):
         btn_x = cube_left + self._view_cube_size // 2 - self._zoom_btn_size // 2
         self.zoom_in_btn.move(btn_x, cube_bottom + self._zoom_spacing)
         self.zoom_out_btn.move(btn_x, cube_bottom + self._zoom_spacing * 2 + self._zoom_btn_size)
+        self.zoom_fit_btn.move(btn_x, cube_bottom + self._zoom_spacing * 3 + self._zoom_btn_size * 2)
 
     def _cad_resize_proxy(self, event):
         if self._orig_resize_event:
