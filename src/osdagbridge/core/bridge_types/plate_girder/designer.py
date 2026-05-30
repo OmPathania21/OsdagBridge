@@ -2948,7 +2948,168 @@ def run_design_check(
     print(f"  PIPELINE COMPLETE - Overall: {engine.overall_status()}")
     print("=" * 60)
 
-    return report_text, engine
+    # -- Build structured results dict for output dock and report ──────────
+    _sec = config.section
+    _mat = config.material
+    _geo = config.geometry
+    design_results = {
+        # ── bridge configuration ────────────────────────────────────────────
+        "span_m"                    : _geo.span,
+        "support_type"              : _geo.support_type,
+        "n_girders"                 : _geo.n_girders,
+        "beam_spacing_m"            : _geo.beam_spacing,
+        "carriageway_width_m"       : _geo.carriageway_width,
+        "beam_type"                 : _geo.beam_type,
+        "cross_bracing_spacing_m"   : _geo.cross_bracing_spacing_m,
+        # ── material properties ─────────────────────────────────────────────
+        "steel_grade"               : _mat.steel_grade,
+        "fy_MPa"                    : _mat.fy,
+        "fu_MPa"                    : _mat.fu,
+        "concrete_grade"            : _mat.concrete_grade,
+        "fck_MPa"                   : _mat.fck,
+        "fctm_MPa"                  : _mat.fctm,
+        "Ecm_MPa"                   : _mat.Ecm,
+        "rebar_grade"               : _mat.rebar_grade,
+        "fy_rebar_MPa"              : _mat.fy_rebar,
+        "gamma_m0"                  : _mat.gamma_m0,
+        "gamma_m1"                  : _mat.gamma_m1,
+        "gamma_v"                   : _mat.gamma_v,
+        # ── steel section ───────────────────────────────────────────────────
+        "D_mm"                      : _sec.D,
+        "bf_top_mm"                 : _sec.bf_top,
+        "tf_top_mm"                 : _sec.tf_top,
+        "bf_bot_mm"                 : _sec.bf_bot,
+        "tf_bot_mm"                 : _sec.tf_bot,
+        "tw_mm"                     : _sec.tw,
+        "dw_mm"                     : round(_sec.dw, 1),
+        "A_steel_mm2"               : round(_sec.A_steel, 1),
+        "Iz_steel_mm4"              : round(_sec.Iz_steel, 0),
+        "Ze_steel_mm3"              : round(_sec.Ze_steel, 0),
+        "Zp_steel_mm3"              : round(_sec.Zp_steel, 0),
+        "y_cg_from_bot_mm"          : round(_sec.y_cg_from_bot, 2),
+        "fabrication"               : _sec.fabrication,
+        # ── slab ────────────────────────────────────────────────────────────
+        "slab_thickness_mm"         : config.slab.thickness,
+        "haunch_depth_mm"           : config.slab.haunch_depth,
+        # ── shear studs ─────────────────────────────────────────────────────
+        "stud_dia_mm"               : config.studs.diameter,
+        "stud_height_mm"            : config.studs.height,
+        "stud_fu_MPa"               : config.studs.fu,
+        "studs_per_section"         : config.studs.n_per_section,
+        # ── demands ─────────────────────────────────────────────────────────
+        "Mu_kNm"                    : demand.Mu_kNm,
+        "Vu_kN"                     : demand.Vu_kN,
+        "Nu_kN"                     : demand.Nu_kN,
+        "M_construction_kNm"        : demand.M_construction_kNm,
+        "delta_live_mm"             : demand.delta_live_mm,
+        "delta_total_mm"            : demand.delta_total_mm,
+        "stress_range_MPa"          : demand.stress_range_MPa,
+        "shear_range_MPa"           : demand.shear_range_MPa,
+        "Nsc"                       : demand.Nsc,
+        "M_sls_kNm"                 : demand.M_sls_kNm,
+        "V_sls_kN"                  : demand.V_sls_kN,
+        "Vr_kN"                     : demand.Vr_kN,
+        "governing_combination"     : demand.governing_combination,
+        "demand_location"           : demand.location,
+        "demand_member"             : demand.member,
+        "demand_source"             : demand.source,
+        # ── capacities — ULS flexure ────────────────────────────────────────
+        "beff_mm"                   : capacity.beff_mm,
+        "xu_mm"                     : capacity.xu_mm,
+        "pna_location"              : capacity.pna_location,
+        "Mp_kNm"                    : capacity.Mp_kNm,
+        "Md_kNm"                    : capacity.Md_kNm,
+        # ── capacities — LTB ────────────────────────────────────────────────
+        "Mcr_kNm"                   : capacity.Mcr_kNm,
+        "lambda_LT"                 : capacity.lambda_LT,
+        "chi_LT"                    : capacity.chi_LT,
+        "Mb_kNm"                    : capacity.Mb_kNm,
+        # ── capacities — shear ──────────────────────────────────────────────
+        "Av_mm2"                    : capacity.Av_mm2,
+        "Vn_kN"                     : capacity.Vn_kN,
+        "Vd_kN"                     : capacity.Vd_kN,
+        # ── capacities — M-V interaction ────────────────────────────────────
+        "Mdv_kNm"                   : capacity.Mdv_kNm,
+        "beta_interaction"          : capacity.beta_interaction,
+        # ── SLS limits ──────────────────────────────────────────────────────
+        "defl_limit_live_mm"        : capacity.defl_limit_live_mm,
+        "defl_limit_total_mm"       : capacity.defl_limit_total_mm,
+        "sigma_c_limit_MPa"         : capacity.sigma_c_limit_MPa,
+        "sigma_s_limit_MPa"         : capacity.sigma_s_limit_MPa,
+        "sigma_rebar_limit_MPa"     : capacity.sigma_rebar_limit_MPa,
+        # ── SLS actual stresses ──────────────────────────────────────────────
+        "sigma_c_actual_MPa"        : capacity.sigma_c_actual_MPa,
+        "sigma_rebar_actual_MPa"    : capacity.sigma_rebar_actual_MPa,
+        "sigma_steel_equiv_MPa"     : capacity.sigma_steel_equiv_MPa,
+        "tau_web_actual_MPa"        : capacity.tau_web_actual_MPa,
+        # ── composite section ───────────────────────────────────────────────
+        "I_comp_short_mm4"          : capacity.I_comp_short_mm4,
+        "y_top_comp_mm"             : capacity.y_top_comp_mm,
+        "y_bot_comp_mm"             : capacity.y_bot_comp_mm,
+        # ── fatigue ─────────────────────────────────────────────────────────
+        "f_fd_MPa"                  : capacity.f_fd_MPa,
+        "tau_fd_MPa"                : capacity.tau_fd_MPa,
+        "f_fd_eff_MPa"              : capacity.f_fd_eff_MPa,
+        "tau_fd_eff_MPa"            : capacity.tau_fd_eff_MPa,
+        # ── shear studs ─────────────────────────────────────────────────────
+        "Qu_kN"                     : capacity.Qu_kN,
+        "Qr_kN"                     : capacity.Qr_kN,
+        "VL_N_per_mm"               : capacity.VL_N_per_mm,
+        "stud_spacing_uls_mm"       : capacity.stud_spacing_mm,
+        "stud_spacing_full_shear_mm": capacity.stud_spacing_full_shear_mm,
+        "stud_spacing_fatigue_mm"   : capacity.stud_spacing_fatigue_mm,
+        "stud_spacing_governing_mm" : capacity.stud_spacing_governing_mm,
+        "stud_spacing_provided_mm"  : capacity.stud_spacing_provided_mm,
+        "stud_spacing_max_mm"       : capacity.stud_spacing_max_mm,
+        "stud_spacing_min_mm"       : capacity.stud_spacing_min_mm,
+        "stud_detailing_ok"         : capacity.stud_detailing_ok,
+        # ── transverse shear ────────────────────────────────────────────────
+        "transverse_shear_ok"       : capacity.transverse_shear_ok,
+        "Ast_required_cm2_per_m"    : capacity.Ast_required_cm2_per_m,
+        "Ast_provided_cm2_per_m"    : capacity.Ast_provided_cm2_per_m,
+        # ── crack control ───────────────────────────────────────────────────
+        "As_min_crack_mm2"          : capacity.As_min_crack_mm2,
+        "As_provided_crack_mm2"     : capacity.As_provided_crack_mm2,
+        # ── stiffener ───────────────────────────────────────────────────────
+        "is_H_limit_mm"             : capacity.is_H_limit_mm,
+        "is_Iys_min_mm4"            : capacity.is_Iys_min_mm4,
+        "is_Iys_prov_mm4"           : capacity.is_Iys_prov_mm4,
+        "is_Fqd_kN"                 : capacity.is_Fqd_kN,
+        "is_Fq_kN"                  : capacity.is_Fq_kN,
+        "bs_Fcdw_wb_kN"             : capacity.bs_Fcdw_wb_kN,
+        "bs_Fcdw_lc_kN"             : capacity.bs_Fcdw_lc_kN,
+        "bs_Fpsd_kN"                : capacity.bs_Fpsd_kN,
+        "bs_Fcd_kN"                 : capacity.bs_Fcd_kN,
+        "bs_R_kN"                   : capacity.bs_R_kN,
+        # ── DCR summary ─────────────────────────────────────────────────────
+        "overall_status"            : engine.overall_status(),
+        "max_dcr"                   : engine.max_dcr(),
+        "n_pass"                    : engine.n_pass(),
+        "n_warn"                    : engine.n_warn(),
+        "n_fail"                    : engine.n_fail(),
+        # ── DCR check rows (for output dock table) ──────────────────────────
+        "checks": [
+            {
+                "check_id"     : chk.check_id,
+                "name"         : chk.name,
+                "clause"       : chk.clause,
+                "demand"       : chk.demand,
+                "demand_unit"  : chk.demand_unit,
+                "capacity"     : chk.capacity,
+                "capacity_unit": chk.capacity_unit,
+                "dcr"          : chk.dcr,
+                "status"       : chk.status,
+                "note"         : chk.note,
+            }
+            for chk in engine.checks
+        ],
+        # ── clause-level detail dicts (for report / deep inspection) ────────
+        "capacity_details"          : capacity.details,
+        # ── formatted report text ────────────────────────────────────────────
+        "report_text"               : report_text,
+    }
+
+    return report_text, engine, design_results
 
 
 # ======================================================================

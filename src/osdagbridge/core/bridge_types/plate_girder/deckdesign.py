@@ -567,24 +567,78 @@ def design_deck_slab(bridge) -> dict:
 
     # ── 13. return UI-compatible dict ─────────────────────────────────────────
     result = {
+        # ── section properties ──────────────────────────────────────────────
         "deck_grade"               : concrete_grade,
         "deck_thickness"           : f"{deck_t_mm:.0f}",
         "deck_overhang"            : f"{overhang_m * 1000:.0f}",
-        # top reinforcement (interior hogging)
+        # ── material properties ─────────────────────────────────────────────
+        "fck_MPa"                  : round(fck, 1),
+        "fctm_MPa"                 : round(fctm, 2),
+        "fy_MPa"                   : round(fy, 1),
+        "rebar_grade"              : rebar_grade,
+        # ── loading parameters ──────────────────────────────────────────────
+        "vehicle_class"            : vehicle_class,
+        "impact_factor"            : round(impact_factor, 3),
+        "gamma_dl"                 : gamma_dl,
+        "gamma_ll"                 : gamma_ll,
+        "P_wheel_kN"               : round(P_wheel_kN, 1),
+        "w_DL_kN_m2"               : round(w_DL_kN_m2, 3),
+        "beam_spacing_m"           : round(S, 3),
+        "beff_m"                   : round(beff_m, 3),
+        # ── ULS design moments ──────────────────────────────────────────────
+        "M_DL_kNm"                 : round(M_DL_kNm, 3),
+        "M_LL_kNm"                 : round(M_LL_kNm, 3),
+        "M_ULS_bot_kNm"            : round(M_ULS_bot_kNm, 3),
+        "M_ULS_top_kNm"            : round(M_ULS_top_kNm, 3),
+        # ── SLS moments ─────────────────────────────────────────────────────
+        "M_SLS_char_bot_kNm"       : round(M_SLS_char_bot, 3),
+        "M_SLS_char_top_kNm"       : round(M_SLS_char_top, 3),
+        "M_SLS_freq_bot_kNm"       : round(M_SLS_freq_bot, 3),
+        "M_SLS_freq_top_kNm"       : round(M_SLS_freq_top, 3),
+        # ── top reinforcement (interior hogging) ────────────────────────────
         "rebar_top_yield"          : f"{fy:.0f}",
         "rebar_top_dia"            : f"{dia_top:.0f}",
         "rebar_top_spacing"        : f"{spc_top:.0f}",
         "rebar_top_cover"          : f"{cover_top_mm:.0f}",
         "rebar_top_area"           : f"{As_top:.0f}",
-        # bottom reinforcement (interior sagging)
+        "d_top_mm"                 : round(d_top_mm, 1),
+        "As_req_top_mm2"           : round(As_req_top, 0),
+        "Mu_top_kNm"               : round(Mu_top, 3),
+        "top_ok"                   : top_ok,
+        # ── bottom reinforcement (interior sagging) ─────────────────────────
         "rebar_bottom_yield"       : f"{fy:.0f}",
         "rebar_bottom_dia"         : f"{dia_bot:.0f}",
         "rebar_bottom_spacing"     : f"{spc_bot:.0f}",
         "rebar_bottom_cover"       : f"{cover_bot_mm:.0f}",
         "rebar_bottom_area"        : f"{As_bot:.0f}",
-        # design check
+        "d_bot_mm"                 : round(d_bot_mm, 1),
+        "As_req_bot_mm2"           : round(As_req_bot, 0),
+        "Mu_bot_kNm"               : round(Mu_bot, 3),
+        "bot_ok"                   : bot_ok,
+        # ── SLS stress check — bottom ───────────────────────────────────────
+        "sigma_c_bot_MPa"          : round(sc_bot["sigma_c"], 3),
+        "sigma_c_bot_lim_MPa"      : round(sc_bot["sc_lim"], 1),
+        "sigma_s_bot_MPa"          : round(sc_bot["sigma_s"], 3),
+        "sigma_s_bot_lim_MPa"      : round(sc_bot["ss_lim"], 1),
+        "sls_stress_bot_ok"        : sc_bot["ok"],
+        # ── SLS stress check — top ──────────────────────────────────────────
+        "sigma_c_top_MPa"          : round(sc_top["sigma_c"], 3),
+        "sigma_c_top_lim_MPa"      : round(sc_top["sc_lim"], 1),
+        "sigma_s_top_MPa"          : round(sc_top["sigma_s"], 3),
+        "sigma_s_top_lim_MPa"      : round(sc_top["ss_lim"], 1),
+        "sls_stress_top_ok"        : sc_top["ok"],
+        # ── crack width check — bottom ──────────────────────────────────────
+        "wk_bot_mm"                : round(cw_bot["wk"], 4),
+        "wk_lim_mm"                : cw_bot["wk_lim"],
+        "Sr_max_bot_mm"            : round(cw_bot["Sr_max"], 1),
+        "crack_bot_ok"             : cw_bot["ok"],
+        # ── crack width check — top ─────────────────────────────────────────
+        "wk_top_mm"                : round(cw_top["wk"], 4),
+        "Sr_max_top_mm"            : round(cw_top["Sr_max"], 1),
+        "crack_top_ok"             : cw_top["ok"],
+        # ── design check report text ────────────────────────────────────────
         "deck_design_check"        : design_check_text,
-        # utilization ratios
+        # ── utilization ratios ──────────────────────────────────────────────
         "ur_bot_uls"   : round(ur_bot_uls, 3),
         "ur_top_uls"   : round(ur_top_uls, 3),
         "ur_bot_sls_c" : round(ur_bot_sls_c, 3),
@@ -596,11 +650,31 @@ def design_deck_slab(bridge) -> dict:
     }
     if overhang_m > 0.01:
         result.update({
+            # ── overhang reinforcement ──────────────────────────────────────
             "rebar_overhang_yield"   : f"{fy:.0f}",
             "rebar_overhang_dia"     : f"{dia_oh:.0f}",
             "rebar_overhang_spacing" : f"{spc_oh:.0f}",
             "rebar_overhang_cover"   : f"{cover_top_mm:.0f}",
             "rebar_overhang_area"    : f"{As_oh:.0f}",
+            "d_oh_mm"                : round(d_oh_mm, 1),
+            "As_req_oh_mm2"          : round(As_req_oh, 0),
+            "Mu_oh_kNm"              : round(Mu_oh, 3),
+            "oh_ok"                  : oh_ok,
+            # ── overhang ULS moments ────────────────────────────────────────
+            "M_DL_oh_kNm"            : round(M_DL_oh, 3),
+            "M_LL_oh_kNm"            : round(M_LL_oh, 3),
+            "M_ULS_oh_kNm"           : round(M_ULS_oh, 3),
+            # ── overhang SLS stress ─────────────────────────────────────────
+            "sigma_c_oh_MPa"         : round(sc_oh["sigma_c"], 3),
+            "sigma_c_oh_lim_MPa"     : round(sc_oh["sc_lim"], 1),
+            "sigma_s_oh_MPa"         : round(sc_oh["sigma_s"], 3),
+            "sigma_s_oh_lim_MPa"     : round(sc_oh["ss_lim"], 1),
+            "sls_stress_oh_ok"       : sc_oh["ok"],
+            # ── overhang crack width ────────────────────────────────────────
+            "wk_oh_mm"               : round(cw_oh["wk"], 4),
+            "Sr_max_oh_mm"           : round(cw_oh["Sr_max"], 1),
+            "crack_oh_ok"            : cw_oh["ok"],
+            # ── overhang utilization ratios ─────────────────────────────────
             "ur_oh_uls"   : round(M_ULS_oh / Mu_oh if Mu_oh > 0 else 9.999, 3),
             "ur_oh_sls_c" : round(sc_oh["sigma_c"] / sc_oh["sc_lim"], 3),
             "ur_oh_sls_s" : round(sc_oh["sigma_s"] / sc_oh["ss_lim"], 3),

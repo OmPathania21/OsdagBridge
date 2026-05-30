@@ -778,11 +778,12 @@ class PlateGirderBridge:
     def _run_dcr_checks(self, dataset) -> None:
         """Run structural capacity checks and push DCR percentages to the output dock."""
         results = PlateGirderAnalysisResults(dataset=dataset, bridge=self.grillage_model)
-        _, engine = run_design_check(
+        _, engine, design_results = run_design_check(
             plate_girder_bridge=self,
             analysis_results=results,
             print_report=True,
         )
+        self.design_results = design_results
 
         dcr_by_id: dict[int, float] = {}
         for c in engine.checks:
