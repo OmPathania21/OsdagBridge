@@ -722,6 +722,33 @@ class BridgeComponentCheckbox(QWidget):
         self._pan_btn.toggled.connect(self._on_pan_toggled)
         layout.addWidget(self._pan_btn)
 
+        self._zoom_win_btn = QPushButton("Zoom Win", self)
+        self._zoom_win_btn.setObjectName("zoom_window_toggle")
+        self._zoom_win_btn.setCheckable(True)
+        self._zoom_win_btn.setCursor(Qt.PointingHandCursor)
+        self._zoom_win_btn.setToolTip(
+            "Zoom Window — drag a rectangle to zoom into that area"
+        )
+        self._zoom_win_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 11px; font-weight: bold;
+                background-color: white;
+                border: 1px solid #bdbdbd;
+                border-radius: 3px;
+                padding: 2px 10px;
+                color: #444;
+            }
+            QPushButton:checked {
+                background-color: #e67e22;
+                color: white;
+                border-color: #c0622a;
+            }
+            QPushButton:hover:!checked { background-color: #e6e6e6; }
+            QPushButton:pressed        { background-color: #d0d0d0; }
+        """)
+        self._zoom_win_btn.toggled.connect(self._on_zoom_window_toggled)
+        layout.addWidget(self._zoom_win_btn)
+
         layout.addStretch()
 
         # Default: Model checked; Node + Node Numbers unchecked
@@ -806,8 +833,33 @@ class BridgeComponentCheckbox(QWidget):
         """Enable / disable pan navigation mode on the 3-D viewer."""
         from osdagbridge.desktop.ui.utils.custom_3dviewer import NavMode
         viewer = self._cad.viewer
-        if viewer is not None:
-            viewer.set_navigation_mode(NavMode.PAN if checked else None)
+        if viewer is None:
+            return
+        if checked:
+            # Deactivate Zoom Window if it was on
+            if self._zoom_win_btn.isChecked():
+                self._zoom_win_btn.blockSignals(True)
+                self._zoom_win_btn.setChecked(False)
+                self._zoom_win_btn.blockSignals(False)
+            viewer.set_navigation_mode(NavMode.PAN)
+        else:
+            viewer.set_navigation_mode(None)
+
+    def _on_zoom_window_toggled(self, checked: bool) -> None:
+        """Enable / disable zoom-window mode on the 3-D viewer."""
+        from osdagbridge.desktop.ui.utils.custom_3dviewer import NavMode
+        viewer = self._cad.viewer
+        if viewer is None:
+            return
+        if checked:
+            # Deactivate Pan if it was on
+            if self._pan_btn.isChecked():
+                self._pan_btn.blockSignals(True)
+                self._pan_btn.setChecked(False)
+                self._pan_btn.blockSignals(False)
+            viewer.set_navigation_mode(NavMode.ZOOM_WINDOW)
+        else:
+            viewer.set_navigation_mode(None)
 
     def reset(self):
         """Reset to default: Model checked, all others unchecked."""
@@ -818,11 +870,13 @@ class BridgeComponentCheckbox(QWidget):
         self._checkboxes[0].blockSignals(True)
         self._checkboxes[0].setChecked(True)
         self._checkboxes[0].blockSignals(False)
-        # Also clear pan mode
-        if hasattr(self, "_pan_btn"):
-            self._pan_btn.blockSignals(True)
-            self._pan_btn.setChecked(False)
-            self._pan_btn.blockSignals(False)
+        # Also clear pan / zoom-window modes
+        for btn in ("_pan_btn", "_zoom_win_btn"):
+            b = getattr(self, btn, None)
+            if b is not None:
+                b.blockSignals(True)
+                b.setChecked(False)
+                b.blockSignals(False)
         if self._cad.viewer is not None:
             self._cad.viewer.set_navigation_mode(None)
 

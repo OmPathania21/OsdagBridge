@@ -2,8 +2,8 @@
 Custom 3D CAD Viewer with stable hover highlighting for models and ViewCube.
 """
 import math
-from PySide6.QtCore import QEvent, QPoint, QTimer, Qt
-from PySide6.QtWidgets import QToolTip, QApplication
+from PySide6.QtCore import QEvent, QPoint, QRect, QSize, QTimer, Qt
+from PySide6.QtWidgets import QApplication, QRubberBand, QToolTip
 
 from OCC.Display import backend
 backend.load_backend("pyside6")
@@ -48,9 +48,14 @@ class CustomViewer3d(qtViewer3d):
         self.destroyed.connect(self._teardown_navcube)
 
         # ---------------- Navigation state ----------------
-        self.active_nav_mode = None      # NavMode.ROTATE / PAN 
+        self.active_nav_mode = None      # NavMode.ROTATE / PAN / ZOOM_WINDOW
         self.is_dragging_nav = False
         self.last_mouse_pos = None
+
+        # ---------------- Zoom-window rubber band ----------------
+        self._zoom_win_start: QPoint | None = None   # logical pixel start
+        self._zoom_win_active: bool = False
+        self._rubber_band = QRubberBand(QRubberBand.Rectangle, self)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -262,6 +267,13 @@ class CustomViewer3d(qtViewer3d):
 
             elif self.active_nav_mode == NavMode.PAN:
                 self.view.Pan(dx, -dy)
+
+            elif self.active_nav_mode == NavMode.ZOOM_WINDOW:
+                if self._zoom_win_active and self._zoom_win_start is not None:
+                    cur = event.position().toPoint()
+                    self._rubber_band.setGeometry(
+                        QRect(self._zoom_win_start, cur).normalized()
+                    )
 
             self.last_mouse_pos = event.position()
             event.accept()
@@ -610,6 +622,15 @@ class CustomViewer3d(qtViewer3d):
             if self.active_nav_mode == NavMode.ROTATE:
                 self.view.StartRotation(x, y)
 
+            elif self.active_nav_mode == NavMode.ZOOM_WINDOW:
+                # Start rubber-band rectangle
+                self._zoom_win_start = event.position().toPoint()
+                self._zoom_win_active = True
+                self._rubber_band.setGeometry(
+                    QRect(self._zoom_win_start, QSize())
+                )
+                self._rubber_band.show()
+
             event.accept()
             return
 
@@ -624,6 +645,23 @@ class CustomViewer3d(qtViewer3d):
 
         # ---------------- NAVIGATION END ----------------
         if self.is_dragging_nav and event.button() == Qt.LeftButton:
+
+            # ── Zoom Window: execute the fit ────────────────────────────────
+            if (
+                self.active_nav_mode == NavMode.ZOOM_WINDOW
+                and self._zoom_win_active
+                and self._zoom_win_start is not None
+            ):
+                self._rubber_band.hide()
+                self._zoom_win_active = False
+
+                end = event.position().toPoint()
+                rect = QRect(self._zoom_win_start, end).normalized()
+                self._zoom_win_start = None
+
+                if rect.width() > 4 and rect.height() > 4:
+                    self._execute_zoom_window(rect)
+
             self.is_dragging_nav = False
             self.last_mouse_pos = None
             event.accept()
@@ -635,6 +673,56 @@ class CustomViewer3d(qtViewer3d):
         self.releaseMouse()
         super().mouseReleaseEvent(event)
 
+    def _execute_zoom_window(self, rect: QRect) -> None:
+        """Zoom the OCC view into the screen-space rectangle *rect* (logical px).
+
+        Coordinate convention
+        ---------------------
+        All OCC V3d_View pixel methods in this codebase (``MoveTo``,
+        ``StartRotation``, ``Rotation``, ``Pan``) receive **physical** pixel
+        coordinates with **Y measured from the top** — the same convention Qt
+        uses.  ``WindowFit`` follows the same convention; no Y-flip is needed.
+
+        Strategy: try pythonocc's high-level ``ZoomArea`` first (it calls
+        ``WindowFit`` internally), then fall back to raw ``WindowFit`` /
+        ``WindowFitAll``.
+        """
+        if not self.view:
+            return
+
+        pr = self.devicePixelRatioF()
+
+        # Logical Qt rect  →  physical-pixel coords (Y from top, no flip)
+        x1 = int(rect.left()   * pr)
+        y1 = int(rect.top()    * pr)
+        x2 = int(rect.right()  * pr)
+        y2 = int(rect.bottom() * pr)
+
+        # 1. pythonocc display wrapper  (highest-level, always present after InitDriver)
+        disp = getattr(self, "_display", None)
+        if disp is not None:
+            try:
+                disp.ZoomArea(x1, y1, x2, y2)
+                return
+            except Exception:
+                pass
+
+        # 2. V3d_View.WindowFit  (available in pythonocc-core ≥ 7.4)
+        try:
+            self.view.WindowFit(x1, y1, x2, y2)
+            self.view.Redraw()
+            return
+        except Exception:
+            pass
+
+        # 3. Alternate name used in some OCCT builds
+        try:
+            self.view.WindowFitAll(x1, y1, x2, y2)
+            self.view.Redraw()
+            return
+        except Exception:
+            pass
+
     def set_navigation_mode(self, mode):
         """
         mode: NavMode.ROTATE | NavMode.PAN | None
@@ -642,14 +730,15 @@ class CustomViewer3d(qtViewer3d):
         self.active_nav_mode = mode
 
     def _can_start_navigation(self):
-        # Pan can start from anywhere in the viewport (even empty space).
+        # Pan and Zoom-Window can start anywhere in the viewport.
         # Rotate keeps the original check so accidental drags in void
         # don't spin the model unexpectedly.
-        if self.active_nav_mode == NavMode.PAN:
+        if self.active_nav_mode in (NavMode.PAN, NavMode.ZOOM_WINDOW):
             return True
         return self.context.HasDetected()
 
 
 class NavMode:
-    ROTATE = "ROTATE"
-    PAN = "PAN"
+    ROTATE      = "ROTATE"
+    PAN         = "PAN"
+    ZOOM_WINDOW = "ZOOM_WINDOW"
