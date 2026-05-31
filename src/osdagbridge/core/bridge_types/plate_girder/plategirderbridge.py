@@ -23,6 +23,7 @@ from .initial_sizing import DEFAULT_FOOTPATH_WIDTH
 from .analyser import BridgeGrillageModel
 from .analysis_results import PlateGirderAnalysisResults
 from .designer import run_design_check
+from . import deckdesign
 from .plot_generator import (
     build_figure_sfd,
     build_figure_bmd,
@@ -48,6 +49,7 @@ from osdagbridge.core.utils.common import (
     KEY_CROSS_BRACING,
     KEY_END_DIAPHRAGM,
     KEY_DECK_CONCRETE_GRADE_BASIC,
+    KEY_DS_REINF_MATERIAL,
     DEFAULT_CRASH_BARRIER_WIDTH,
     DEFAULT_RAILING_WIDTH,
     DEFAULT_GIRDER_SPACING,
@@ -196,6 +198,7 @@ class PlateGirderBridge:
           4. Set up grillage model geometry and sections
           5. Apply dead loads
           6. Apply live loads
+          7. Run DCR checks, cross-bracing and deck-slab design
         """
         self.output_dict = dict(self.input_dict)   # mutable until end of design()
         self._build_dtos()
@@ -248,13 +251,16 @@ class PlateGirderBridge:
         self.crossbracing_design_results = self._design_cross_bracing_members()
         self.output_dict["crossbracing_design_results"] = self.crossbracing_design_results
 
+        # Deck slab design — writes "deck_design_results" into output_dict
+        self.design_deck_slab()
+
         # Freeze output_dict — no further writes allowed after this point
         self.output_dict = types.MappingProxyType(self.output_dict)
         import pprint
         sep = "=" * 60
         print(f"\n{sep}\n  OUTPUT DICT (frozen) — {len(self.output_dict)} keys\n{sep}")
         for k, v in self.output_dict.items():
-            if k == "crossbracing_design_results":
+            if k in ("crossbracing_design_results", "deck_design_results"):
                 print(f"  {k!r} :")
                 pprint.pprint(v, indent=4, width=120)
             else:
@@ -326,9 +332,14 @@ class PlateGirderBridge:
         """
         if not _DB_PATH.exists():
             raise LookupError(f"Material database not found at {_DB_PATH} in PlateGirderBridge._lookup_material")
-        
-        # Choose the table: steel or concrete
-        table = 'Steel_Grade_Properties' if material_name[0] == 'E' else 'Concrete_Grade_Properties'
+
+        # Choose the table: rebar (Fe-grades), structural steel (E-grades), or concrete
+        if material_name.startswith('Fe'):
+            table = 'Rebar_Grade_Properties'
+        elif material_name[0] == 'E':
+            table = 'Steel_Grade_Properties'
+        else:
+            table = 'Concrete_Grade_Properties'
 
         try:
             con = sqlite3.connect(_DB_PATH)
@@ -350,7 +361,7 @@ class PlateGirderBridge:
                     return float(row[0]) * MPa              # DB stores MPa as integer → convert to Pa
                 elif property == "Ultimate Tensile Strength":
                     return float(row[0]) * MPa
-                elif property in ("fck", "fctm", "Ecm"):  # Concrete properties (MPa or GPa depending on property)
+                elif property in ("fck", "fctm", "Ecm", "fy", "fu"):  # Concrete (MPa/GPa) and rebar (MPa) properties — returned as plain numbers
                     return float(row[0])
                 else:
                     raise SyntaxError(f"Unknown property '{property}' requested in table '{table}' in PlateGirderBridge._lookup_material")
@@ -1316,6 +1327,46 @@ class PlateGirderBridge:
                     )
 
         print(sep)
+
+    def design_deck_slab(self) -> dict:
+        """
+        Design the concrete deck slab from the current inputs and store the
+        result in ``self.output_dict`` under ``"deck_design_results"``.
+
+        Resolves the deck concrete (fck, fctm) and reinforcement (fy) material
+        properties from the Osdag material database via :meth:`_lookup_material`,
+        then delegates the structural design to :func:`deckdesign.design_deck_slab`.
+
+        Called from :meth:`design` while ``output_dict`` is still mutable.
+
+        Returns
+        -------
+        dict
+            Deck-design summary keyed to DECK_DESIGN_SUMMARY_SCHEMA
+            (see :func:`deckdesign.design_deck_slab`).  The same dict is stored
+            in ``self.output_dict["deck_design_results"]``.
+        """
+        concrete_grade = str(self.input_dict[KEY_DECK_CONCRETE_GRADE_BASIC]).strip()
+        rebar_grade = str(self.input_dict[KEY_DS_REINF_MATERIAL]).strip()
+
+        fck = self._lookup_material(concrete_grade, "fck")
+        fctm = self._lookup_material(concrete_grade, "fctm")
+        fy = self._lookup_material(rebar_grade, "fy")
+
+        result = deckdesign.design_deck_slab(self.input_dict, fck=fck, fctm=fctm, fy=fy)
+        self.output_dict["deck_design_results"] = result
+
+        import pprint
+        sep = "=" * 60
+        print(f"\n{sep}\n  DECK SLAB DESIGN RESULTS\n{sep}")
+        # pprint the structured summary; print the design-check report as text
+        summary = {k: v for k, v in result.items() if k != "deck_design_check"}
+        pprint.pprint(summary, indent=4, width=120)
+        if result.get("deck_design_check"):
+            print(result["deck_design_check"])
+        print(sep)
+
+        return result
 
     # ─────────────────────────────────────────────────────────────────────────
     # Plotting

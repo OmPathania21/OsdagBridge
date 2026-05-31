@@ -3,7 +3,7 @@ IRC bridge deck slab design module.
 
 Design pipeline:
   1. Read bridge parameters from the backend.
-  2. Resolve concrete / rebar properties via IRC 22:2015 Annex III.
+  2. Receive concrete / rebar properties (fck, fctm, fy) resolved from the material DB.
   3. Fetch impact factor from IRC 6:2017 Cl.208.2 / 208.3.
   4. Fetch ULS partial safety factors from IRC 6:2017 Table B.2.
   5. Compute dead-load and live-load moments (effective-width method, IRC 21 Cl.305.16).
@@ -17,34 +17,19 @@ from __future__ import annotations
 import math
 
 from osdagbridge.core.utils.codes.irc6_2017 import IRC6_2017
-from osdagbridge.core.utils.codes.irc22_2015 import IRC22_2014
 from osdagbridge.core.utils.codes.keyfile import KEY_VEHICLE
+from osdagbridge.core.utils.common import (
+    KEY_SPAN, KEY_CARRIAGEWAY_WIDTH, KEY_DECK_CONCRETE_GRADE_BASIC,
+    KEY_TS_GIRDER_SPACING, KEY_TS_DECK_OVERHANG, KEY_TS_DECK_THICKNESS,
+    KEY_DS_REINF_MATERIAL, KEY_DS_TOP_CLEAR_COVER, KEY_DS_BOTTOM_CLEAR_COVER,
+    KEY_DS_REINF_BOUNDS,
+)
 
 # ── constants ─────────────────────────────────────────────────────────────────
 _STANDARD_DIAS_MM = [8, 10, 12, 16, 20, 25, 32]
 _SPACING_MAX_MM = 300.0
 _SPACING_MIN_MM = 75.0
 _SPACING_ROUND_MM = 5.0               # round spacing down to nearest 5 mm
-
-
-# ── material helpers ──────────────────────────────────────────────────────────
-
-def _concrete_props(grade: str) -> dict:
-    """Return fck (MPa) and fctm (MPa) from IRC 22:2015 Annex III."""
-    table = IRC22_2014.cl_602_annexIII_concrete_properties()
-    key = grade.strip().upper()
-    if key not in table:
-        raise ValueError(f"Unknown concrete grade {grade!r} — not found in IRC 22:2015 Annex III table.")
-    return {"fck": float(table[key]["fck"]), "fctm": float(table[key]["fctm"])}
-
-
-def _rebar_fy(grade: str) -> float:
-    """Return yield strength (MPa) for a rebar grade string (e.g. 'Fe 415')."""
-    table = IRC22_2014.cl_602_annexIII_reinforcement_steel_properties()
-    normalized = grade.replace(" ", "")  # "Fe 415" → "Fe415"
-    if normalized not in table:
-        raise ValueError(f"Unknown rebar grade {grade!r} — not found in IRC 22:2015 Annex III table.")
-    return float(table[normalized]["fy"])
 
 
 # ── structural mechanics helpers ──────────────────────────────────────────────
@@ -228,14 +213,21 @@ def _wheel_contact_width_m(vehicle_class: str) -> float:
 
 # ── main design function ──────────────────────────────────────────────────────
 
-def design_deck_slab(bridge) -> dict:
+def design_deck_slab(input_dict: dict, fck: float, fctm: float, fy: float) -> dict:
     """
     Design the concrete deck slab of a plate girder bridge.
 
     Parameters
     ----------
-    bridge : PlateGirderBridge
-        Backend instance after design() has been called.
+    input_dict : dict
+        Flat bridge input dictionary (``PlateGirderBridge.input_dict``) populated
+        before/after design() has been run.
+    fck : float
+        Characteristic concrete compressive strength (MPa), from the material DB.
+    fctm : float
+        Mean concrete tensile strength (MPa), from the material DB.
+    fy : float
+        Reinforcement characteristic yield strength (MPa), from the material DB.
 
     Returns
     -------
@@ -246,39 +238,29 @@ def design_deck_slab(bridge) -> dict:
         ur_{bot,top,oh}_{uls,sls_c,sls_s,crack},
         deck_design_check.
     """
-    from osdagbridge.core.utils.common import (
-        KEY_SPAN, KEY_CARRIAGEWAY_WIDTH, KEY_DECK_CONCRETE_GRADE_BASIC,
-        KEY_TS_GIRDER_SPACING, KEY_TS_DECK_OVERHANG, KEY_TS_DECK_THICKNESS,
-        KEY_DS_REINF_MATERIAL, KEY_DS_TOP_CLEAR_COVER, KEY_DS_BOTTOM_CLEAR_COVER,
-        KEY_DS_REINF_BOUNDS, DEFAULT_GIRDER_SPACING,
-    )
-
     # ── 1. read bridge parameters ─────────────────────────────────────────────
-    basic = getattr(bridge, "basic_inputs", {})
-    additional = getattr(bridge, "additional_inputs", {})
+    inp = input_dict
 
-    span_m = float(basic.get(KEY_SPAN, 30.0))
-    cw_m = float(basic.get(KEY_CARRIAGEWAY_WIDTH, 7.5))
-    concrete_grade = str(basic.get(KEY_DECK_CONCRETE_GRADE_BASIC, "M30")).strip()
+    span_m = float(inp[KEY_SPAN])
+    cw_m = float(inp[KEY_CARRIAGEWAY_WIDTH])
+    concrete_grade = str(inp[KEY_DECK_CONCRETE_GRADE_BASIC]).strip()
 
-    beam_spacing_m = float(additional.get(KEY_TS_GIRDER_SPACING, DEFAULT_GIRDER_SPACING))
-    overhang_m = float(additional.get(KEY_TS_DECK_OVERHANG, 0.0))
-    deck_t_mm = float(additional.get(KEY_TS_DECK_THICKNESS, 200.0))
+    beam_spacing_m = float(inp[KEY_TS_GIRDER_SPACING])
+    overhang_m = float(inp[KEY_TS_DECK_OVERHANG])
+    deck_t_mm = float(inp[KEY_TS_DECK_THICKNESS])
 
-    rebar_grade = str(additional.get(KEY_DS_REINF_MATERIAL, "Fe 415")).strip()
-    cover_top_mm = float(additional.get(KEY_DS_TOP_CLEAR_COVER, 50.0))
-    cover_bot_mm = float(additional.get(KEY_DS_BOTTOM_CLEAR_COVER, 50.0))
+    rebar_grade = str(inp[KEY_DS_REINF_MATERIAL]).strip()
+    cover_top_mm = float(inp[KEY_DS_TOP_CLEAR_COVER])
+    cover_bot_mm = float(inp[KEY_DS_BOTTOM_CLEAR_COVER])
 
-    bounds = additional.get(KEY_DS_REINF_BOUNDS, {}) or {}
-    lower_dia = int(bounds.get("lower") or _STANDARD_DIAS_MM[0])
-    upper_dia = int(bounds.get("upper") or _STANDARD_DIAS_MM[-1])
-    allowed_dias = [d for d in _STANDARD_DIAS_MM if lower_dia <= d <= upper_dia] or _STANDARD_DIAS_MM
+    bounds = inp[KEY_DS_REINF_BOUNDS]
+    # lower/upper may be None — an explicit "no bound", i.e. open at that end.
+    lower_dia = int(bounds["lower"]) if bounds["lower"] is not None else _STANDARD_DIAS_MM[0]
+    upper_dia = int(bounds["upper"]) if bounds["upper"] is not None else _STANDARD_DIAS_MM[-1]
+    allowed_dias = [d for d in _STANDARD_DIAS_MM if lower_dia <= d <= upper_dia]
 
-    # ── 2. material properties ────────────────────────────────────────────────
-    conc = _concrete_props(concrete_grade)
-    fck = conc["fck"]
-    fctm = conc["fctm"]
-    fy = _rebar_fy(rebar_grade)
+    # ── 2. material properties (fck, fctm, fy resolved from the material DB) ───
+    # concrete_grade / rebar_grade are read above only for the report text.
 
     # ── 3. governing vehicle & IRC 6 loads ────────────────────────────────────
     vehicle_class = _governing_vehicle(cw_m)

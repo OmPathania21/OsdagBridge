@@ -117,8 +117,7 @@ class DeckDesign(QDialog):
         backend = getattr(self._main_window, "backend", None)
         if backend is not None and getattr(backend, "grillage_geometry", None) is not None:
             try:
-                from osdagbridge.core.bridge_types.plate_girder.deckdesign import design_deck_slab
-                result = design_deck_slab(backend)
+                result = backend.output_dict.get("deck_design_results")
                 self.load_data(result)
             except Exception:
                 self.design_check_text.setHtml(
