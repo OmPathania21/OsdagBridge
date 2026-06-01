@@ -196,13 +196,22 @@ class IRC6_2017:
 
         Returns allowable clearance values.
         """
-        if carriageway_width < 5.3:
-            raise ValueError("Clear carriageway width must be at least 5.3 m")
+        if carriageway_width < 0:
+            raise ValueError("Carriageway width cannot be negative")
 
         f = 0.15  # meters (150 mm)
 
-        if 5.3 <= carriageway_width <= 6.1:
+        # Get number of design lanes from Table 6
+        design_lanes = IRC6_2017.table_6(carriageway_width)  # replace IRC with your class name if needed
+
+        # Single-lane carriageway
+        if design_lanes == 1:
+            g = (0.0, 0.0)
+
+        # Multi-lane carriageway
+        elif 5.3 <= carriageway_width <= 6.1:
             g = (0.4, 1.2)  # allowable range
+
         else:  # > 6.1 m
             g = (1.2, 1.2)  # fixed value
 
