@@ -931,7 +931,7 @@ class BridgeComponentCheckbox(QWidget):
     # key=None  → "Model" pseudo-checkbox (selects all base components)
     # key in OVERLAY_KEYS → independent toggle, not affected by Model
     COMPONENTS = [
-        ("Model",         None),
+        ("Bridge",         None),
         ("Girder",        "Girder"),
         ("Deck",          "Deck"),
         ("Cross Bracing", "Cross Bracing"),
