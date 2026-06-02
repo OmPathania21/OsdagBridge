@@ -253,10 +253,15 @@ class CrossBracingForces:
             )
 
         # --- Girder section dimensions (metres) ---
+        # Representative (first) girder; resolve_girder_value tolerates both the
+        # per-girder dynamic keys and legacy scalar keys.
+        from osdagbridge.core.bridge_types.plate_girder.plategirderbridge import (
+            resolve_girder_value as _gv,
+        )
         inp = self.bridge.input_dict
-        self.D      = float(inp[KEY_GIRDER_DEPTH])
-        self.tf_top = float(inp[KEY_GIRDER_TOP_FLANGE_THICKNESS])
-        self.tf_bot = float(inp[KEY_GIRDER_BOTTOM_FLANGE_THICKNESS])
+        self.D      = float(_gv(inp, KEY_GIRDER_DEPTH))
+        self.tf_top = float(_gv(inp, KEY_GIRDER_TOP_FLANGE_THICKNESS))
+        self.tf_bot = float(_gv(inp, KEY_GIRDER_BOTTOM_FLANGE_THICKNESS))
         self.h = self.D * self.depth_ratio
         self.s = float(inp[KEY_TS_GIRDER_SPACING])
 

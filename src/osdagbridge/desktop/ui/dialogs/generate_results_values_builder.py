@@ -220,17 +220,25 @@ def resolve_material_properties_concrete(input_dict: dict, bridge=None) -> dict 
 # ── Resolvers — Member Definitions ───────────────────────────────────────────
 
 def resolve_girder_section_properties(input_dict: dict, bridge=None) -> dict | None:
-    depth     = input_dict.get(KEY_GIRDER_DEPTH)
-    bf_top    = input_dict.get(KEY_GIRDER_TOP_FLANGE_WIDTH)
-    tf_top    = input_dict.get(KEY_GIRDER_TOP_FLANGE_THICKNESS)
-    bf_bot    = input_dict.get(KEY_GIRDER_BOTTOM_FLANGE_WIDTH)
-    tf_bot    = input_dict.get(KEY_GIRDER_BOTTOM_FLANGE_THICKNESS)
-    tw        = input_dict.get(KEY_GIRDER_WEB_THICKNESS)
-    area      = input_dict.get(KEY_GIRDER_SECTIONAL_AREA)
-    iz        = input_dict.get(KEY_GIRDER_SECTIONAL_IZ)
-    n_girders = input_dict.get(KEY_TS_NO_OF_GIRDERS)
+    from osdagbridge.core.bridge_types.plate_girder.plategirderbridge import (
+        resolve_girder_value,
+    )
 
-    if not _has(depth, bf_top, tf_top, bf_bot, tf_bot, tw, area, iz, n_girders):
+    def _gv(base_key, idx):
+        """Per-girder value (idx 0-based) or None if absent — no exceptions."""
+        try:
+            return resolve_girder_value(input_dict, base_key, idx)
+        except KeyError:
+            return None
+
+    n_girders = input_dict.get(KEY_TS_NO_OF_GIRDERS)
+    # Probe girder 0 so we can bail out cleanly when no girder data is present.
+    if not _has(
+        _gv(KEY_GIRDER_DEPTH, 0), _gv(KEY_GIRDER_TOP_FLANGE_WIDTH, 0),
+        _gv(KEY_GIRDER_TOP_FLANGE_THICKNESS, 0), _gv(KEY_GIRDER_BOTTOM_FLANGE_WIDTH, 0),
+        _gv(KEY_GIRDER_BOTTOM_FLANGE_THICKNESS, 0), _gv(KEY_GIRDER_WEB_THICKNESS, 0),
+        _gv(KEY_GIRDER_SECTIONAL_AREA, 0), _gv(KEY_GIRDER_SECTIONAL_IZ, 0), n_girders,
+    ):
         return None
 
     try:
@@ -238,24 +246,21 @@ def resolve_girder_section_properties(input_dict: dict, bridge=None) -> dict | N
     except Exception:
         return None
 
-    row = [
-        EMPTY,                  # Girder label — filled per-row below
-        _mm(depth),
-        _mm(bf_top),
-        _mm(bf_bot),
-        _mm(tf_top),
-        _mm(tf_bot),
-        _mm(tw),
-        _mm2(area),
-        _mm4(iz),
-        EMPTY,                  # Cross-section class — not yet resolved from inputs
-    ]
-
     rows = []
     for i in range(1, n + 1):
-        r = list(row)
-        r[0] = f"Girder {i}"
-        rows.append(r)
+        gi = i - 1
+        rows.append([
+            f"Girder {i}",
+            _mm(_gv(KEY_GIRDER_DEPTH, gi)),
+            _mm(_gv(KEY_GIRDER_TOP_FLANGE_WIDTH, gi)),
+            _mm(_gv(KEY_GIRDER_BOTTOM_FLANGE_WIDTH, gi)),
+            _mm(_gv(KEY_GIRDER_TOP_FLANGE_THICKNESS, gi)),
+            _mm(_gv(KEY_GIRDER_BOTTOM_FLANGE_THICKNESS, gi)),
+            _mm(_gv(KEY_GIRDER_WEB_THICKNESS, gi)),
+            _mm2(_gv(KEY_GIRDER_SECTIONAL_AREA, gi)),
+            _mm4(_gv(KEY_GIRDER_SECTIONAL_IZ, gi)),
+            EMPTY,              # Cross-section class — not yet resolved from inputs
+        ])
 
     return {
         "id":    "girder_section_properties",

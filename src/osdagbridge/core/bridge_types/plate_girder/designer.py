@@ -356,13 +356,21 @@ class BridgeConfig:
         )
 
         inp = bridge.input_dict
+        # NOTE: the DCR capacity check evaluates the representative (first) girder.
+        # The grillage analysis model supports distinct per-girder geometry (see
+        # analyser._assign_girder_members), but this check is not yet run per
+        # girder. Girder geometry is read through resolve_girder_value so it works
+        # whether the dict carries per-girder dynamic keys or legacy scalar keys.
+        from osdagbridge.core.bridge_types.plate_girder.plategirderbridge import (
+            resolve_girder_value as _gv,
+        )
         section = SteelSection(
-            D=inp[KEY_GIRDER_DEPTH]                   * 1000,
-            bf_top=inp[KEY_GIRDER_TOP_FLANGE_WIDTH]        * 1000,
-            tf_top=inp[KEY_GIRDER_TOP_FLANGE_THICKNESS]    * 1000,
-            bf_bot=inp[KEY_GIRDER_BOTTOM_FLANGE_WIDTH]     * 1000,
-            tf_bot=inp[KEY_GIRDER_BOTTOM_FLANGE_THICKNESS] * 1000,
-            tw=inp[KEY_GIRDER_WEB_THICKNESS]               * 1000,
+            D=_gv(inp, KEY_GIRDER_DEPTH)                   * 1000,
+            bf_top=_gv(inp, KEY_GIRDER_TOP_FLANGE_WIDTH)        * 1000,
+            tf_top=_gv(inp, KEY_GIRDER_TOP_FLANGE_THICKNESS)    * 1000,
+            bf_bot=_gv(inp, KEY_GIRDER_BOTTOM_FLANGE_WIDTH)     * 1000,
+            tf_bot=_gv(inp, KEY_GIRDER_BOTTOM_FLANGE_THICKNESS) * 1000,
+            tw=_gv(inp, KEY_GIRDER_WEB_THICKNESS)               * 1000,
         )
 
         geom = bridge.grillage_geometry

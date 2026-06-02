@@ -29,7 +29,7 @@ from osdagbridge.core.bridge_types.plate_girder.bridge_geometry import BridgeGeo
 from osdagbridge.core.bridge_types.plate_girder.load_placement import LoadPlacementManager
 import warnings
 from osdagbridge.core.bridge_types.plate_girder.analysis_results import PlateGirderAnalysisResults
-from osdagbridge.core.bridge_types.plate_girder.dto import (SectionProperties, SteelProperties, MaterialProperties, GrillageGeometry, DeckLayoutProperties)
+from osdagbridge.core.bridge_types.plate_girder.dto import (SectionProperties, SteelProperties, ConcreteProperties, MaterialProperties, GrillageGeometry, DeckLayoutProperties)
 from osdagbridge.core.bridge_types.plate_girder.results_data import restructure_data as restructure_data_direct
 
 
@@ -44,22 +44,28 @@ class BridgeGrillageModel:
         # -------------------- SECTIONS --------------------
         # Sections are set via create_sections()
         self.edge_longitudinal_section = None
-        self.longitudinal_section = None
+        self.longitudinal_section = None          # representative (girder 0) — back-compat
         self.transverse_section = None
         self.end_transverse_section = None
+        # One ospgrillage section per main girder (set by create_sections()).
+        self.girder_sections: list = []
 
         # Cross-section properties (DTO), stashed by create_sections() so that
         # load magnitudes can be derived from actual geometry instead of
         # hard-coded placeholder values.
-        self.longitudinal_props: SectionProperties | None = None
+        self.longitudinal_props: SectionProperties | None = None  # representative (girder 0)
         self.edge_longitudinal_props: SectionProperties | None = None
+        # One SectionProperties DTO per main girder, ordered by girder index.
+        self.girder_props: list = []
 
         # -------------------- GRILLAGE MEMBERS --------------------
         # Members are set via create_material() once sections and material are ready
-        self.longitudinal_beam = None
+        self.longitudinal_beam = None            # representative (girder 0) — back-compat
         self.edge_longitudinal_beam = None
         self.transverse_slab = None
         self.end_transverse_slab = None
+        # One ospgrillage member per main girder (set by assign_members()).
+        self.girder_beams: list = []
 
         # -------------------- GEOMETRY --------------------
         # Geometry is set via set_geometry()
@@ -138,35 +144,41 @@ class BridgeGrillageModel:
     #   CREATE SECTIONS
     # ============================================================
     def create_sections(self,
-                        longitudinal: SectionProperties,
+                        girder_sections: list[SectionProperties],
                         edge_longitudinal: SectionProperties,
                         transverse: SectionProperties,
                         end_transverse: SectionProperties):
         """
-        Creates all four grillage sections from user-supplied SectionProperties.
+        Creates all grillage sections from user-supplied SectionProperties.
 
         Parameters
         ----------
-        longitudinal : SectionProperties
-            Properties for the interior longitudinal beam.
+        girder_sections : list[SectionProperties]
+            One entry per main girder, ordered by girder index. A single-element
+            list reproduces the legacy uniform-girder behaviour.
         edge_longitudinal : SectionProperties
-            Properties for the edge longitudinal beam.
+            Properties for the overhang edge beam.
         transverse : SectionProperties
             Properties for the transverse slab (unit_width=True).
         end_transverse : SectionProperties
             Properties for the end transverse slab.
         """
-        self.longitudinal_props = longitudinal
-        self.edge_longitudinal_props = edge_longitudinal
+        if not girder_sections:
+            raise ValueError("create_sections requires at least one girder section.")
 
-        self.longitudinal_section = og.create_section(
-            A=longitudinal.A,
-            J=longitudinal.J,
-            Iz=longitudinal.Iz,
-            Iy=longitudinal.Iy,
-            Az=longitudinal.Az,
-            Ay=longitudinal.Ay,
-        )
+        # Per-girder DTOs and ospgrillage sections.
+        self.girder_props = list(girder_sections)
+        self.girder_sections = [
+            og.create_section(A=s.A, J=s.J, Iz=s.Iz, Iy=s.Iy, Az=s.Az, Ay=s.Ay)
+            for s in girder_sections
+        ]
+
+        # Representative girder 0 retained under the legacy attribute names so
+        # existing consumers (self-weight fallback, verify_sections, etc.) work.
+        self.longitudinal_props = self.girder_props[0]
+        self.longitudinal_section = self.girder_sections[0]
+
+        self.edge_longitudinal_props = edge_longitudinal
 
         self.edge_longitudinal_section = og.create_section(
             A=edge_longitudinal.A,
@@ -221,9 +233,12 @@ class BridgeGrillageModel:
         Must be called after both ``create_sections()`` and
         ``create_material()`` have been called.
         """
-        self.longitudinal_beam = og.create_member(
-            section=self.longitudinal_section, material=self.steel_custom
-        )
+        self.girder_beams = [
+            og.create_member(section=sec, material=self.steel_custom)
+            for sec in self.girder_sections
+        ]
+        # Representative girder 0 under the legacy attribute name.
+        self.longitudinal_beam = self.girder_beams[0]
         self.edge_longitudinal_beam = og.create_member(
             section=self.edge_longitudinal_section, material=self.steel_custom
         )
@@ -264,16 +279,13 @@ class BridgeGrillageModel:
             mesh_type="Oblique"  # ('Ortho' or 'Oblique')
         )
 
-        # Assign members
-        self.model.set_member(self.longitudinal_beam, member="interior_main_beam")
-        self.model.set_member(self.longitudinal_beam, member="exterior_main_beam_1")
-        self.model.set_member(self.longitudinal_beam, member="exterior_main_beam_2")
-        
-        # Assign edge properties only if overhang exists; otherwise treat as normal girders
+        # Assign members — one section per main girder.
+        self._assign_girder_members()
+
+        # Assign edge properties only if overhang exists; otherwise the two outer
+        # grid lines are real girders and are already handled by the loop above.
         if self.edge_dist > 0:
             self.model.set_member(self.edge_longitudinal_beam, member="edge_beam")
-        else:
-            self.model.set_member(self.longitudinal_beam, member="edge_beam")
         self.model.set_member(self.transverse_slab, member="transverse_slab")
         self.model.set_member(self.end_transverse_slab, member="start_edge")
         self.model.set_member(self.end_transverse_slab, member="end_edge")
@@ -283,6 +295,57 @@ class BridgeGrillageModel:
 
         # update geometry with model
         # self.geometry.model = self.model
+
+    def _assign_girder_members(self):
+        """
+        Assign one section per main girder by isolating each longitudinal z_group.
+
+        ospgrillage groups longitudinal grid lines into z_groups — one per girder
+        line. We build the ordered list of main-girder z_groups (dropping the two
+        overhang edge-beam lines when an overhang exists) and assign
+        ``self.girder_beams[i]`` to the i-th line using the inclusive
+        ``only_group`` targeting added to ospgrillage's ``set_member``.
+
+        z_groups are numbered ascending with transverse (z) position, so index i
+        of ``main_groups`` lines up with girder index i of ``self.girder_beams``.
+        """
+        model = self.model
+        zg = model.common_grillage_element_z_group
+
+        # All longitudinal z_groups, ascending by transverse (z) position.
+        long_cats = (
+            "edge_beam", "exterior_main_beam_1",
+            "interior_main_beam", "exterior_main_beam_2",
+        )
+        all_long_groups = sorted({g for cat in long_cats for g in zg.get(cat, [])})
+
+        # With an overhang the two outermost lines are edge beams (handled by the
+        # caller); without one, every longitudinal line is a structural girder.
+        main_groups = all_long_groups[1:-1] if self.edge_dist > 0 else all_long_groups
+
+        n_beams = len(self.girder_beams)
+        if len(main_groups) != n_beams:
+            warnings.warn(
+                f"_assign_girder_members: {len(main_groups)} girder grid lines but "
+                f"{n_beams} girder section(s); unmatched lines reuse the last section."
+            )
+
+        def _member_for_group(g: int) -> str:
+            # Any category whose list contains g is a valid set_member target;
+            # check the single-line categories before the interior/edge lists.
+            for cat in (
+                "exterior_main_beam_1", "exterior_main_beam_2",
+                "interior_main_beam", "edge_beam",
+            ):
+                if g in zg.get(cat, []):
+                    return cat
+            raise ValueError(
+                f"z_group {g} not found in any longitudinal member category"
+            )
+
+        for i, g in enumerate(main_groups):
+            beam = self.girder_beams[i] if i < n_beams else self.girder_beams[-1]
+            model.set_member(beam, member=_member_for_group(g), only_group=g)
 
     # ============================================================
     #   PLOT THE MODEL
@@ -307,15 +370,16 @@ class BridgeGrillageModel:
     def create_self_weight_load(self, model=None, L=None):
         """Creates beam self weight distributed along length.
 
-        Magnitude is derived from the interior longitudinal girder section
-        area (m²) × 78.5 kN/m³, so it tracks the actual section chosen by
-        initial sizing rather than a hard-coded placeholder.
+        Magnitude is derived per girder from its own section area (m²) × 78.5
+        kN/m³, so each loaded grid line tracks the actual section assigned to it
+        rather than a single shared value. When all girders share one section
+        this reduces to the previous uniform behaviour.
         """
         model = model or self.model
         if model is None:
             raise ValueError("Model is not available. Create model before adding loads.")
 
-        if self.longitudinal_props is None:
+        if not self.girder_props:
             raise ValueError(
                 "create_sections() must be called before create_self_weight_load(): "
                 "girder cross-section area is required to compute self weight."
@@ -325,13 +389,31 @@ class BridgeGrillageModel:
 
         start_beam = 0
         end_beam = L
-        A_girder_m2 = self.longitudinal_props.A
-        beam_mag = girder_self_weight_kN_m(A_girder_m2, STEEL_UNIT_WEIGHT_kN_m3) * kN / m  # N/m
-        print(f"Self weight line load magnitude: {beam_mag:.2f} N/m")
+
+        # Per-girder areas ordered by ascending transverse (z) position.
+        girder_areas = [p.A for p in self.girder_props]
+
+        # Ordered transverse positions of the main girders (ascending z); used to
+        # map each loaded grid line back to its girder index.
+        all_z_sorted = sorted(model.Mesh_obj.noz)
+        main_z_sorted = all_z_sorted[1:-1] if self.edge_dist > 0 else all_z_sorted
+
+        def _area_for_z(z: float) -> float:
+            if not main_z_sorted:
+                return girder_areas[0]
+            idx = min(
+                range(len(main_z_sorted)),
+                key=lambda k: abs(main_z_sorted[k] - z),
+            )
+            return girder_areas[idx] if idx < len(girder_areas) else girder_areas[-1]
+
         DL_self_weight = og.create_load_case(name="girder self weight")
 
         # iterate through all grillage transverse positions (except extreme edges)
         for z_pos in model.Mesh_obj.noz[1:-1]:
+            A_girder_m2 = _area_for_z(z_pos)
+            beam_mag = girder_self_weight_kN_m(A_girder_m2, STEEL_UNIT_WEIGHT_kN_m3) * kN / m  # N/m
+            print(f"Self weight line load @ z={z_pos:.3f} m: {beam_mag:.2f} N/m (A={A_girder_m2:.5f} m²)")
             p1 = og.create_load_vertex(x=start_beam, z=z_pos, p=beam_mag)
             p2 = og.create_load_vertex(x=end_beam, z=z_pos, p=beam_mag)
 
@@ -2035,15 +2117,26 @@ if __name__ == "__main__":
     ))
 
     # --- Test section values (replace with UI inputs later) ---
+    # n_l=7 with edge_dist>0 → 5 structural main girders. Give each a DISTINCT
+    # area (linearly scaled) to exercise per-girder section assignment.
+    _base = SectionProperties(
+        A=1.025 * m ** 2,
+        J=0.1878 * m ** 3,
+        Iz=0.3694 * m ** 4,
+        Iy=0.3634 * m ** 4,
+        Az=0.4979 * m ** 2,
+        Ay=0.309 * m ** 2,
+    )
+    n_main = bridge.n_l - 2 if bridge.edge_dist > 0 else bridge.n_l
+    girder_sections = [
+        SectionProperties(
+            A=_base.A * (1.0 + 0.1 * i),
+            J=_base.J, Iz=_base.Iz, Iy=_base.Iy, Az=_base.Az, Ay=_base.Ay,
+        )
+        for i in range(n_main)
+    ]
     bridge.create_sections(
-        longitudinal=SectionProperties(
-            A=1.025 * m ** 2,
-            J=0.1878 * m ** 3,
-            Iz=0.3694 * m ** 4,
-            Iy=0.3634 * m ** 4,
-            Az=0.4979 * m ** 2,
-            Ay=0.309 * m ** 2,
-        ),
+        girder_sections=girder_sections,
         edge_longitudinal=SectionProperties(
             A=0.934 * m ** 2,
             J=0.1857 * m ** 3,
@@ -2071,14 +2164,22 @@ if __name__ == "__main__":
     )
 
     # --- Test material values (replace with UI inputs later) ---
-    bridge.create_material(SteelProperties(
-        grade="steel",
-        E=200 * GPa,
-        v=0.3,
-        rho=78.5 * kN / m ** 3,
-        Fy=250 * MPa,
-        E0=200 * GPa,
-        b=0.01,
+    bridge.create_material(MaterialProperties(
+        steel_prop=SteelProperties(
+            grade="steel",
+            E=200 * GPa,
+            v=0.3,
+            rho=78.5 * kN / m ** 3,
+            Fy=250 * MPa,
+            E0=200 * GPa,
+            b=0.01,
+        ),
+        concrete_prop=ConcreteProperties(
+            grade="M30",
+            fck=30.0,
+            fctm=2.9,
+            Ecm=31.0,
+        ),
     ))
 
     bridge.assign_members()
@@ -2102,14 +2203,35 @@ if __name__ == "__main__":
 
     results = bridge.analyze()
 
+    # --- Verify per-girder sections reached the OpenSees elements ---
+    import re as _re
+    zg = bridge.model.common_grillage_element_z_group
+    long_cats = ("edge_beam", "exterior_main_beam_1", "interior_main_beam", "exterior_main_beam_2")
+    all_long = sorted({g for c in long_cats for g in zg.get(c, [])})
+    main_groups = all_long[1:-1] if bridge.edge_dist > 0 else all_long
+    print("\n" + "=" * 60)
+    print("  PER-GIRDER SECTION VERIFICATION")
+    print("=" * 60)
+    for i, g in enumerate(main_groups):
+        cat = next(c for c in ("exterior_main_beam_1", "exterior_main_beam_2",
+                               "interior_main_beam", "edge_beam") if g in zg.get(c, []))
+        eles = bridge.model.get_element(member=cat, options="elements",
+                                        z_group_num=zg[cat].index(g))
+        cmd = bridge.model.element_command_list.get(eles[0]) if eles else ""
+        # element cmd: ...*[ni, nj], *[A, E, G, J, Iy, Iz], ... — area is the
+        # first entry of the SECOND bracket group.
+        brackets = _re.findall(r"\*\[([^\]]+)\]", cmd)
+        elem_A = brackets[1].split(",")[0].strip() if len(brackets) > 1 else "?"
+        print(f"  girder {i} z_group {g:<2} [{cat:<20}] "
+              f"expected A={girder_sections[i].A:.4f}  element A={elem_A}")
+    print("=" * 60)
+
     result_handler = PlateGirderAnalysisResults(
         dataset=results,
         bridge=bridge,
         edge_dist=bridge.edge_dist
     )
 
-
-    result_handler.run_interactive_viewer()
-
+    # result_handler.run_interactive_viewer()
     # result_handler.print_moving_load_trace()
 
