@@ -116,6 +116,34 @@ _STEEL_B        = 0.01         # Strain-hardening ratio
 _STEEL_FY_DEFAULT = 250 * MPa  # Fallback Fy if material not found in DB (Pa)
 
 
+def resolve_girder_value(source: dict, base_key: str, i: int | None = None):
+    """
+    Resolve a girder property from an input/output dict, tolerating both the
+    per-girder dynamic key scheme and the legacy scalar key.
+
+    Per-girder values are stored under ``<base_key>_G{i+1}M1`` (see
+    ``defaults.solve_extend_basic_input_dict``). Resolution order:
+
+      1. ``<base_key>_G{i+1}M1`` — the requested girder (only when ``i`` given),
+      2. ``<base_key>``          — the legacy scalar key, if still populated,
+      3. ``<base_key>_G1M1``     — first girder, the representative fallback used
+                                   for edge beams / transverse members and any
+                                   consumer that does not care about a specific
+                                   girder.
+
+    Raises ``KeyError(base_key)`` if none of the candidates are present.
+    """
+    candidates = []
+    if i is not None:
+        candidates.append(f"{base_key}_G{i + 1}M1")
+    candidates.append(base_key)
+    candidates.append(f"{base_key}_G1M1")
+    for key in candidates:
+        if key in source:
+            return source[key]
+    raise KeyError(base_key)
+
+
 class PlateGirderBridge:
     """Core backend for Plate Girder Bridge."""
 
@@ -216,7 +244,7 @@ class PlateGirderBridge:
         dataset = self._reanalyze_with_dedup()
 
         inp = self.input_dict
-        print(
+        header = (
             f"\n{'-'*60}\n"
             f"  PLATE GIRDER BRIDGE - DESIGN SUMMARY\n"
             f"{'-'*60}\n"
@@ -225,25 +253,28 @@ class PlateGirderBridge:
             f"  No. of girders        : {inp[KEY_TS_NO_OF_GIRDERS]}\n"
             f"  Girder spacing        : {inp[KEY_TS_GIRDER_SPACING] * 1e3:.1f} mm\n"
             f"  Deck overhang         : {inp[KEY_TS_DECK_OVERHANG] * 1e3:.1f} mm\n"
-            f"{'-'*60}\n"
-            f"  GIRDER CROSS-SECTION (all dimensions in mm)\n"
-            f"{'-'*60}\n"
-            f"  Total depth      D    : {inp[KEY_GIRDER_DEPTH]                   * 1e3:.1f}\n"
-            f"  Web depth        d_w  : {inp[KEY_GIRDER_WEB_DEPTH]               * 1e3:.1f}\n"
-            f"  Web thickness    t_w  : {inp[KEY_GIRDER_WEB_THICKNESS]           * 1e3:.1f}\n"
-            f"  Top flange width B_ft : {inp[KEY_GIRDER_TOP_FLANGE_WIDTH]        * 1e3:.1f}\n"
-            f"  Top flange thk   T_ft : {inp[KEY_GIRDER_TOP_FLANGE_THICKNESS]    * 1e3:.1f}\n"
-            f"  Bot flange width B_fb : {inp[KEY_GIRDER_BOTTOM_FLANGE_WIDTH]     * 1e3:.1f}\n"
-            f"  Bot flange thk   T_fb : {inp[KEY_GIRDER_BOTTOM_FLANGE_THICKNESS] * 1e3:.1f}\n"
-            f"{'-'*60}\n"
-            f"  SECTION PROPERTIES (SI units)\n"
-            f"{'-'*60}\n"
-            f"  Area   A  : {inp[KEY_GIRDER_SECTIONAL_AREA]:.6f} m^2\n"
-            f"  I_z       : {inp[KEY_GIRDER_SECTIONAL_IZ]:.6f} m^4\n"
-            f"  I_y       : {inp[KEY_GIRDER_SECTIONAL_IY]:.6f} m^4\n"
-            f"  I_t (J)   : {inp[KEY_GIRDER_TORSION_CONSTANT_IT]:.6f} m^3\n"
-            f"{'-'*60}\n"
         )
+        print(header)
+        # Per-girder cross-section block (each girder may differ).
+        for gi in range(self._girder_count()):
+            v = lambda key: self._girder_value(key, gi)
+            print(
+                f"{'-'*60}\n"
+                f"  GIRDER G{gi + 1} CROSS-SECTION (mm) / PROPERTIES (SI)\n"
+                f"{'-'*60}\n"
+                f"  Total depth      D    : {v(KEY_GIRDER_DEPTH)                   * 1e3:.1f}\n"
+                f"  Web depth        d_w  : {v(KEY_GIRDER_WEB_DEPTH)               * 1e3:.1f}\n"
+                f"  Web thickness    t_w  : {v(KEY_GIRDER_WEB_THICKNESS)           * 1e3:.1f}\n"
+                f"  Top flange width B_ft : {v(KEY_GIRDER_TOP_FLANGE_WIDTH)        * 1e3:.1f}\n"
+                f"  Top flange thk   T_ft : {v(KEY_GIRDER_TOP_FLANGE_THICKNESS)    * 1e3:.1f}\n"
+                f"  Bot flange width B_fb : {v(KEY_GIRDER_BOTTOM_FLANGE_WIDTH)     * 1e3:.1f}\n"
+                f"  Bot flange thk   T_fb : {v(KEY_GIRDER_BOTTOM_FLANGE_THICKNESS) * 1e3:.1f}\n"
+                f"  Area   A  : {v(KEY_GIRDER_SECTIONAL_AREA):.6f} m^2\n"
+                f"  I_z       : {v(KEY_GIRDER_SECTIONAL_IZ):.6f} m^4\n"
+                f"  I_y       : {v(KEY_GIRDER_SECTIONAL_IY):.6f} m^4\n"
+                f"  I_t (J)   : {v(KEY_GIRDER_TORSION_CONSTANT_IT):.6f} m^3\n"
+                f"{'-'*60}"
+            )
 
         self._run_dcr_checks(dataset)
         self.result_data = self.grillage_model.get_result_data()
@@ -314,8 +345,13 @@ class PlateGirderBridge:
         deck_layout, and section_props.
         """
         self.grillage_model.set_geometry(self.grillage_geometry, self.deck_layout)
+        # Build one SectionProperties per main girder. When the input dict carries
+        # per-girder dynamic keys (``<base>_G{i}M1``) the girders may differ;
+        # otherwise every girder falls back to the shared scalar section.
+        n_girders = self._girder_count()
+        girder_sections = [self._girder_section(i) for i in range(n_girders)]
         self.grillage_model.create_sections(
-            longitudinal=self._girder_section(),
+            girder_sections=girder_sections,
             edge_longitudinal=self._girder_section(),
             transverse=self._transverse_section(),
             end_transverse=self._end_transverse_section(),
@@ -410,44 +446,63 @@ class PlateGirderBridge:
                         concrete_prop=concrete_prop
                     )
 
-    def _girder_section(self) -> SectionProperties:
-        """Build a SectionProperties for the main/edge longitudinal girder."""
-        inp = self.input_dict
-        Az = inp[KEY_GIRDER_WEB_DEPTH] * inp[KEY_GIRDER_WEB_THICKNESS]
-        Ay = 2 * inp[KEY_GIRDER_TOP_FLANGE_WIDTH] * inp[KEY_GIRDER_TOP_FLANGE_THICKNESS]
+    def _girder_count(self) -> int:
+        """Number of structural main girders (excludes overhang edge beams)."""
+        try:
+            return max(1, int(self.input_dict[KEY_TS_NO_OF_GIRDERS]))
+        except (KeyError, TypeError, ValueError):
+            return 1
+
+    def _girder_value(self, base_key: str, i: int | None = None):
+        """
+        Read a girder property from ``input_dict`` (see ``resolve_girder_value``
+        for the per-girder/scalar resolution order).
+        """
+        return resolve_girder_value(self.input_dict, base_key, i)
+
+    def _girder_section(self, i: int | None = None) -> SectionProperties:
+        """
+        Build a SectionProperties for main girder ``i`` (0-based).
+
+        ``i=None`` builds from the representative (first) girder — used for edge
+        beams and as the uniform fallback.
+        """
+        g = lambda key: self._girder_value(key, i)
+        Az = g(KEY_GIRDER_WEB_DEPTH) * g(KEY_GIRDER_WEB_THICKNESS)
+        Ay = 2 * g(KEY_GIRDER_TOP_FLANGE_WIDTH) * g(KEY_GIRDER_TOP_FLANGE_THICKNESS)
         return SectionProperties(
-            A=inp[KEY_GIRDER_SECTIONAL_AREA],
-            J=inp[KEY_GIRDER_TORSION_CONSTANT_IT],
-            Iz=inp[KEY_GIRDER_SECTIONAL_IZ],
-            Iy=inp[KEY_GIRDER_SECTIONAL_IY],
+            A=g(KEY_GIRDER_SECTIONAL_AREA),
+            J=g(KEY_GIRDER_TORSION_CONSTANT_IT),
+            Iz=g(KEY_GIRDER_SECTIONAL_IZ),
+            Iy=g(KEY_GIRDER_SECTIONAL_IY),
             Az=Az,
             Ay=Ay,
         )
 
     def _transverse_section(self) -> SectionProperties:
         """Build a SectionProperties for the transverse deck slab (half-depth, unit width)."""
-        inp = self.input_dict
-        t  = inp[KEY_GIRDER_DEPTH] / 2
-        Az = t * inp[KEY_GIRDER_WEB_THICKNESS]
+        g = lambda key: self._girder_value(key)  # representative (first) girder
+        t  = g(KEY_GIRDER_DEPTH) / 2
+        Az = t * g(KEY_GIRDER_WEB_THICKNESS)
         return SectionProperties(
-            A=inp[KEY_GIRDER_SECTIONAL_AREA] / 2,
-            J=inp[KEY_GIRDER_TORSION_CONSTANT_IT] / 2,
-            Iz=inp[KEY_GIRDER_SECTIONAL_IZ] / 2,
-            Iy=inp[KEY_GIRDER_SECTIONAL_IY] / 2,
+            A=g(KEY_GIRDER_SECTIONAL_AREA) / 2,
+            J=g(KEY_GIRDER_TORSION_CONSTANT_IT) / 2,
+            Iz=g(KEY_GIRDER_SECTIONAL_IZ) / 2,
+            Iy=g(KEY_GIRDER_SECTIONAL_IY) / 2,
             Az=Az,
             Ay=Az,
         )
 
     def _end_transverse_section(self) -> SectionProperties:
         """Build a SectionProperties for the end transverse slab (quarter-depth)."""
-        inp = self.input_dict
-        Az = inp[KEY_GIRDER_WEB_DEPTH] / 2 * inp[KEY_GIRDER_WEB_THICKNESS]
-        Ay = inp[KEY_GIRDER_TOP_FLANGE_WIDTH] * inp[KEY_GIRDER_TOP_FLANGE_THICKNESS]
+        g = lambda key: self._girder_value(key)  # representative (first) girder
+        Az = g(KEY_GIRDER_WEB_DEPTH) / 2 * g(KEY_GIRDER_WEB_THICKNESS)
+        Ay = g(KEY_GIRDER_TOP_FLANGE_WIDTH) * g(KEY_GIRDER_TOP_FLANGE_THICKNESS)
         return SectionProperties(
-            A=inp[KEY_GIRDER_SECTIONAL_AREA] / 4,
-            J=inp[KEY_GIRDER_TORSION_CONSTANT_IT] / 4,
-            Iz=inp[KEY_GIRDER_SECTIONAL_IZ] / 4,
-            Iy=inp[KEY_GIRDER_SECTIONAL_IY] / 4,
+            A=g(KEY_GIRDER_SECTIONAL_AREA) / 4,
+            J=g(KEY_GIRDER_TORSION_CONSTANT_IT) / 4,
+            Iz=g(KEY_GIRDER_SECTIONAL_IZ) / 4,
+            Iy=g(KEY_GIRDER_SECTIONAL_IY) / 4,
             Az=Az,
             Ay=Ay,
         )
@@ -535,9 +590,13 @@ class PlateGirderBridge:
         deck_t_m             = deck_thickness_from_inputs(ai, _DEFAULT_DECK_THICKNESS_MM)
 
         # ── Girder geometry for CD ───────────────────────────────────────
-        d_depth   = inp[KEY_GIRDER_DEPTH]
-        c_spacing = inp[KEY_TS_GIRDER_SPACING]
+        # Use the governing (deepest) girder for the windward drag depth so a
+        # mix of per-girder depths still yields a conservative transverse force.
         n_girders = inp[KEY_TS_NO_OF_GIRDERS]
+        d_depth   = max(
+            self._girder_value(KEY_GIRDER_DEPTH, i) for i in range(self._girder_count())
+        )
+        c_spacing = inp[KEY_TS_GIRDER_SPACING]
 
         self.grillage_model.create_wind_load(
             railing_height=railing_height,
@@ -1440,13 +1499,16 @@ class PlateGirderBridge:
         steel_grade    = str(self.output_dict.get(KEY_GIRDER)).strip()
         concrete_grade = str(self.output_dict.get(KEY_DECK_CONCRETE_GRADE_BASIC)).strip()
 
-        # output_dict values are in SI metres; BridgeParametersDTO expects mm
-        D       = inp[KEY_GIRDER_DEPTH]                   * 1e3
-        tw      = inp[KEY_GIRDER_WEB_THICKNESS]           * 1e3
-        B_top   = inp[KEY_GIRDER_TOP_FLANGE_WIDTH]        * 1e3
-        t_f_top = inp[KEY_GIRDER_TOP_FLANGE_THICKNESS]    * 1e3
-        B_bot   = inp[KEY_GIRDER_BOTTOM_FLANGE_WIDTH]     * 1e3
-        t_f_bot = inp[KEY_GIRDER_BOTTOM_FLANGE_THICKNESS] * 1e3
+        # output_dict values are in SI metres; BridgeParametersDTO expects mm.
+        # CAD currently renders a single uniform segment, so use the representative
+        # (first) girder via resolve_girder_value (tolerates per-girder keys).
+        gv = lambda key: resolve_girder_value(inp, key)
+        D       = gv(KEY_GIRDER_DEPTH)                   * 1e3
+        tw      = gv(KEY_GIRDER_WEB_THICKNESS)           * 1e3
+        B_top   = gv(KEY_GIRDER_TOP_FLANGE_WIDTH)        * 1e3
+        t_f_top = gv(KEY_GIRDER_TOP_FLANGE_THICKNESS)    * 1e3
+        B_bot   = gv(KEY_GIRDER_BOTTOM_FLANGE_WIDTH)     * 1e3
+        t_f_bot = gv(KEY_GIRDER_BOTTOM_FLANGE_THICKNESS) * 1e3
 
         span_mm = float(self.output_dict[KEY_SPAN]) * 1e3
         cw_each_way_m = float(self.output_dict[KEY_CARRIAGEWAY_WIDTH])
