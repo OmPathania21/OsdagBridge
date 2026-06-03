@@ -319,9 +319,9 @@ def _update_design_options_defaults(input_dict: dict) -> None:
     _update(KEY_DS_STUD_YIELD_STRENGTH,     "400")
     _update(KEY_DS_STUD_ULTIMATE_STRENGTH,  "400")
     _update(KEY_DS_STUD_DIAMETER,           "16")
-    _update(KEY_DS_STUD_HEIGHT,             "10")
+    _update(KEY_DS_STUD_HEIGHT,             "100")
     _update(KEY_DS_STUD_COUNT,              "2")
-    _update(KEY_DS_STUD_TRANSVERSE_SPACING, "10")
+    _update(KEY_DS_STUD_TRANSVERSE_SPACING, "100")
 
 def _update_design_options_cont_defaults(input_dict: dict) -> None:
     """Fill Design Options (Cont.) tab keys that are None with schema defaults."""
