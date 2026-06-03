@@ -1115,7 +1115,7 @@ class BridgeGrillageModel:
         b_width : float, optional
             Beam/box section width in metres.
         d_depth : float, optional
-            Depth of windward girder in metres (KEY_GIRDER_DEPTH).
+            Depth of windward girder in metres (KEY_MP_GIRDER_DEPTH).
         partial_safety_factor : float
             Partial safety factor applied to the combined WL load case.
 

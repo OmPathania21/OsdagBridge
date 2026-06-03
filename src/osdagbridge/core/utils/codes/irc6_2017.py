@@ -669,7 +669,7 @@ class IRC6_2017:
                 (KEY_GIRDER_SPACING) Required for plate girders (n≥2) and rolled beams (n≥2).
             b_width (float, optional): width of beam/box section in m.
                 Required for rolled single and rolled multiple cases.
-            d_depth (float, optional): depth of windward girder in m. (KEY_GIRDER_DEPTH)
+            d_depth (float, optional): depth of windward girder in m. (KEY_MP_GIRDER_DEPTH)
                 Required for all beam/girder cases except single plate.
 
         Returns:

@@ -324,10 +324,10 @@ class BridgeConfig:
         # (which mirrors IS 2062 / IRC 22 Annex III), concrete/rebar resolved via IRC 22 Annex III.
         from osdagbridge.core.utils.common import (
             KEY_GIRDER, KEY_DECK_CONCRETE_GRADE_BASIC, KEY_TS_DECK_THICKNESS,
-            KEY_SPAN, KEY_CARRIAGEWAY_WIDTH, KEY_CROSS_BRACING_SPACING,
-            KEY_GIRDER_DEPTH, KEY_GIRDER_TOP_FLANGE_WIDTH, KEY_GIRDER_TOP_FLANGE_THICKNESS,
-            KEY_GIRDER_BOTTOM_FLANGE_WIDTH, KEY_GIRDER_BOTTOM_FLANGE_THICKNESS,
-            KEY_GIRDER_WEB_THICKNESS,
+            KEY_SPAN, KEY_CARRIAGEWAY_WIDTH, KEY_MP_CB_SPACING,
+            KEY_MP_GIRDER_DEPTH, KEY_MP_GIRDER_TOP_FLANGE_WIDTH, KEY_MP_GIRDER_TOP_FLANGE_THICKNESS,
+            KEY_MP_GIRDER_BOTTOM_FLANGE_WIDTH, KEY_MP_GIRDER_BOTTOM_FLANGE_THICKNESS,
+            KEY_MP_GIRDER_WEB_THICKNESS,
         )
 
         if not getattr(bridge, "material_props", None):
@@ -365,12 +365,12 @@ class BridgeConfig:
             resolve_girder_value as _gv,
         )
         section = SteelSection(
-            D=_gv(inp, KEY_GIRDER_DEPTH)                   * 1000,
-            bf_top=_gv(inp, KEY_GIRDER_TOP_FLANGE_WIDTH)        * 1000,
-            tf_top=_gv(inp, KEY_GIRDER_TOP_FLANGE_THICKNESS)    * 1000,
-            bf_bot=_gv(inp, KEY_GIRDER_BOTTOM_FLANGE_WIDTH)     * 1000,
-            tf_bot=_gv(inp, KEY_GIRDER_BOTTOM_FLANGE_THICKNESS) * 1000,
-            tw=_gv(inp, KEY_GIRDER_WEB_THICKNESS)               * 1000,
+            D=_gv(inp, KEY_MP_GIRDER_DEPTH)                   * 1000,
+            bf_top=_gv(inp, KEY_MP_GIRDER_TOP_FLANGE_WIDTH)        * 1000,
+            tf_top=_gv(inp, KEY_MP_GIRDER_TOP_FLANGE_THICKNESS)    * 1000,
+            bf_bot=_gv(inp, KEY_MP_GIRDER_BOTTOM_FLANGE_WIDTH)     * 1000,
+            tf_bot=_gv(inp, KEY_MP_GIRDER_BOTTOM_FLANGE_THICKNESS) * 1000,
+            tw=_gv(inp, KEY_MP_GIRDER_WEB_THICKNESS)               * 1000,
         )
 
         geom = bridge.grillage_geometry
@@ -395,7 +395,7 @@ class BridgeConfig:
         edge_dist = geom.edge_dist
 
         # Cross-bracing spacing drives the lateral unbraced length for LTB.
-        cb_spacing = float(bridge.additional_inputs.get(KEY_CROSS_BRACING_SPACING) or
+        cb_spacing = float(bridge.additional_inputs.get(KEY_MP_CB_SPACING) or
                                 DEFAULT_CROSS_BRACING_SPACING)
 
         geometry = GeometryConfig(
@@ -439,13 +439,13 @@ class BridgeConfig:
                 return default
 
         stiffener = StiffenerConfig(
-            c_mm        = _optfloat(KEY_INTERMEDIATE_STIFFENER_SPACING),
-            tq_mm       = _optfloat(KEY_INTERMEDIATE_STIFFENER_THICKNESS),
-            H_mm        = _optfloat(KEY_INTERMEDIATE_STIFFENER_OUTSTAND),
-            n_sides     = int(_optfloat(KEY_NO_BEARING_STIFFENERS, 1)),
-            bs_tq_mm    = _optfloat(KEY_BEARING_STIFFENER_PLATE_THICKNESS),
-            bs_H_mm     = _optfloat(KEY_OUTSTAND_BEARING_STIFFENER),
-            bs_n_plates = int(_optfloat(KEY_NO_BEARING_STIFFENERS, 2)),
+            c_mm        = _optfloat(KEY_MP_STIFFENER_INTERMEDIATE_SPACING),
+            tq_mm       = _optfloat(KEY_MP_STIFFENER_INTERMEDIATE_THICKNESS),
+            H_mm        = _optfloat(KEY_MP_STIFFENER_INTERMEDIATE_OUTSTAND),
+            n_sides     = int(_optfloat(KEY_MP_STIFFENER_NO_BEARING_STIFFENERS, 1)),
+            bs_tq_mm    = _optfloat(KEY_MP_STIFFENER_BEARING_THICKNESS),
+            bs_H_mm     = _optfloat(KEY_MP_STIFFENER_BEARING_OUTSTAND),
+            bs_n_plates = int(_optfloat(KEY_MP_STIFFENER_NO_BEARING_STIFFENERS, 2)),
             bs_R_kN     = 0.0,
         )
 
