@@ -95,7 +95,13 @@ from osdagbridge.core.utils.common import (
     KEY_RL_TYPE,
     KEY_RAILING_TYPE,
     KEY_MD_TYPE,
-    KEY_MEDIAN_TYPE
+    KEY_MEDIAN_TYPE,
+    KEY_DS_STUD_DIAMETER,
+    KEY_DS_STUD_HEIGHT,
+    KEY_DS_STUD_COUNT,
+    KEY_DS_STUD_TRANSVERSE_SPACING,
+    KEY_DS_STUD_HEAD_DIAMETER,
+    KEY_DS_STUD_HEAD_HEIGHT,
 )
 from osdagbridge.core.bridge_types.plate_girder.initial_sizing import (
     DEFAULT_DECK_THICKNESS as _DEFAULT_DECK_THICKNESS_MM,
@@ -108,6 +114,10 @@ from osdagbridge.core.bridge_components.super_structure.crash_barrier.geometry i
 )
 from osdagbridge.core.bridge_components.super_structure.railing.geometry import (
     railing_load_from_inputs,
+)
+from osdagbridge.core.bridge_components.super_structure.shear_studs.geometry import (
+    min_stud_head_diameter,
+    min_stud_head_height,
 )
 
 
@@ -288,6 +298,10 @@ class PlateGirderBridge:
         # Deck slab design — writes "deck_design_results" into output_dict
         self.design_deck_slab()
 
+        # Compute derived bridge-component geometry (head diameter, head height, etc.)
+        # and write results into output_dict before it is frozen.
+        self.bridge_component_solver()
+
         # Freeze output_dict — no further writes allowed after this point
         self.output_dict = types.MappingProxyType(self.output_dict)
         import pprint
@@ -330,6 +344,71 @@ class PlateGirderBridge:
             median_width=float(inp[KEY_MD_WIDTH]),
             n_footpaths=int(inp[KEY_TS_NO_OF_FOOTPATHS]),
         )
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Bridge component solver
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def bridge_component_solver(self) -> None:
+        """
+        Single entry-point that computes all derived bridge-component
+        geometry values and writes them into ``self.output_dict``.
+
+        **How to add a new component in the future**
+
+        1. Create a private ``_solve_<component>(self)`` method below.
+        2. Add **one line** calling it here.
+
+        ``bridge_component_solver()`` is called only **once** from the
+        design pipeline; each private sub-method owns its own slice of
+        ``output_dict`` and can be developed and tested independently.
+
+        Current components
+        ------------------
+        * Shear studs  --> ``_solve_shear_studs()``
+        """
+        self._solve_shear_studs()
+
+        # ── Future components: add one line per component here ────────────────
+        # self._solve_deck()
+        # self._solve_bearings()
+        # self._solve_stiffeners()
+        # self._solve_cross_bracing()
+
+    def _solve_shear_studs(self) -> None:
+        """
+        Compute derived shear-stud geometry values and update ``output_dict``.
+
+        Keys written
+        ------------
+        KEY_DS_STUD_HEAD_DIAMETER
+            Minimum stud head diameter = 1.5 x d_stud
+            [IRC 22:2015 - Cl. 606.6 - Detailing of Shear Connectors]
+
+        KEY_DS_STUD_HEAD_HEIGHT
+            Minimum stud head height = 0.667 x d_stud
+            [IS 3935:1966 - Composite Construction]
+
+        Raises
+        ------
+        ValueError
+            If ``KEY_DS_STUD_DIAMETER`` is missing or cannot be parsed as float.
+        """
+        # KEY_DS_STUD_DIAMETER is always populated by _update_design_options_defaults()
+        d_stud_mm = float(self.output_dict[KEY_DS_STUD_DIAMETER])
+
+        # ── Compute geometry values ───────────────────────────────────────────
+        # Minimum head diameter  [IRC 22:2015 - Cl. 606.6]
+        head_d_mm = min_stud_head_diameter(d_stud_mm)
+
+        # Minimum head height    [IS 3935:1966]
+        head_h_mm = min_stud_head_height(d_stud_mm)
+
+        # ── Write results into output_dict ────────────────────────────────────
+        self.output_dict.update({
+            KEY_DS_STUD_HEAD_DIAMETER: head_d_mm,
+            KEY_DS_STUD_HEAD_HEIGHT:   head_h_mm,
+        })
 
     # ─────────────────────────────────────────────────────────────────────────
     # Grillage model setup
@@ -1738,14 +1817,21 @@ class PlateGirderBridge:
                 web_thickness=tw,
                 flange_thickness=t_f_top,
             ),
-            # --- Shear studs (defaults) ---
+            # --- Shear studs ---
+            # All values are read directly from output_dict with no fallbacks.
+            # base_diameter      [KEY_DS_STUD_DIAMETER]             : shank diameter (mm)
+            # top_diameter       [KEY_DS_STUD_HEAD_DIAMETER]        : min head diameter = 1.5 x d  [IRC 22:2015 Cl. 606.6]
+            # base_height        [KEY_DS_STUD_HEIGHT]               : stud shank height (mm)
+            # top_height         [KEY_DS_STUD_HEAD_HEIGHT]          : min head height = 0.667 x d  [IS 3935:1966]
+            # num_per_section    [KEY_DS_STUD_COUNT]                : studs per section
+            # transverse_spacing [KEY_DS_STUD_TRANSVERSE_SPACING]   : transverse spacing (mm)
             shear_stud_params=ShearStudParamsDTO(
-                base_diameter=50,
-                top_diameter=70,
-                base_height=100,
-                top_height=20,
-                num_per_section=3,
-                transverse_spacing=305,
+                base_diameter      = float(inp[KEY_DS_STUD_DIAMETER]),
+                top_diameter       = float(inp[KEY_DS_STUD_HEAD_DIAMETER]),
+                base_height        = float(inp[KEY_DS_STUD_HEIGHT]),
+                top_height         = float(inp[KEY_DS_STUD_HEAD_HEIGHT]),
+                num_per_section    = int(float(inp[KEY_DS_STUD_COUNT])),
+                transverse_spacing = float(inp[KEY_DS_STUD_TRANSVERSE_SPACING]),
                 pitch=500,
             ),
             # --- Girder segments (single uniform segment) ---
