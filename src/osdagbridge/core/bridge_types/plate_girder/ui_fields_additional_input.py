@@ -1815,214 +1815,450 @@ STEEL_DESIGN_DETAILS_SCHEMA = {
     },
 }
 
+from osdagbridge.desktop.ui.dialogs.additional_input.drawings.cad_preview_widget import CadPreviewWidget
+from osdagbridge.desktop.ui.dialogs.additional_input.ui_builder._segment_table_widget import SegmentTableWidget
+from osdagbridge.desktop.ui.dialogs.additional_input.drawings.rolled_section_preview import RolledSectionPreview
+
 GIRDER_DETAILS_SCHEMA = {
-    "id": "girder_details_tab",
-    "defaults": {
-        "member_length_m": 30.0,
-        "distance_start_m": 0.0,
-        "max_girder_count": 20,
+    "id": KEY_GD_TAB,
+    "layout": {
+        "type":          "columns",
+        "columns":       2,
+        "column_widths": [1, 1],
     },
-    "SAIL_APPROVED_THICKNESS_VALUES": SAIL_APPROVED_THICKNESS_VALUES,
-    "thickness_values_mm": SAIL_APPROVED_THICKNESS_VALUES,
-    "overview": [
+    "sections": [
+
+        # ── CAD preview — full width (col 0, spans both columns) ──────────────
         {
-            "id": "select_girder",
-            "label": "Select Girder:",
-            "type": "combo_dynamic",
-            "bind": "girder_dropdown",
-            "include_all": True,
-        },
-        {
-            "id": "span",
-            "label": "Span:",
-            "type": "combo",
-            "choices": VALUES_GIRDER_SPAN_MODE,
-            "bind": "span_combo",
-        },
-        {
-            "id": "total_span",
-            "label": "Total Span (m):",
-            "type": "line",
-            "default": "30",
-            "read_only": True,
-            "bind": "length_input",
-        },
-    ],
-    "segment_manager": {
-        "table_headers": ["Member ID", "Start (m)", "End (m)", "Length (m)", "Action"],
-        "action_column_width": 132,
-    },
-    "cad_view": {
-        "buttons": [
-            {"id": "cross_section", "label": "Cross Section", "mode": "cross", "width": 130, "height": 32},
-            {"id": "side_view", "label": "Side View", "mode": "side", "width": 130, "height": 32},
-        ]
-    },
-    "section_inputs": [
-        {
-            "id": "design",
-            "label": "Design:",
-            "type": "combo",
-            "choices": VALUES_GIRDER_DESIGN_MODE,
-            "bind": "design_combo",
-            "legacy_payload_key": "design_mode",
-            "visible_for": ["welded"],
-        },
-        {
-            "id": "type",
-            "label": "Type:",
-            "type": "combo",
-            "choices": VALUES_GIRDER_TYPE,
-            "bind": "type_combo",
-            "legacy_payload_key": "girder_type",
-        },
-        {
-            "id": "symmetry",
-            "label": "Symmetry:",
-            "type": "combo",
-            "choices": VALUES_GIRDER_SYMMETRY,
-            "bind": "symmetry_combo",
-            "row_bucket": "symmetry_row",
-            "legacy_payload_key": "symmetry",
-            "visible_for": ["welded"],
-        },
-        {
-            "id": "depth",
-            "label": "Total Depth, d (mm):",
-            "type": "line_with_bounds",
-            "bounds_key": "total_depth",
-            "bounds_default": {"lower": 200.0, "upper": 2000.0, "increment": 25.0},
-            "bind": "total_depth_input",
-            "bind_widget": "total_depth_widget",
-            "bind_bounds_button": "total_depth_bounds_button",
-            "legacy_welded_key": "total_depth_mm",
-            "legacy_welded_bounds_key": "total_depth_bounds",
-            "visible_for": ["welded"],
-        },
-        {
-            "id": "top_flange_width",
-            "label": "Width of Top Flange, t<sub>fw</sub> (mm):",
-            "type": "line_with_bounds",
-            "bounds_key": "top_width",
-            "bounds_default": {"lower": 100.0, "upper": 1000.0, "increment": 10.0},
-            "bind": "top_width_input",
-            "bind_widget": "top_width_widget",
-            "bind_bounds_button": "top_width_bounds_button",
-            "legacy_welded_key": "top_flange_width_mm",
-            "legacy_welded_bounds_key": "top_flange_width_bounds",
-            "visible_for": ["welded"],
-        },
-        {
-            "id": "top_flange_thickness",
-            "label": "Top Flange Thickness, t<sub>ft</sub> (mm):",
-            "type": "mode_line",
-            "mode_choices": VALUES_PROFILE_SCOPE,
-            "default_mode": "All",
-            "bind_mode": "top_thickness_combo",
-            "bind_value": "top_thickness_value_input",
-            "bind_wrapper": "top_thickness_widget",
-            "thickness_key": "top_thickness",
-            "legacy_welded_mode_key": "top_thickness_mode",
-            "legacy_welded_value_key": "top_thickness_value_mm",
-            "visible_for": ["welded"],
-        },
-        {
-            "id": "bottom_flange_width",
-            "label": "Width of Bottom Flange, b<sub>fw</sub> (mm):",
-            "type": "line_with_bounds",
-            "bounds_key": "bottom_width",
-            "bounds_default": {"lower": 100.0, "upper": 1000.0, "increment": 10.0},
-            "bind": "bottom_width_input",
-            "bind_widget": "bottom_width_widget",
-            "bind_bounds_button": "bottom_width_bounds_button",
-            "legacy_welded_key": "bottom_flange_width_mm",
-            "legacy_welded_bounds_key": "bottom_flange_width_bounds",
-            "visible_for": ["welded"],
-        },
-        {
-            "id": "bottom_flange_thickness",
-            "label": "Bottom Flange Thickness, b<sub>ft</sub> (mm):",
-            "type": "mode_line",
-            "mode_choices": VALUES_PROFILE_SCOPE,
-            "default_mode": "All",
-            "bind_mode": "bottom_thickness_combo",
-            "bind_value": "bottom_thickness_value_input",
-            "bind_wrapper": "bottom_thickness_widget",
-            "thickness_key": "bottom_thickness",
-            "legacy_welded_mode_key": "bottom_thickness_mode",
-            "legacy_welded_value_key": "bottom_thickness_value_mm",
-            "visible_for": ["welded"],
-        },
-        {
-            "id": "support_type",
-            "label": "Support Type:",
-            "type": "combo",
-            "choices": VALUES_GIRDER_SUPPORT_TYPE,
-            "bind": "support_type_combo",
-            "visible_for": ["welded"],
-        },
-        {
-            "id": "support_width",
-            "label": "Support Width (mm):",
-            "type": "line",
-            "validator": {"type": "double_range", "bottom": 0.0, "top": 1000000.0, "decimals": 3},
-            "bind": "support_width_input",
-            "legacy_welded_key": "support_width_mm",
-            "visible_for": ["welded"],
-        },
-        {
-            "id": "web_thickness",
-            "label": "Web Thickness, w<sub>t</sub> (mm):",
-            "type": "mode_line",
-            "mode_choices": VALUES_PROFILE_SCOPE,
-            "default_mode": "All",
-            "bind_mode": "web_thickness_combo",
-            "bind_value": "web_thickness_value_input",
-            "bind_wrapper": "web_thickness_widget",
-            "thickness_key": "web_thickness",
-            "legacy_welded_mode_key": "web_thickness_mode",
-            "legacy_welded_value_key": "web_thickness_value_mm",
-            "visible_for": ["welded"],
-        },
-        {
-            "id": "is_section",
-            "label": "IS Section:",
-            "type": "combo",
-            "choices": [
-                "ISMB 500", "ISMB 550", "ISMB 600",
-                "ISWB 500", "ISWB 550", "ISWB 600",
+            "column":   0,
+            "col_span": 2,
+            "title":    "",
+            "rows": [
+                {
+                    "fields": [{
+                        "id":           KEY_GD_CAD_PREVIEW,
+                        "type":         TYPE_DIRECT_WIDGET,
+                        "widget_class": CadPreviewWidget,
+                    }]
+                },
             ],
-            "bind": "is_section_combo",
-            "legacy_payload_key": "rolled_section",
-            "visible_for": ["rolled"],
         },
+
+        # ── Girder Overview — col 0 ───────────────────────────────────────────
         {
-            "id": "torsional_restraint",
-            "label": "Torsional Restraint:",
-            "type": "combo",
-            "choices": VALUES_TORSIONAL_RESTRAINT,
-            "bind": "torsion_combo",
-            "aliases": ["torsion"],
-            "legacy_payload_key": "torsional_restraint",
+            "column":  0,
+            "title":   "Girder Overview",
+            "refresh": [{
+                "widget_id": KEY_GD_SELECT_GIRDER,
+                "path":      [KEY_TS_NO_OF_GIRDERS],
+                "on_refresh": "_on_girder_count_refreshed",
+            }],
+            "rows": [
+                {
+                    "fields": [{
+                        "id":          KEY_GD_SELECT_GIRDER,
+                        "label":       "Select Girder:",
+                        "type":        TYPE_COMBOBOX,
+                        "choices":     [],
+                        "on_activate": [{
+                            "source_key": KEY_TS_NO_OF_GIRDERS,
+                            "handler":    "_on_girder_count_refreshed",
+                        }],
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":        KEY_GD_TOTAL_SPAN,
+                        "label":     "Total Span (m):",
+                        "type":      TYPE_TEXTBOX,
+                        "read_only": True,
+                        "bind":      "length_input",
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":       KEY_GD_APPLY_EXTERIOR,
+                        "type":     TYPE_BUTTON,
+                        "text":     "Apply changes to exterior girders",
+                        "on_click": "_on_apply_exterior_clicked",
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":       KEY_GD_APPLY_INTERIOR,
+                        "type":     TYPE_BUTTON,
+                        "text":     "Apply changes to interior girder",
+                        "on_click": "_on_apply_interior_clicked",
+                    }]
+                },
+            ],
         },
+
+        # ── Segment Table — col 1 ─────────────────────────────────────────────
         {
-            "id": "warping_restraint",
-            "label": "Warping Restraint:",
-            "type": "combo",
-            "choices": VALUES_WARPING_RESTRAINT,
-            "bind": "warping_combo",
-            "aliases": ["warping"],
-            "legacy_payload_key": "warping_restraint",
+            "column": 1,
+            "title":  "",
+            "rows": [
+                {
+                    "fields": [{
+                        "id":                KEY_GD_SEGMENT_TABLE,
+                        "type":              TYPE_DIRECT_WIDGET,
+                        "widget_class":      SegmentTableWidget,
+                        "on_row_select":     "_on_segment_selected",
+                        "on_data_changed":   "_on_segment_data_changed",
+                    }]
+                },
+            ],
         },
+
+        # ── Section Inputs — col 0 (spans 2 grid rows: preview + properties) ───
         {
-            "id": "web_type",
-            "label": "Web Type:",
-            "type": "combo",
-            "choices": VALUES_WEB_TYPE,
-            "bind": "web_type_combo",
-            "row_bucket": "web_type_row",
-            "legacy_payload_key": "web_type",
-            "visible_for": ["welded"],
+            "column":   0,
+            "row_span": 2,
+            "title":    "Section Inputs",
+            "rows": [
+
+                # Member ID selector
+                {
+                    "fields": [{
+                        "id":        KEY_GD_MEMBER_ID,
+                        "label":     "Member ID:",
+                        "type":      TYPE_COMBOBOX,
+                        "choices":   [],
+                        "bind":      "member_id_combo",
+                    }]
+                },
+
+                # Type (Welded / Rolled)
+                {
+                    "fields": [{
+                        "id":        KEY_GD_TYPE,
+                        "label":     "Type:",
+                        "type":      TYPE_COMBOBOX,
+                        "choices":   VALUES_GIRDER_TYPE,
+                        "on_change": "_on_girder_type_changed",
+                    }]
+                },
+
+                # Symmetry — welded only
+                {
+                    "fields": [{
+                        "id":      KEY_GD_SYMMETRY,
+                        "label":   "Symmetry:",
+                        "type":    TYPE_COMBOBOX,
+                        "choices": VALUES_GIRDER_SYMMETRY,
+                        "bind":    "symmetry_combo",
+                    }]
+                },
+
+                # Welded dimensions
+                {
+                    "fields": [{
+                        "id":         KEY_GD_DEPTH,
+                        "label":      "Total Depth, d (mm):",
+                        "type":       TYPE_ADAPTIVE,
+                        "controller": KEY_DESIGN_MODE,
+                        "modes": {
+                            "Optimized": {
+                                "type":           TYPE_BOUND_BTN,
+                                "text":           "Set Bounds",
+                                "lower_limit":    200.0,
+                                "upper_limit":    2000.0,
+                                "with_increment": True,
+                            },
+                            "Custom": {
+                                "type":        TYPE_TEXTBOX,
+                                "placeholder": "",
+                                "bind":        "total_depth_input",
+                                "on_editing_finished": "_update_section_drawing",
+                            },
+                        },
+                    }],
+                },
+                {
+                    "fields": [{
+                        "id":         KEY_GD_TOP_FLANGE_WIDTH,
+                        "label":      "Width of Top Flange, t<sub>fw</sub> (mm):",
+                        "type":       TYPE_ADAPTIVE,
+                        "controller": KEY_DESIGN_MODE,
+                        "modes": {
+                            "Optimized": {
+                                "type":           TYPE_BOUND_BTN,
+                                "text":           "Set Bounds",
+                                "lower_limit":    100.0,
+                                "upper_limit":    1000.0,
+                                "with_increment": True,
+                            },
+                            "Custom": {
+                                "type":        TYPE_TEXTBOX,
+                                "placeholder": "",
+                                "bind":        "top_width_input",
+                                "on_editing_finished": "_update_section_drawing",
+                            },
+                        },
+                    }],
+                },
+                {
+                    "fields": [{
+                        "id":         KEY_GD_TOP_FLANGE_THICKNESS,
+                        "label":      "Top Flange Thickness, t<sub>ft</sub> (mm):",
+                        "type":       TYPE_ADAPTIVE,
+                        "controller": KEY_DESIGN_MODE,
+                        "modes": {
+                            "Optimized": {
+                                "type":            TYPE_ALL_CUSTOM,
+                                "bind":            "top_thickness_combo",
+                            },
+                            "Custom": {
+                                "type":    TYPE_COMBOBOX,
+                                "choices": [str(v) for v in SAIL_APPROVED_THICKNESS_VALUES],
+                                "bind":    "top_thickness_combo",
+                                "on_change": "_update_section_drawing",
+                            },
+                        },
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":         KEY_GD_BOTTOM_FLANGE_WIDTH,
+                        "label":      "Width of Bottom Flange, b<sub>fw</sub> (mm):",
+                        "type":       TYPE_ADAPTIVE,
+                        "controller": KEY_DESIGN_MODE,
+                        "modes": {
+                            "Optimized": {
+                                "type":           TYPE_BOUND_BTN,
+                                "text":           "Set Bounds",
+                                "lower_limit":    100.0,
+                                "upper_limit":    1000.0,
+                                "with_increment": True,
+                            },
+                            "Custom": {
+                                "type":        TYPE_TEXTBOX,
+                                "placeholder": "",
+                                "bind":        "bottom_width_input",
+                                "on_editing_finished": "_update_section_drawing",
+                            },
+                        },
+                    }],
+                },
+                {
+                    "fields": [{
+                        "id":         KEY_GD_BOTTOM_FLANGE_THICKNESS,
+                        "label":      "Bottom Flange Thickness, b<sub>ft</sub> (mm):",
+                        "type":       TYPE_ADAPTIVE,
+                        "controller": KEY_DESIGN_MODE,
+                        "modes": {
+                            "Optimized": {
+                                "type":            TYPE_ALL_CUSTOM,
+                                "bind":            "bottom_thickness_combo",
+                            },
+                            "Custom": {
+                                "type":    TYPE_COMBOBOX,
+                                "choices": [str(v) for v in SAIL_APPROVED_THICKNESS_VALUES],
+                                "bind":    "bottom_thickness_combo",
+                                "on_change": "_update_section_drawing",
+                            },
+                        },
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":      KEY_GD_SUPPORT_TYPE,
+                        "label":   "Support Type:",
+                        "type":    TYPE_COMBOBOX,
+                        "choices": VALUES_GIRDER_SUPPORT_TYPE,
+                        "bind":    "support_type_combo",
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":    KEY_GD_SUPPORT_WIDTH,
+                        "label": "Support Width (mm):",
+                        "type":  TYPE_TEXTBOX,
+                        "bind":  "support_width_input",
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":         KEY_GD_WEB_THICKNESS,
+                        "label":      "Web Thickness, w<sub>t</sub> (mm):",
+                        "type":       TYPE_ADAPTIVE,
+                        "controller": KEY_DESIGN_MODE,
+                        "modes": {
+                            "Optimized": {
+                                "type":            TYPE_ALL_CUSTOM,
+                                "bind":            "web_thickness_combo",
+                            },
+                            "Custom": {
+                                "type":    TYPE_COMBOBOX,
+                                "choices": [str(v) for v in SAIL_APPROVED_THICKNESS_VALUES],
+                                "bind":    "web_thickness_combo",
+                                "on_change": "_update_section_drawing",
+                            },
+                        },
+                    }]
+                },
+
+                # Rolled section
+                {
+                    "fields": [{
+                        "id":        KEY_GD_IS_SECTION,
+                        "label":     "IS Section:",
+                        "type":      TYPE_COMBOBOX,
+                        "choices":   [],
+                        "bind":      "is_section_combo",
+                        "on_change": "_update_section_drawing",
+                    }]
+                },
+
+                # Restraints — common to welded + rolled
+                {
+                    "fields": [{
+                        "id":      KEY_GD_TORSIONAL_RESTRAINT,
+                        "label":   "Torsional Restraint:",
+                        "type":    TYPE_COMBOBOX,
+                        "choices": VALUES_TORSIONAL_RESTRAINT,
+                        "bind":    "torsion_combo",
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":      KEY_GD_WARPING_RESTRAINT,
+                        "label":   "Warping Restraint:",
+                        "type":    TYPE_COMBOBOX,
+                        "choices": VALUES_WARPING_RESTRAINT,
+                        "bind":    "warping_combo",
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":      KEY_GD_WEB_TYPE,
+                        "label":   "Web Type:",
+                        "type":    TYPE_COMBOBOX,
+                        "choices": VALUES_WEB_TYPE,
+                        "bind":    "web_type_combo",
+                    }]
+                },
+            ],
+        },
+
+        # ── Section Preview — col 1, grid row 2 ─────────────────────────────────
+        {
+            "column": 1,
+            "title":  "",
+            "id":     KEY_GD_SECTION_DRAWING,
+            "rows": [
+                {
+                    "fields": [{
+                        "id":           KEY_GD_SECTION_PREVIEW,
+                        "type":         TYPE_DIRECT_WIDGET,
+                        "widget_class": RolledSectionPreview,
+                    }]
+                },
+            ],
+        },
+
+        # ── Section Properties — col 1, grid row 3 ───────────────────────────
+        {
+            "column": 1,
+            "title":  "Section Properties",
+            "id":     KEY_GD_SP,
+            "rows": [
+                {
+                    "fields": 
+                        [{
+                            "id": KEY_SD_SECTION_PROP_MASS,  
+                            "label": "Mass, M (Kg/m)",                                    
+                            "type": TYPE_TEXTBOX, "read_only": True,
+                        }]},
+                {
+                    "fields": 
+                        [{
+                            "id": KEY_SD_SECTION_PROP_AREA,  
+                            "label": "Sectional Area, a (cm<sup>2</sup>)",                
+                            "type": TYPE_TEXTBOX, "read_only": True,
+                        }]},
+                {
+                    "fields": 
+                        [{
+                            "id": KEY_SD_SECTION_PROP_IZ,  
+                            "label": "2nd Moment of Area, I<sub>z</sub> (cm<sup>4</sup>)",  
+                            "type": TYPE_TEXTBOX, "read_only": True
+                        }]
+                },
+                {
+                    "fields": 
+                        [{
+                            "id": KEY_SD_SECTION_PROP_IV,  
+                            "label": "2nd Moment of Area, I<sub>y</sub> (cm<sup>4</sup>)",  
+                            "type": TYPE_TEXTBOX, "read_only": True
+                        }]
+                },
+                {
+                    "fields": 
+                        [{
+                            "id": KEY_SD_SECTION_PROP_RZ,  
+                            "label": "Radius of Gyration, r<sub>z</sub> (cm)",              
+                            "type": TYPE_TEXTBOX, "read_only": True
+                        }]
+                },
+                {
+                    "fields": 
+                        [{
+                            "id": KEY_SD_SECTION_PROP_RV,  
+                            "label": "Radius of Gyration, r<sub>y</sub> (cm)",              
+                            "type": TYPE_TEXTBOX, "read_only": True
+                        }]
+                },
+                {
+                    "fields": 
+                        [{
+                            "id": KEY_SD_SECTION_PROP_ZZ,  
+                            "label": "Elastic Modulus, Z<sub>z</sub> (cm<sup>3</sup>)",     
+                            "type": TYPE_TEXTBOX, "read_only": True
+                        }]
+                },
+                {
+                    "fields": 
+                        [{
+                            "id": KEY_SD_SECTION_PROP_ZV,  
+                            "label": "Elastic Modulus, Z<sub>y</sub> (cm<sup>3</sup>)",     
+                            "type": TYPE_TEXTBOX, "read_only": True
+                        }]
+                },
+                {
+                    "fields": 
+                        [{
+                            "id": KEY_SD_SECTION_PROP_ZUZ,  
+                            "label": "Plastic Modulus, Z<sub>pz</sub> (cm<sup>3</sup>)",     
+                            "type": TYPE_TEXTBOX, "read_only": True
+                        }]
+                },
+                {
+                    "fields": 
+                        [{
+                            "id": KEY_SD_SECTION_PROP_ZUV,  
+                            "label": "Plastic Modulus, Z<sub>py</sub> (cm<sup>3</sup>)",     
+                            "type": TYPE_TEXTBOX, "read_only": True
+                        }]
+                },
+                {
+                    "fields": 
+                        [{
+                            "id": KEY_SD_SECTION_PROP_IT,  
+                            "label": "Torsion Constant, I<sub>t</sub> (cm<sup>4</sup>)",     
+                            "type": TYPE_TEXTBOX, "read_only": True
+                        }]
+                },
+                {
+                    "fields": 
+                        [{
+                            "id": KEY_SD_SECTION_PROP_IW,  
+                            "label": "Warping Constant, I<sub>w</sub> (cm<sup>6</sup>)",     
+                            "type": TYPE_TEXTBOX, "read_only": True
+                        }]
+                },
+            ],
         },
     ],
 }

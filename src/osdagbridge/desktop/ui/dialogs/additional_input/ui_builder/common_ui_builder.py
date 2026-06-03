@@ -26,6 +26,38 @@ ADDITIONAL_INPUTS_SCROLL_STYLE = """
     QScrollArea QScrollBar::sub-line:vertical { border:none; background:none; }
 """
 
+from PySide6.QtWidgets import QStackedWidget
+class AdaptiveWidget(QStackedWidget):
+    """Switches between different field types based on a controller value."""
+
+    def __init__(self, controller_id: str, mode_widgets: dict, ai, field_id: str):
+        super().__init__()
+        self._controller_id = controller_id
+        self._mode_widgets  = mode_widgets
+        self._ai            = ai
+        self._field_id      = field_id
+        for widget in mode_widgets.values():
+            self.addWidget(widget)
+
+    def switch_mode(self, mode: str) -> None:
+        keys = list(self._mode_widgets.keys())
+        idx  = keys.index(mode) if mode in keys else 0
+        self.setCurrentIndex(idx)
+        if not self._ai or not hasattr(self._ai, "working_input_dict"):
+            return
+        value  = self._ai.working_input_dict.get(self._field_id)
+        active = self.currentWidget()
+        if isinstance(active, QLineEdit) and value is not None:
+            active.blockSignals(True)
+            active.setText(str(value))
+            active.blockSignals(False)
+
+    def setText(self, value: str) -> None:
+        if not self._ai or not hasattr(self._ai, "working_input_dict"):
+            return
+        mode = str(self._ai.working_input_dict.get(self._controller_id) or "")
+        self.switch_mode(mode)
+
 class UIBuilder(QWidget):
     """Builds a card + grid from a tab schema dict."""
 
@@ -78,11 +110,9 @@ class UIBuilder(QWidget):
         elif layout_type == "columns":
             self._build_columns_layout(main_layout, layout_def)
         elif layout_type == "rows" and "sections" in self._schema:
-            # Explicit rows layout with sections
             for section in self._schema["sections"]:
                 self._build_section(section, main_layout)
         elif "sections" in self._schema:
-            # sections present, no layout key — default stacked
             for section in self._schema["sections"]:
                 self._build_section(section, main_layout)
         elif "cards" in self._schema:
@@ -92,7 +122,6 @@ class UIBuilder(QWidget):
                     self._build_grid(section, card_layout)
                 main_layout.addWidget(card)
         else:
-            # Single card — Typical Section subtabs (has "rows" directly)
             card, card_layout = self._create_section_card(self._card_title)
             self._build_grid(self._schema, card_layout)
             main_layout.addWidget(card)
@@ -113,14 +142,107 @@ class UIBuilder(QWidget):
     # Layout strategies
     # ──────────────────────────────────────────────────────────────────────────
 
+    # ════════════════════════════════════════════════════════════════════════════
+    # Patch for common_ui_builder.py
+    #
+    # Two methods to add/replace inside UIBuilder:
+    #   1. _group_sections_into_rows  — new method, place just above _build_columns_layout
+    #   2. _build_columns_layout      — replace existing method
+    # ════════════════════════════════════════════════════════════════════════════
+
+    def _group_sections_into_rows(self, sections: list, n_cols: int) -> list:
+        """
+        Group a flat sections list into visual grid rows.
+        Only used when the schema opts in via col_span on any section.
+ 
+        Rules:
+          - col_span > 1  → own full-width row.
+          - col 0 with row_span > 1 → paired with next N col-1 sections
+            across multiple grid rows (col-0 widget spans them all).
+          - col 0 followed immediately by col 1 → paired into the same row.
+          - col 0 with no col-1 partner         → own row.
+ 
+        Returns list of rows, each row is list of (section, grid_row, row_span).
+        For simple case returns list of lists of sections (backward compat).
+        """
+        rows         = []
+        pending_col0 = None
+        pending_row_span = 1
+        i            = 0
+ 
+        while i < len(sections):
+            sec      = sections[i]
+            col      = int(sec.get("column", 0))
+            col_span = int(sec.get("col_span", 1))
+            row_span = int(sec.get("row_span", 1))
+ 
+            if col_span > 1:
+                if pending_col0 is not None:
+                    rows.append([pending_col0])
+                    pending_col0 = None
+                rows.append([sec])
+ 
+            elif col == 0:
+                if pending_col0 is not None:
+                    rows.append([pending_col0])
+                pending_col0     = sec
+                pending_row_span = row_span
+ 
+            elif col == 1:
+                if pending_col0 is not None:
+                    rows.append([pending_col0, sec])
+                    pending_col0 = None
+                    pending_row_span = 1
+                else:
+                    rows.append([sec])
+ 
+            else:
+                if pending_col0 is not None:
+                    rows.append([pending_col0])
+                    pending_col0 = None
+                rows.append([sec])
+ 
+            i += 1
+ 
+        if pending_col0 is not None:
+            rows.append([pending_col0])
+ 
+        return rows
+ 
     def _build_columns_layout(self, parent_layout, layout_def):
-        """Place sections into columns based on their 'column' key."""
+        """Place sections into columns.
+ 
+        Two modes selected automatically:
+ 
+        INDEPENDENT COLUMNS (default — preserves all existing tab behaviour)
+            Each column gets its own QVBoxLayout.  Sections are appended to
+            their column's layout independently, so multiple col-0 sections
+            stack freely while a single col-1 Description spans the full
+            column height.  This is exactly the original behaviour.
+ 
+        GRID MODE (opt-in — used when any section has "col_span" > 1)
+            Sections are grouped into visual rows by _group_sections_into_rows
+            and placed with QGridLayout.addWidget(w, row, col, 1, col_span).
+            This allows a section to span both columns (e.g. CAD preview) while
+            the rows below remain two-column.
+        """
         num_cols   = layout_def.get("columns", 2)
         col_widths = layout_def.get("column_widths", [1] * num_cols)
-
+        sections   = self._schema.get("sections", [])
+ 
+        # Decide mode: grid if any section requests col_span > 1
+        use_grid = any(int(s.get("col_span", 1)) > 1 for s in sections)
+ 
+        if use_grid:
+            self._build_columns_layout_grid(parent_layout, sections, num_cols, col_widths)
+        else:
+            self._build_columns_layout_independent(parent_layout, sections, num_cols, col_widths)
+ 
+    def _build_columns_layout_independent(self, parent_layout, sections, num_cols, col_widths):
+        """Original independent-column behaviour — unchanged for all existing tabs."""
         row = QHBoxLayout()
         row.setSpacing(16)
-
+ 
         col_layouts = []
         for i in range(num_cols):
             col_widget = QWidget()
@@ -131,22 +253,66 @@ class UIBuilder(QWidget):
             col_layouts.append(col_layout)
             stretch = col_widths[i] if i < len(col_widths) else 1
             row.addWidget(col_widget, stretch)
-
-        for section in self._schema.get("sections", []):
+ 
+        for section in sections:
             col_idx = section.get("column", 0)
             col_idx = max(0, min(col_idx, num_cols - 1))
             stype   = section.get("type")
             stretch = 1 if section.get("stretch") else 0
-
+ 
             if stype == TYPE_DESCRIPTION:
                 self._build_description_box(section, col_layouts[col_idx], stretch=stretch)
             else:
                 self._build_section(section, col_layouts[col_idx])
-
+ 
         for col_layout in col_layouts:
             col_layout.addStretch()
-
+ 
         parent_layout.addLayout(row)
+ 
+    def _build_columns_layout_grid(self, parent_layout, sections, num_cols, col_widths):
+        """Grid mode — supports col_span for full-width rows (e.g. Girder Details)."""
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(16)
+        grid.setVerticalSpacing(12)
+        grid.setContentsMargins(0, 0, 0, 0)
+ 
+        for col_idx in range(num_cols):
+            stretch = col_widths[col_idx] if col_idx < len(col_widths) else 1
+            grid.setColumnStretch(col_idx, stretch)
+ 
+        visual_rows = self._group_sections_into_rows(sections, num_cols)
+        for grid_row in range(len(visual_rows)):
+            grid.setRowStretch(grid_row, 0)
+ 
+        for grid_row, row_group in enumerate(visual_rows):
+            for section in row_group:
+                col      = int(section.get("column", 0))
+                col_span = int(section.get("col_span", 1))
+                stype    = section.get("type")
+                stretch  = 1 if section.get("stretch") else 0
+ 
+                if stype == TYPE_DESCRIPTION:
+                    wrapper = QWidget()
+                    wrapper.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+                    wrapper_layout = QVBoxLayout(wrapper)
+                    wrapper_layout.setContentsMargins(0, 0, 0, 0)
+                    self._build_description_box(section, wrapper_layout, stretch=stretch)
+                    grid.addWidget(wrapper, grid_row, col, 1, col_span)
+                else:
+                    section_widget = QWidget()
+                    section_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+                    section_id = section.get("id", "")
+                    if section_id:
+                        section_widget.setObjectName(section_id)
+                    section_layout = QVBoxLayout(section_widget)
+                    section_layout.setContentsMargins(0, 0, 0, 0)
+                    section_layout.setSpacing(12)
+                    self._build_section(section, section_layout)
+                    row_span = int(section.get("row_span", 1))
+                    grid.addWidget(section_widget, grid_row, col, row_span, col_span, Qt.AlignTop)
+ 
+        parent_layout.addLayout(grid)
 
     def _build_description_box(self, section: dict, parent_layout, stretch: int = 0):
         """Styled grey description box."""
@@ -281,8 +447,7 @@ class UIBuilder(QWidget):
                     col += 2
                 elif ftype == TYPE_DIRECT_WIDGET:
                     field = self._create_field(field_def)
-                    field.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-                    field.setMinimumSize(200, 200)
+                    field.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
                     grid.addWidget(field, row_idx, col, 1, 2)
                     col += 2
                 elif ftype == TYPE_LOAD_COMBINATION:
@@ -326,6 +491,7 @@ class UIBuilder(QWidget):
                     field = self._create_field(field_def, field_width=200)
                     grid.addWidget(field, row_idx, col + 1, Qt.AlignLeft)
                     col += 2
+
             row_idx += 1
 
         card_layout.addLayout(grid)
@@ -447,15 +613,68 @@ class UIBuilder(QWidget):
         elif ftype == TYPE_BOUND_BTN:
             return self._create_bound_btn_field(field_def, owner, ai)
 
+        elif ftype == TYPE_ALL_CUSTOM:
+            return self._create_all_custom_field(field_def, owner, ai)
+        
+        elif ftype == TYPE_ADAPTIVE:
+            ctrl_id     = field_def.get("controller", "")
+            field_id    = field_def.get("id", "")
+            modes       = field_def.get("modes", {})
+
+            mode_widgets = {}
+            for mode_name, mode_def in modes.items():
+                # merge field_id into mode_def for proper binding
+                merged = {**mode_def, "id": field_id}
+                mode_widgets[mode_name] = self._create_field(merged, field_width=field_width)
+
+            widget = AdaptiveWidget(ctrl_id, mode_widgets, ai, field_id)
+            widget.setObjectName(field_id)
+
+            return widget
+
         elif ftype == TYPE_DIRECT_WIDGET:
-            widget_class = field_def.get("widget_class")
-            widget = widget_class()
-            widget.setObjectName(field_def.get("id"))
+            cls = field_def.get("widget_class")
+            if cls is None:
+                return QWidget()
+ 
+            widget = cls(parent=owner)
+            field_id = str(field_def.get("id", ""))
+            if field_id:
+                widget.setObjectName(field_id)
+ 
+            # Wire any Signal connections declared in the schema as string method names.
+            for signal_name, method_key in [
+                ("row_selected",  "on_row_select"),
+                ("data_changed",  "on_data_changed"),
+            ]:
+                method_str = field_def.get(method_key, "")
+                if not method_str:
+                    continue
+                signal = getattr(widget, signal_name, None)
+                if signal is None:
+                    continue
+                # Resolve handler on owner then ai
+                handler = (
+                    getattr(owner, method_str, None)
+                    or (getattr(ai, method_str, None) if ai else None)
+                )
+                if callable(handler):
+                    signal.connect(handler)
+ 
             return widget
 
         elif ftype == TYPE_MODE_LINE:
             return self._create_mode_line_field(field_def, owner, ai)
-        
+
+        elif ftype == TYPE_MODE_VALUE:
+            return self._create_mode_value_field(field_def, owner, ai)
+
+        elif ftype == TYPE_CAD_PREVIEW:
+            return self._create_cad_preview_field(field_def, owner, ai)
+
+        elif ftype == TYPE_SEGMENT_TABLE:
+            return self._create_segment_table_field(field_def, owner, ai)
+
         elif ftype == TYPE_LOAD_COMBINATION:
             from osdagbridge.desktop.ui.dialogs.additional_input.ui_builder._load_combination_widget import LoadCombinationWidget
             return LoadCombinationWidget(
@@ -827,6 +1046,206 @@ class UIBuilder(QWidget):
 
         return wrapper
 
+    # ──────────────────────────────────────────────────────────────────────────
+    # TYPE_MODE_VALUE — mode combo + value combo (Stiffener thickness pattern)
+    # ──────────────────────────────────────────────────────────────────────────
+
+    def _create_mode_value_field(self, field_def: dict, owner, ai) -> QWidget:
+        """Combo (mode) + Combo (value) pair.
+
+        Mirrors _create_mode_line_field but uses a QComboBox on the value side
+        instead of a QLineEdit. First mode_choice = "All" → hides value combo;
+        other choices show it.
+
+        Schema fields:
+            id             : str           — composite; widgets get '<id>.mode' and '<id>.value'
+            mode_choices   : list[str]
+            value_choices  : list[str]     — pre-populated; tab may call addItems later
+            bind_mode      : str optional
+            bind_value     : str optional
+            on_mode_change : str optional  — owner method name
+        """
+        field_id      = field_def.get("id", "")
+        bind_mode     = field_def.get("bind_mode")
+        bind_value    = field_def.get("bind_value")
+        on_change     = field_def.get("on_mode_change") or ""
+        mode_choices  = field_def.get("mode_choices", [])
+        value_choices = [str(v) for v in (field_def.get("value_choices") or [])]
+
+        wrapper = QWidget()
+        wrapper.setFixedWidth(200)
+        wrapper.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        h = QHBoxLayout(wrapper)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(8)
+
+        mode_combo = QComboBox()
+        mode_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        mode_combo.addItems(mode_choices)
+        mode_combo.setObjectName(field_id + ".mode")
+        if hasattr(owner, "style_input_field"):
+            owner.style_input_field(mode_combo)
+        else:
+            from osdagbridge.desktop.ui.dialogs.tabs.common import apply_field_style
+            apply_field_style(mode_combo)
+
+        value_combo = QComboBox()
+        value_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        value_combo.addItems(value_choices)
+        value_combo.setObjectName(field_id + ".value")
+        value_combo.setEnabled(False)
+        if hasattr(owner, "style_input_field"):
+            owner.style_input_field(value_combo)
+        else:
+            from osdagbridge.desktop.ui.dialogs.tabs.common import apply_field_style
+            apply_field_style(value_combo)
+
+        if bind_mode:
+            setattr(owner, bind_mode, mode_combo)
+        if bind_value:
+            setattr(owner, bind_value, value_combo)
+
+        def _on_mode_changed(text, _vc=value_combo, _choices=mode_choices, _h=h):
+            if _choices and text == _choices[0]:
+                _vc.hide()
+                _vc.setEnabled(False)
+                _h.setStretch(0, 1)
+                _h.setStretch(1, 0)
+            else:
+                _vc.show()
+                _vc.setEnabled(True)
+                _h.setStretch(0, 1)
+                _h.setStretch(1, 1)
+
+        mode_combo.currentTextChanged.connect(_on_mode_changed)
+
+        if on_change and hasattr(owner, on_change):
+            mode_combo.currentTextChanged.connect(getattr(owner, on_change))
+
+        if ai and field_id:
+            mode_combo.currentTextChanged.connect(
+                lambda text, k=field_id + ".mode": ai._on_field_edited(k, text)
+            )
+            value_combo.currentTextChanged.connect(
+                lambda text, k=field_id + ".value": ai._on_field_edited(k, text)
+            )
+
+        # ── on_change_compute wiring ───────────────────────────────────────
+        on_change_compute = field_def.get("on_change_compute")
+        if on_change_compute and ai:
+            func_name = on_change_compute.get("function", "")
+            if func_name and hasattr(ai, func_name):
+                def _trigger_compute(_val, _ai=ai, _fn=func_name, _root=self):
+                    result = getattr(_ai, _fn)(_ai.working_input_dict)
+                    if not isinstance(result, dict):
+                        return
+                    for widget_id, value in result.items():
+                        w = _root.findChild(QLineEdit, widget_id)
+                        if w:
+                            w.setText(str(value) if value is not None else "")
+                mode_combo.currentTextChanged.connect(_trigger_compute)
+                value_combo.currentTextChanged.connect(_trigger_compute)
+
+        h.addWidget(mode_combo, 1)
+        h.addWidget(value_combo, 1)
+
+        # Initial state — value combo hidden when first mode choice selected
+        if mode_choices:
+            value_combo.hide()
+            h.setStretch(0, 1)
+            h.setStretch(1, 0)
+        else:
+            value_combo.show()
+            h.setStretch(0, 1)
+            h.setStretch(1, 1)
+
+        return wrapper
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # TYPE_CAD_PREVIEW — GirderCadView canvas + Cross Section / Side View btns
+    # ──────────────────────────────────────────────────────────────────────────
+
+    def _create_cad_preview_field(self, field_def: dict, owner, ai) -> QWidget:
+        """Instantiate CadPreviewWidget and bind it to owner.
+
+        Schema fields:
+            id          : str — objectName for the composite widget
+            bind        : str — owner attribute name (e.g. "cad_preview")
+            on_refresh  : str — owner method called with (view_mode) when
+                          the user clicks Cross Section / Side View buttons
+        """
+        from osdagbridge.desktop.ui.dialogs.additional_input.drawings.cad_preview_widget import (
+            CadPreviewWidget,
+        )
+
+        field_id   = field_def.get("id", "")
+        bind       = field_def.get("bind")
+        on_refresh = field_def.get("on_refresh") or ""
+
+        on_refresh_cb = None
+        if on_refresh:
+            # look up on owner first, then ai
+            target = (
+                getattr(owner, on_refresh, None)
+                or (getattr(ai, on_refresh, None) if ai else None)
+            )
+            if callable(target):
+                on_refresh_cb = target
+
+        widget = CadPreviewWidget(on_refresh=on_refresh_cb, parent=owner)
+        widget.setObjectName(field_id)
+
+        if bind:
+            setattr(owner, bind, widget)
+
+        return widget
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # TYPE_SEGMENT_TABLE — master-detail segment table with +/− row actions
+    # ──────────────────────────────────────────────────────────────────────────
+
+    def _create_segment_table_field(self, field_def: dict, owner, ai) -> QWidget:
+        """Instantiate SegmentTableWidget and bind callbacks to owner/ai.
+
+        Schema fields:
+            id              : str — objectName
+            bind            : str — owner attribute name
+            on_row_select   : str — owner/ai method(row_index, member_id)
+            on_data_changed : str — owner/ai method(segments_list)
+            min_rows        : int — minimum rows (disable remove below this)
+        """
+        from osdagbridge.desktop.ui.dialogs.additional_input.ui_builder._segment_table_widget import (
+            SegmentTableWidget,
+        )
+
+        field_id        = field_def.get("id", "")
+        bind            = field_def.get("bind")
+        on_row_select   = field_def.get("on_row_select") or ""
+        on_data_changed = field_def.get("on_data_changed") or ""
+        min_rows        = int(field_def.get("min_rows", 1))
+
+        def _resolve(name):
+            if not name:
+                return None
+            target = (
+                getattr(owner, name, None)
+                or (getattr(ai, name, None) if ai else None)
+            )
+            return target if callable(target) else None
+
+        widget = SegmentTableWidget(
+            on_row_select=_resolve(on_row_select),
+            on_data_changed=_resolve(on_data_changed),
+            min_rows=min_rows,
+            parent=owner,
+        )
+        widget.setObjectName(field_id)
+
+        if bind:
+            setattr(owner, bind, widget)
+
+        return widget
+
     def _build_tabs_layout(self, parent_layout):
         from PySide6.QtWidgets import QTabWidget
         tab_widget = QTabWidget()
@@ -869,18 +1288,7 @@ class UIBuilder(QWidget):
                 tab_widget.setTabEnabled(tab_widget.count() - 1, False)
 
         def _refresh_tab(idx):
-            """
-            Refresh source fields for the active tab.
-            Called on tab change AND on dialog open (via refresh_active_tab()).
-            Reads 'refresh' list from tab schema definition — each entry has:
-                widget_id: objectName of the QLineEdit to update
-                path:      list of keys to traverse in working_input_dict
-            Does NOT write to working_input_dict — display only.
-            """
             if idx >= len(tabs_def):
-                return
-            refresh_list = tabs_def[idx].get("refresh", [])
-            if not refresh_list:
                 return
             ai = self.additional_input_instance
             if not ai or not hasattr(ai, "working_input_dict"):
@@ -888,10 +1296,12 @@ class UIBuilder(QWidget):
             current_widget = tab_widget.currentWidget()
             if not current_widget:
                 return
+
+            # existing refresh logic
+            refresh_list = tabs_def[idx].get("refresh", [])
             for entry in refresh_list:
                 widget_id = entry.get("widget_id")
                 path      = entry.get("path", [])
-                # traverse working_input_dict by path list
                 val = ai.working_input_dict
                 for key in path:
                     if isinstance(val, dict):
@@ -901,7 +1311,6 @@ class UIBuilder(QWidget):
                         break
                 if val is None:
                     continue
-                # find widget by objectName and set value
                 w = current_widget.findChild(QLineEdit, widget_id)
                 if w:
                     w.setText(str(val))
@@ -922,3 +1331,66 @@ class UIBuilder(QWidget):
         tab_widget.refresh_active_tab = _refresh_active_tab
 
         parent_layout.addWidget(tab_widget)
+
+    def _create_all_custom_field(self, field_def: dict, owner, ai) -> QComboBox:
+        """Combo with ['All', 'Custom'].
+        Selecting 'Custom' opens CustomMultiSelectDialog internally.
+        Selected values are stored in ai.working_input_dict under field_id + '.selected'.
+
+        Schema:
+            id   : str
+            bind : str optional
+        """
+        from osdagbridge.core.utils.common import SAIL_APPROVED_THICKNESS_VALUES
+
+        field_id = field_def.get("id", "")
+        bind     = field_def.get("bind")
+
+        combo = QComboBox()
+        combo.addItems(["All", "Custom"])
+        combo.setObjectName(field_id)
+
+        if hasattr(owner, "style_input_field"):
+            owner.style_input_field(combo)
+        else:
+            from osdagbridge.desktop.ui.dialogs.tabs.common import apply_field_style
+            apply_field_style(combo)
+
+        if bind:
+            setattr(owner, bind, combo)
+
+        if ai and field_id:
+            combo.currentTextChanged.connect(
+                lambda text, k=field_id: ai._on_field_edited(k, text)
+            )
+
+        def _on_changed(text, _combo=combo, _ai=ai, _fid=field_id):
+            if text != "Custom":
+                return
+            
+            from osdagbridge.desktop.ui.dialogs.additional_input.dialogs.multi_select_dialog import CustomMultiSelectDialog
+
+            current_raw = (_ai.working_input_dict.get(_fid + ".selected", [])
+                            if _ai and hasattr(_ai, "working_input_dict") else [])
+            if isinstance(current_raw, str):
+                current_raw = [v.strip() for v in current_raw.split(",") if v.strip()]
+
+            allowed = [str(v) for v in SAIL_APPROVED_THICKNESS_VALUES]
+            dlg = CustomMultiSelectDialog(
+                title="Select Thickness Values",
+                selected_values=current_raw,
+                allowed_values=allowed,
+                parent=_combo,
+            )
+            if dlg.exec():
+                chosen = dlg.selected_values()
+                if _ai and hasattr(_ai, "working_input_dict"):
+                    _ai.working_input_dict[_fid + ".selected"] = chosen
+            else:
+                # user cancelled — revert combo to "All"
+                _combo.blockSignals(True)
+                _combo.setCurrentText("All")
+                _combo.blockSignals(False)
+
+        combo.currentTextChanged.connect(_on_changed)
+        return combo

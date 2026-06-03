@@ -21,7 +21,7 @@ from PySide6.QtGui import QDoubleValidator, QIntValidator
 from osdagbridge.core.utils.common import *
 from osdagbridge.desktop.ui.utils.custom_titlebar import CustomTitleBar
 from osdagbridge.desktop.ui.dialogs.tabs.common import apply_field_style
-from osdagbridge.desktop.ui.utils.rolled_section_preview import RolledSectionPreview
+from osdagbridge.desktop.ui.dialogs.additional_input.drawings.rolled_section_preview import RolledSectionPreview
 from osdagbridge.desktop.ui.widgets.section_viewer import SectionCatalog, SectionPreviewWidget
 from osdagbridge.desktop.ui.widgets.placeholder_section_preview import PlaceholderSectionPreviewWidget
 from .cross_bracing_details_tab import BracingLayoutCadWidget

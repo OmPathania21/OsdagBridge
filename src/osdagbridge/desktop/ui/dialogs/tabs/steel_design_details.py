@@ -20,7 +20,7 @@ from osdagbridge.desktop.ui.docks.output_dock import (
 
 from osdagbridge.desktop.ui.dialogs.tabs.common import apply_field_style
 from osdagbridge.desktop.ui.utils.styled_scroll_area import StyledScrollArea
-from osdagbridge.desktop.ui.utils.rolled_section_preview import RolledSectionPreview
+from osdagbridge.desktop.ui.dialogs.additional_input.drawings.rolled_section_preview import RolledSectionPreview
 from osdagbridge.desktop.ui.dialogs.tabs.sub_tabs.section_properties.stiffener_details_tab import (
     StiffenerCadPreviewWidget,
 )

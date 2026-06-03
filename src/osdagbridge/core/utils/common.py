@@ -38,6 +38,11 @@ TYPE_DESCRIPTION = "description"
 
 TYPE_CUSTOM_VEHICLE    = "custom_vehicle"
 TYPE_LOAD_COMBINATION = "load_combination"
+TYPE_MODE_VALUE = "mode_value"
+TYPE_CAD_PREVIEW    = "cad_preview"
+TYPE_SEGMENT_TABLE  = "segment_table"
+TYPE_ADAPTIVE = "adaptive"
+TYPE_ALL_CUSTOM = "all_custom"   # combo [All, Custom] where Custom opens popup dialog
 
 # ========== Type of Fields End ==========================================================
 
@@ -153,19 +158,6 @@ KEY_SD_SHEAR_HEIGHT = "steeldesign.details.shear.height"
 KEY_SD_SHEAR_TRANSVERSE_SPACING = "steeldesign.details.shear.transverse_spacing"
 KEY_SD_SHEAR_STUDS_PER_SECTION = "steeldesign.details.shear.studs_per_section"
 KEY_SD_SHEAR_LONGITUDINAL_SPACING = "steeldesign.details.shear.longitudinal_spacing"
-
-KEY_SD_SECTION_PROP_MASS = "steeldesign.details.section_properties.mass"
-KEY_SD_SECTION_PROP_AREA = "steeldesign.details.section_properties.area"
-KEY_SD_SECTION_PROP_IZ = "steeldesign.details.section_properties.iz"
-KEY_SD_SECTION_PROP_IV = "steeldesign.details.section_properties.iv"
-KEY_SD_SECTION_PROP_RZ = "steeldesign.details.section_properties.rz"
-KEY_SD_SECTION_PROP_RV = "steeldesign.details.section_properties.rv"
-KEY_SD_SECTION_PROP_ZZ = "steeldesign.details.section_properties.zz"
-KEY_SD_SECTION_PROP_ZV = "steeldesign.details.section_properties.zv"
-KEY_SD_SECTION_PROP_ZUZ = "steeldesign.details.section_properties.zuz"
-KEY_SD_SECTION_PROP_ZUV = "steeldesign.details.section_properties.zuv"
-KEY_SD_SECTION_PROP_IT = "steeldesign.details.section_properties.it"
-KEY_SD_SECTION_PROP_IW = "steeldesign.details.section_properties.iw"
 
 KEY_SD_STIFFENER_ROW_INTERMEDIATE = "steeldesign.details.stiffener.row.intermediate"
 KEY_SD_STIFFENER_ROW_LONGITUDINAL = "steeldesign.details.stiffener.row.longitudinal"
@@ -314,6 +306,89 @@ KEY_WC_LD_LANE_TABLE = "typical_section.lane_details.lane_table"
 KEY_WC_LD_LANE_TABLE_COUNT = "typical_section.lane_details.lane_table_count"
 
 #══════════════TYPICAL-SECTION-TAB-KEY-ENDS═══════════════════════════════════════════════════════
+
+#══════════════MEMBER-PROPERTIES-TAB-KEY-STARTS═══════════════════════════════════════════════════════
+KEY_MEMBER_PROPERTIES_TAB           = "member_properties"
+
+#-------------- Girder Details Sub-Tab --------------------------------------------
+KEY_GD_TAB                          = "member_properties.girder_details"
+KEY_GD_SP                           = "member_properties.girder_details.section_properties"
+KEY_GD_SECTION_DRAWING              = "member_properties.girder_details.section_drawing"
+KEY_GD_CAD_BTN_CROSS_SECTION = "member_properties.girder_details.cad_btn.cross_section"
+KEY_GD_CAD_BTN_SIDE_VIEW     = "member_properties.girder_details.cad_btn.side_view"
+
+# Top-level composite fields
+KEY_GD_CAD_PREVIEW               = "member_properties.girder_details.cad_preview"
+KEY_GD_SEGMENT_TABLE             = "member_properties.girder_details.segment_table"
+ 
+# Overview fields
+KEY_GD_SELECT_GIRDER             = "member_properties.girder_details.select_girder"
+KEY_GD_SPAN                      = "member_properties.girder_details.span"
+KEY_GD_TOTAL_SPAN                = "member_properties.girder_details.total_span"
+ 
+# Section inputs
+KEY_GD_TYPE                      = "member_properties.girder_details.section_inputs.type"
+KEY_GD_SYMMETRY                  = "member_properties.girder_details.section_inputs.symmetry"
+KEY_GD_DEPTH                     = "member_properties.girder_details.section_inputs.depth"
+KEY_GD_TOP_FLANGE_WIDTH          = "member_properties.girder_details.section_inputs.top_flange_width"
+KEY_GD_TOP_FLANGE_THICKNESS      = "member_properties.girder_details.section_inputs.top_flange_thickness"
+KEY_GD_BOTTOM_FLANGE_WIDTH       = "member_properties.girder_details.section_inputs.bottom_flange_width"
+KEY_GD_BOTTOM_FLANGE_THICKNESS   = "member_properties.girder_details.section_inputs.bottom_flange_thickness"
+KEY_GD_SUPPORT_TYPE              = "member_properties.girder_details.section_inputs.support_type"
+KEY_GD_SUPPORT_WIDTH             = "member_properties.girder_details.section_inputs.support_width"
+KEY_GD_WEB_THICKNESS             = "member_properties.girder_details.section_inputs.web_thickness"
+KEY_GD_IS_SECTION                = "member_properties.girder_details.section_inputs.is_section"
+KEY_GD_TORSIONAL_RESTRAINT       = "member_properties.girder_details.section_inputs.torsional_restraint"
+KEY_GD_WARPING_RESTRAINT         = "member_properties.girder_details.section_inputs.warping_restraint"
+KEY_GD_WEB_TYPE                  = "member_properties.girder_details.section_inputs.web_type"
+
+KEY_GD_MEMBER_ID                 = "member_properties.girder_details.member_id"
+KEY_GD_APPLY_EXTERIOR            = "member_properties.girder_details.apply_exterior"
+KEY_GD_APPLY_INTERIOR            = "member_properties.girder_details.apply_interior"
+KEY_GD_SECTION_PREVIEW           = "member_properties.girder_details.section_preview"
+
+#-------------- Stiffener Details Sub-Tab --------------------------------------------
+KEY_SD_TAB                          = "member_properties.stiffener_details"
+ 
+# Overview
+KEY_SD_MEMBER_ID                    = "member_properties.stiffener_details.member_id"
+ 
+# Stiffener inputs
+KEY_SD_BEARING_COUNT                = "member_properties.stiffener_details.bearing_count"
+KEY_SD_BEARING_SPACING              = "member_properties.stiffener_details.bearing_spacing"
+KEY_SD_BEARING_THICKNESS            = "member_properties.stiffener_details.bearing_thickness"
+KEY_SD_BEARING_OUTSTAND             = "member_properties.stiffener_details.bearing_outstand"
+KEY_SD_INTERMEDIATE                 = "member_properties.stiffener_details.intermediate"
+KEY_SD_INTERMEDIATE_SPACING         = "member_properties.stiffener_details.intermediate_spacing"
+KEY_SD_INTERMEDIATE_THICKNESS       = "member_properties.stiffener_details.intermediate_thickness"
+KEY_SD_INTERMEDIATE_OUTSTAND        = "member_properties.stiffener_details.intermediate_outstand"
+KEY_SD_LONGITUDINAL                 = "member_properties.stiffener_details.longitudinal"
+KEY_SD_LONGITUDINAL_THICKNESS       = "member_properties.stiffener_details.longitudinal_thickness"
+
+# Steel Design Properties
+KEY_SD_SECTION_PROP_MASS = "steeldesign.details.section_properties.mass"
+KEY_SD_SECTION_PROP_AREA = "steeldesign.details.section_properties.area"
+KEY_SD_SECTION_PROP_IZ = "steeldesign.details.section_properties.iz"
+KEY_SD_SECTION_PROP_IV = "steeldesign.details.section_properties.iv"
+KEY_SD_SECTION_PROP_RZ = "steeldesign.details.section_properties.rz"
+KEY_SD_SECTION_PROP_RV = "steeldesign.details.section_properties.rv"
+KEY_SD_SECTION_PROP_ZZ = "steeldesign.details.section_properties.zz"
+KEY_SD_SECTION_PROP_ZV = "steeldesign.details.section_properties.zv"
+KEY_SD_SECTION_PROP_ZUZ = "steeldesign.details.section_properties.zuz"
+KEY_SD_SECTION_PROP_ZUV = "steeldesign.details.section_properties.zuv"
+KEY_SD_SECTION_PROP_IT = "steeldesign.details.section_properties.it"
+KEY_SD_SECTION_PROP_IW = "steeldesign.details.section_properties.iw"
+
+# Web buckling inputs
+KEY_SD_SHEAR_BUCKLING_METHOD        = "member_properties.stiffener_details.shear_buckling_method"
+
+#-------------- Cross Bracing Sub-Tab --------------------------------------------
+KEY_CB_TAB                          = "member_properties.cross_bracing_details"
+
+#-------------- End Diaphragm Sub-Tab --------------------------------------------
+KEY_ED_TAB                          = "member_properties.end_diaphragm_details"
+
+#══════════════MEMBER-PROPERTIES-TAB-KEY-ENDS═══════════════════════════════════════════════════════
 
 #══════════════LOAD-TAB-KEY-START═════════════════════════════════════════════════════════════════
 

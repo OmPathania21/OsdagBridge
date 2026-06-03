@@ -1,4 +1,4 @@
-"""
+﻿"""
 Additional Inputs Widget for Highway Bridge Design
 Provides detailed input fields for manual bridge parameter definition
 """
@@ -124,6 +124,127 @@ class AdditionalInputs(QDialog):
                 widget.blockSignals(True)
                 widget.setChecked(bool(value))
                 widget.blockSignals(False)
+        
+        # ── Sync AdaptiveWidgets from working_input_dict ──────────────────────
+        from osdagbridge.desktop.ui.dialogs.additional_input.ui_builder.common_ui_builder import AdaptiveWidget
+        for adaptive in self.findChildren(AdaptiveWidget):
+            ctrl_id = getattr(adaptive, "_controller_id", "")
+            if not ctrl_id:
+                continue
+            mode = str(self.working_input_dict.get(ctrl_id) or "")
+            adaptive.switch_mode(mode)
+ 
+    def _on_apply_exterior_clicked(self) -> None:
+        """Connector: Apply changes to first and last girders."""
+        from osdagbridge.core.utils.common import KEY_GD_SELECT_GIRDER
+        girder_w = self.findChild(QWidget, KEY_GD_SELECT_GIRDER)
+        pass
+
+    def _on_apply_interior_clicked(self) -> None:
+        """Connector: Apply changes to interior girders."""
+        from osdagbridge.core.utils.common import KEY_GD_SEGMENT_TABLE
+        table = self.findChild(QWidget, KEY_GD_SEGMENT_TABLE)
+        pass
+
+    # ==== Show/Hide Fields Based on Girder Type Selection in Girder Details Tab ============================
+    def _on_girder_type_changed(self, girder_type: str) -> None:
+        
+        is_welded = girder_type.strip().lower() == "welded"
+
+        welded_keys = [
+            KEY_GD_SYMMETRY, KEY_GD_DEPTH, KEY_GD_TOP_FLANGE_WIDTH,
+            KEY_GD_TOP_FLANGE_THICKNESS, KEY_GD_BOTTOM_FLANGE_WIDTH,
+            KEY_GD_BOTTOM_FLANGE_THICKNESS, KEY_GD_SUPPORT_TYPE,
+            KEY_GD_SUPPORT_WIDTH, KEY_GD_WEB_THICKNESS, KEY_GD_WEB_TYPE,
+        ]
+        rolled_keys = [KEY_GD_IS_SECTION]
+
+        for key in welded_keys:
+            w   = self.findChild(QWidget, key)
+            lbl = self.findChild(QLabel, key + "_label")
+            if w:   w.setVisible(is_welded)
+            if lbl: lbl.setVisible(is_welded)
+
+        for key in rolled_keys:
+            w   = self.findChild(QWidget, key)
+            lbl = self.findChild(QLabel, key + "_label")
+            if w:   w.setVisible(not is_welded)
+            if lbl: lbl.setVisible(not is_welded)
+
+        # Update section drawing when type changes
+        self._update_section_drawing()
+
+    # Set Design Mode (Optimized/Custom) for Member Properties Tab and sync AdaptiveWidgets
+    def set_member_properties_design_mode(self, mode_str: str):
+
+        # Ensures IS Section hidden and welded fields shown correctly on first open
+        gd_type_w = self.findChild(QComboBox, KEY_GD_TYPE)
+        if gd_type_w:
+            self._on_girder_type_changed(gd_type_w.currentText())
+
+        value = str(mode_str or "").strip().lower()
+        if value in {"custom", "customized"}:
+            normalized = "Custom"
+        else:
+            normalized = "Optimized"
+
+        self.working_input_dict[KEY_DESIGN_MODE] = normalized
+        is_optimized = normalized == "Optimized"
+
+        # Sync AdaptiveWidgets (depth, flange widths, thickness fields)
+        from osdagbridge.desktop.ui.dialogs.additional_input.ui_builder.common_ui_builder import AdaptiveWidget
+        for adaptive in self.findChildren(AdaptiveWidget):
+            if getattr(adaptive, "_controller_id", "") == KEY_DESIGN_MODE:
+                adaptive.switch_mode(normalized)
+
+        # Type & Symmetry — disabled when Optimized
+        for key in [KEY_GD_TYPE, KEY_GD_SYMMETRY]:
+            w = self.findChild(QWidget, key)
+            if w:
+                w.setEnabled(not is_optimized)
+
+        # Web Type — read-only and forced to "Thin Web with ITS" when Optimized
+        web_type_w = self.findChild(QComboBox, KEY_GD_WEB_TYPE)
+        if web_type_w:
+            web_type_w.setEnabled(not is_optimized)
+            if is_optimized:
+                web_type_w.blockSignals(True)
+                web_type_w.setCurrentText("Thin Web with ITS")
+                web_type_w.blockSignals(False)
+
+        # Section Properties card — hide entirely when Optimized
+        wrapper = self.findChild(QWidget, KEY_GD_SP)
+        if wrapper:
+            wrapper.setVisible(not is_optimized)
+
+        # Hide section drawing when Optimized — only visible in Custom mode
+        wrapper = self.findChild(QWidget, KEY_GD_SECTION_DRAWING)
+        if wrapper:
+            wrapper.setVisible(not is_optimized)
+
+    # === Refresh Girder List in Member Properties ===========================================
+    def _on_girder_count_refreshed(self, widget_id: str, value) -> None:
+        """Connector: refresh mechanism updates Select Girder combo
+        when girder count changes in working_input_dict (from Typical Section).
+        Called by UIBuilder's refresh path with widget_id=KEY_GD_SELECT_GIRDER.
+        """
+        from osdagbridge.core.utils.common import KEY_GD_SELECT_GIRDER
+        combo = self.findChild(QComboBox, KEY_GD_SELECT_GIRDER)
+        if combo is None:
+            return
+        try:
+            count = int(float(str(value or 0)))
+        except (ValueError, TypeError):
+            return
+        current = combo.currentText()
+        combo.blockSignals(True)
+        combo.clear()
+        for i in range(1, count + 1):
+            combo.addItem(f"Girder {i}", f"G{i}")
+        # restore selection if still valid
+        idx = combo.findText(current)
+        combo.setCurrentIndex(idx if idx >= 0 else 0)
+        combo.blockSignals(False)
 
     def reset_active_tab_defaults(self) -> None:
         """
@@ -180,6 +301,41 @@ class AdditionalInputs(QDialog):
 
             # Update only the reset key in working_input_dict
             self.working_input_dict[name] = value
+
+    # Update Section Drawing (RolledSectionPreview renamed to SectionDrawing) in Girder Details.
+    # Implicitly connected via schema on_change / on_editing_finished on section input fields.
+    def _update_section_drawing(self) -> None:
+        from osdagbridge.core.utils.common import KEY_GD_SECTION_PREVIEW
+        from osdagbridge.desktop.ui.dialogs.additional_input.drawings.rolled_section_preview import RolledSectionPreview
+        widget = self.findChild(RolledSectionPreview, KEY_GD_SECTION_PREVIEW)
+        if widget is None:
+            return
+        widget.update_section(self.working_input_dict)
+
+    # == Member Properties > Girder Details = segment table connectors = STARTS ================
+    def _on_segment_selected(self, row: int, member_id: str) -> None:
+        """Connector: SegmentTableWidget.row_selected → CadPreviewWidget.
+        Fired when the user clicks a row. Highlights that member on the canvas.
+        """
+        from osdagbridge.core.utils.common import KEY_GD_CAD_PREVIEW
+        cad = self.findChild(QWidget, KEY_GD_CAD_PREVIEW)
+        if cad and hasattr(cad, "update_selected_member"):
+            cad.update_selected_member(member_id)
+ 
+    def _on_segment_data_changed(self, segments) -> None:
+        """Connector: SegmentTableWidget.data_changed → CadPreviewWidget.
+        Fired on End edit, split (+), or remove (−). Redraws the canvas
+        with the updated segment chain. Non-list payloads (action dicts)
+        are ignored here — the table handles split/remove internally.
+        """
+        from osdagbridge.core.utils.common import KEY_GD_CAD_PREVIEW
+        if not isinstance(segments, list):
+            return
+        cad = self.findChild(QWidget, KEY_GD_CAD_PREVIEW)
+        if cad and hasattr(cad, "update_segments"):
+            cad.update_segments(segments)
+    
+    # == Member Properties > Girder Details = segment table connectors = ENDS ================
 
     # Compute func that return the value to be updated (field)
     # Calculation from Core IRC STARTS=======================================================================
@@ -602,7 +758,9 @@ class AdditionalInputs(QDialog):
         self.tabs.addTab(self.typical_section_tab, "Typical Section Details")
         
         # Sub-Tab 2: Member Properties
-        self.section_properties_tab = SectionPropertiesTab()
+        self.section_properties_tab = SectionPropertiesTab(
+            additiona_input_instance=self
+        )
         self.tabs.addTab(self.section_properties_tab, "Member Properties")
         self.section_properties_tab.set_editable_mode(self._member_properties_editable)
 
@@ -761,15 +919,6 @@ class AdditionalInputs(QDialog):
             except ValueError:
                 continue
 
-    def _normalize_member_properties_design_mode(self, mode_str: str) -> str:
-        """Map upstream design labels to Member Properties supported values."""
-        value = str(mode_str or "").strip().lower()
-        if value in {"custom", "customized"}:
-            return "Custom"
-        if value in {"optimized", "optimised"}:
-            return "Optimized"
-        return "Optimized"
-
     def _sync_member_properties_girder_count(self) -> None:
         """Push current girder count from Typical Section to Member Properties."""
         try:
@@ -891,11 +1040,6 @@ class AdditionalInputs(QDialog):
             widget.setObjectName(field_def["id"])
 
         return widget
-
-    def set_member_properties_design_mode(self, mode_str: str):
-        normalized_mode = self._normalize_member_properties_design_mode(mode_str)
-        if hasattr(self, "section_properties_tab") and hasattr(self.section_properties_tab, "set_design_mode"):
-            self.section_properties_tab.set_design_mode(normalized_mode)
 
     def get_all_values(self):
         """

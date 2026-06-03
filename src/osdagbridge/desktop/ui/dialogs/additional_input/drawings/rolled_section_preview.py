@@ -21,18 +21,14 @@ from osdagbridge.desktop.ui.utils.cad_palette import (
     OSDAG_FONT_FAMILY,
 )
 
-try:  # pragma: no cover - optional dependency
-    from osdagbridge.core.bridge_components.super_structure.girder.properties import BeamSection  # type: ignore
-except Exception:  # pragma: no cover - fallback when module missing in current build
-    BeamSection = Any  # type: ignore[misc,assignment]
-
 class RolledSectionPreview(QWidget):
     """Render a rolled or welded section with CAD-style dimension annotations."""
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
-        self._section: Optional[BeamSection] = None
+        self._section = None
         self._dimensions: Dict[str, float] = {}
+        self._caption: str = ""
 
         self._outline_color = QColor(CAD_OUTLINE)
         self._outline_width = 3.0
@@ -62,9 +58,71 @@ class RolledSectionPreview(QWidget):
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-    def set_section(self, section: Optional[BeamSection]) -> None:
-        """Update the preview to show the supplied rolled ``BeamSection``."""
 
+    # Convenience orchestrator — calls set_section (rolled) or set_dimensions (welded).
+    # Reads from working_input_dict which is kept in sync by _on_field_edited.
+    # Called from additional_inputs._update_section_drawing via schema on_change /
+    # on_editing_finished on all section input fields.
+    def update_section(self, working_input_dict: dict) -> None:
+        from osdagbridge.core.utils.common import (
+            KEY_GD_TYPE, KEY_GD_IS_SECTION,
+            KEY_GD_DEPTH, KEY_GD_TOP_FLANGE_WIDTH, KEY_GD_BOTTOM_FLANGE_WIDTH,
+            KEY_GD_TOP_FLANGE_THICKNESS, KEY_GD_BOTTOM_FLANGE_THICKNESS,
+            KEY_GD_WEB_THICKNESS,
+        )
+        is_welded = str(working_input_dict.get(KEY_GD_TYPE) or "").lower() == "welded"
+
+        if is_welded:
+            depth = float(working_input_dict.get(KEY_GD_DEPTH) or 0)
+            top_w = float(working_input_dict.get(KEY_GD_TOP_FLANGE_WIDTH) or 0)
+            bot_w = float(working_input_dict.get(KEY_GD_BOTTOM_FLANGE_WIDTH) or top_w)
+            web_t = float(working_input_dict.get(KEY_GD_WEB_THICKNESS) or 0)
+            top_t = float(working_input_dict.get(KEY_GD_TOP_FLANGE_THICKNESS) or 0)
+            bot_t = float(working_input_dict.get(KEY_GD_BOTTOM_FLANGE_THICKNESS) or top_t)
+            if not depth or not top_w:
+                self.clear()
+                return
+            self.set_dimensions(
+                depth_mm=depth,
+                flange_width_mm=top_w,
+                bottom_flange_width_mm=bot_w,
+                web_thickness_mm=web_t or max(8.0, depth * 0.02),
+                flange_thickness_mm=top_t or max(10.0, depth * 0.03),
+                bottom_flange_thickness_mm=bot_t or max(10.0, depth * 0.03),
+                show_welds=True,
+            )
+            self._caption = "Welded girder preview"
+            self.update()
+
+        else:
+            from osdagbridge.desktop.ui.dialogs.tabs.sub_tabs.section_properties.girder_details_tab import girder_properties
+            designation = str(working_input_dict.get(KEY_GD_IS_SECTION) or "")
+            if not designation:
+                self.clear()
+                return
+            beam = girder_properties.get_beam_profile(designation)
+            # Fallback to outline dict when full beam data unavailable — mirrors old _update_preview
+            outline = girder_properties.get_rolled_section(designation) if beam is None else None
+            if beam:
+                self.set_section(beam)
+                self._caption = f"Rolled section \u2022 {designation}"
+                self.update()
+            elif outline:
+                self.set_dimensions(
+                    depth_mm=outline["depth_mm"],
+                    flange_width_mm=outline["top_flange_width_mm"],
+                    bottom_flange_width_mm=outline["bottom_flange_width_mm"],
+                    web_thickness_mm=outline["web_thickness_mm"],
+                    flange_thickness_mm=outline["top_flange_thickness_mm"],
+                    bottom_flange_thickness_mm=outline["bottom_flange_thickness_mm"],
+                )
+                self._caption = f"Rolled section \u2022 {designation}"
+                self.update()
+            else:
+                self.clear()
+
+    def set_section(self, section) -> None:
+        """Update the preview to show the supplied rolled BeamSection."""
         self._section = section
         if section is None:
             self._dimensions = {}
@@ -94,7 +152,6 @@ class RolledSectionPreview(QWidget):
         show_welds: bool = False,
     ) -> None:
         """Feed custom dimensions directly (e.g., for welded sections)."""
-
         self._section = None
         self._dimensions = {
             "depth": float(depth_mm),
@@ -111,10 +168,10 @@ class RolledSectionPreview(QWidget):
 
     def clear(self) -> None:
         """Reset the preview to an empty placeholder."""
-
         self._section = None
         self._dimensions = {}
         self._show_welds = False
+        self._caption = ""
         self.update()
 
     # ------------------------------------------------------------------
@@ -315,6 +372,22 @@ class RolledSectionPreview(QWidget):
             label_symbol="wt",
         )
 
+        # Draw caption (e.g. "Welded girder preview" / "Rolled section • ISMB 500") at bottom
+        if self._caption:
+            painter.save()
+            cap_font = QFont(self.font())
+            cap_font.setFamily(self._brand_font_family)
+            cap_font.setPointSizeF(max(9.0, cap_font.pointSizeF()))
+            cap_font.setBold(True)
+            painter.setFont(cap_font)
+            painter.setPen(QColor(CAD_TEXT))
+            painter.drawText(
+                self.rect().adjusted(8, 0, -8, -6),
+                Qt.AlignHCenter | Qt.AlignBottom,
+                self._caption,
+            )
+            painter.restore()
+
     # ------------------------------------------------------------------
     # Drawing helpers
     # ------------------------------------------------------------------
@@ -424,7 +497,6 @@ class RolledSectionPreview(QWidget):
     def _draw_welds(self, painter: QPainter, top_flange: QRectF, web: QRectF, bottom_flange: QRectF) -> None:
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing, True)
-        # Keep weld triangles visible on a light theme.
         fill_color = QColor("#111111")
         outline_pen = QPen(QColor("#111111"), 0.9)
         outline_pen.setCosmetic(True)
@@ -688,7 +760,7 @@ class RolledSectionPreview(QWidget):
         return f"{value:.1f} mm"
 
     @staticmethod
-    def _extract_dimension(section: BeamSection, names, default: float) -> float:
+    def _extract_dimension(section, names, default: float) -> float:
         for attr in names if isinstance(names, (tuple, list)) else (names,):
             if hasattr(section, attr):
                 raw = getattr(section, attr)
