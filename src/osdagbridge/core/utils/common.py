@@ -529,6 +529,8 @@ KEY_DS_STUD_DIAMETER              = "design_options.shear_studs.diameter"
 KEY_DS_STUD_HEIGHT                = "design_options.shear_studs.height"
 KEY_DS_STUD_COUNT                 = "design_options.shear_studs.count"
 KEY_DS_STUD_TRANSVERSE_SPACING    = "design_options.shear_studs.transverse_spacing"
+KEY_DS_STUD_HEAD_DIAMETER         = "design_options.shear_studs.head_diameter"
+KEY_DS_STUD_HEAD_HEIGHT           = "design_options.shear_studs.head_height"
 
 #══════════════DESIGN-OPTIONS-TAB-KEY-ENDS═════════════════════════════════════════════════════
 
