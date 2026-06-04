@@ -432,10 +432,10 @@ def solve_extend_basic_input_dict(basic_input_dict: dict) -> None:
     })
     # --- Remove all stale dynamic girder keys first (handles girder count change) ---
     # Match on the common prefix of all KEY_MP_GIRDER_* values from common.py
-    # which all start with "member_properties.girder_details." and contain "_G"
+    # which all start with "member_properties.girder_details." and contain ".G"
     stale_keys = [
         k for k in basic_input_dict
-        if k.startswith("member_properties.girder_details.") and "_G" in k
+        if k.startswith("member_properties.girder_details.") and ".G" in k
     ]
     for k in stale_keys:
         del basic_input_dict[k]
@@ -444,7 +444,7 @@ def solve_extend_basic_input_dict(basic_input_dict: dict) -> None:
     # To add a new property in future, just add one line here.
     # The imported constant's string VALUE is used as the base key,
     # e.g. KEY_MP_GIRDER_DEPTH = "member_properties.girder_details.section_input.depth"
-    # produces → "member_properties.girder_details.section_input.depth_G1M1"
+    # produces → "member_properties.girder_details.section_input.depth.G1.M1"
     MP_GIRDER_PROPS = [
         (KEY_MP_GIRDER_SYMMETRY,                section_props['symmetry']),
         (KEY_MP_GIRDER_DEPTH,                   section_props['D']),
@@ -474,13 +474,13 @@ def solve_extend_basic_input_dict(basic_input_dict: dict) -> None:
     for girder_idx in range(1, no_of_girders + 1):
         for member_id in [1]:  # extend to [1, 2, 3] for multiple members per girder
             for base_key, value in MP_GIRDER_PROPS:
-                dynamic_key = f"{base_key}_G{girder_idx}M{member_id}"
+                dynamic_key = f"{base_key}.G{girder_idx}.M{member_id}"
                 basic_input_dict[dynamic_key] = value
 
     # --- Remove all stale dynamic stiffener keys (handles girder count change) ---
     stale_stiffener_keys = [
         k for k in basic_input_dict
-        if k.startswith("member_properties.stiffener_details.") and "_G" in k
+        if k.startswith("member_properties.stiffener_details.") and ".G" in k
     ]
     for k in stale_stiffener_keys:
         del basic_input_dict[k]
@@ -503,13 +503,13 @@ def solve_extend_basic_input_dict(basic_input_dict: dict) -> None:
     for girder_idx in range(1, no_of_girders + 1):
         for member_id in [1]:
             for base_key, defaults_key in MP_STIFFENER_PROPS:
-                dynamic_key = f"{base_key}_G{girder_idx}M{member_id}"
+                dynamic_key = f"{base_key}.G{girder_idx}.M{member_id}"
                 basic_input_dict[dynamic_key] = STIFFENER_DETAILS_DEFAULTS[defaults_key]
 
     # --- Remove all stale dynamic cross bracing keys ---
     stale_cb_keys = [
         k for k in basic_input_dict
-        if k.startswith("member_properties.cross_bracing_details.") and "_G" in k
+        if k.startswith("member_properties.cross_bracing_details.") and ".G" in k
     ]
     for k in stale_cb_keys:
         del basic_input_dict[k]
@@ -536,10 +536,10 @@ def solve_extend_basic_input_dict(basic_input_dict: dict) -> None:
     for girder_idx in range(1, no_of_girders):
         g_pair = f"G{girder_idx}G{girder_idx + 1}"
         for member_id in range(1, no_of_members + 1):
-            b_member = f"B1M{member_id}"
-            suffix = f"_{g_pair}_{b_member}"
+            b_member = f"B{girder_idx}M{member_id}"
+            suffix = f".{g_pair}.{b_member}"
             select_girders_value = f"G{girder_idx} to G{girder_idx + 1}"
-            member_id_value      = f"B1M1 to B1M{no_of_members}"
+            member_id_value      = f"B{girder_idx}M1 to B{girder_idx}M{no_of_members}"
             for base_key, defaults_key in MP_CB_PROPS:
                 dynamic_key = f"{base_key}{suffix}"
                 if defaults_key == "select_girders":
@@ -552,7 +552,7 @@ def solve_extend_basic_input_dict(basic_input_dict: dict) -> None:
     # --- Remove all stale dynamic end diaphragm keys ---
     stale_ed_keys = [
         k for k in basic_input_dict
-        if k.startswith("member_properties.end_diaphragm_details.") and "_G" in k
+        if k.startswith("member_properties.end_diaphragm_details.") and ".G" in k
     ]
     for k in stale_ed_keys:
         del basic_input_dict[k]
@@ -592,10 +592,10 @@ def solve_extend_basic_input_dict(basic_input_dict: dict) -> None:
     for girder_idx in range(1, no_of_girders):
         g_pair = f"G{girder_idx}G{girder_idx + 1}"
         for member_id in range(1, no_of_ed_members + 1):
-            e_member = f"E1M{member_id}"
-            suffix = f"_{g_pair}_{e_member}"
+            e_member = f"E{girder_idx}M{member_id}"
+            suffix = f".{g_pair}.{e_member}"
             select_girders_value = f"G{girder_idx} to G{girder_idx + 1}"
-            member_id_value      = f"E1M1 to E1M{no_of_ed_members}"
+            member_id_value      = f"E{girder_idx}M1 to E{girder_idx}M{no_of_ed_members}"
             for base_key, defaults_key in MP_ED_PROPS:
                 dynamic_key = f"{base_key}{suffix}"
                 if defaults_key == "select_girders":

@@ -193,23 +193,23 @@ def resolve_girder_value(source: dict, base_key: str, i: int | None = None):
     Resolve a girder property from an input/output dict, tolerating both the
     per-girder dynamic key scheme and the legacy scalar key.
 
-    Per-girder values are stored under ``<base_key>_G{i+1}M1`` (see
+    Per-girder values are stored under ``<base_key>.G{i+1}.M1`` (see
     ``defaults.solve_extend_basic_input_dict``). Resolution order:
 
-      1. ``<base_key>_G{i+1}M1`` — the requested girder (only when ``i`` given),
-      2. ``<base_key>``          — the legacy scalar key, if still populated,
-      3. ``<base_key>_G1M1``     — first girder, the representative fallback used
-                                   for edge beams / transverse members and any
-                                   consumer that does not care about a specific
-                                   girder.
+      1. ``<base_key>.G{i+1}.M1`` — the requested girder (only when ``i`` given),
+      2. ``<base_key>``           — the legacy scalar key, if still populated,
+      3. ``<base_key>.G1.M1``     — first girder, the representative fallback used
+                                    for edge beams / transverse members and any
+                                    consumer that does not care about a specific
+                                    girder.
 
     Raises ``KeyError(base_key)`` if none of the candidates are present.
     """
     candidates = []
     if i is not None:
-        candidates.append(f"{base_key}_G{i + 1}M1")
+        candidates.append(f"{base_key}.G{i + 1}.M1")
     candidates.append(base_key)
-    candidates.append(f"{base_key}_G1M1")
+    candidates.append(f"{base_key}.G1.M1")
     for key in candidates:
         if key in source:
             return source[key]
@@ -487,7 +487,7 @@ class PlateGirderBridge:
         """
         self.grillage_model.set_geometry(self.grillage_geometry, self.deck_layout)
         # Build one SectionProperties per main girder. When the input dict carries
-        # per-girder dynamic keys (``<base>_G{i}M1``) the girders may differ;
+        # per-girder dynamic keys (``<base>.G{i}.M1``) the girders may differ;
         # otherwise every girder falls back to the shared scalar section.
         n_girders = self._girder_count()
         girder_sections = [self._girder_section(i) for i in range(n_girders)]
