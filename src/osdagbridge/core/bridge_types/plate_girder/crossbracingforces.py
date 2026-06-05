@@ -134,13 +134,15 @@ from typing import Optional
 import pandas as pd
 
 from osdagbridge.core.utils.common import (
-    DEFAULT_CROSS_BRACING_SPACING,
     KEY_MP_CB_SPACING,
     KEY_MP_CB_TYPE,
     KEY_MP_GIRDER_DEPTH,
     KEY_MP_GIRDER_TOP_FLANGE_THICKNESS,
     KEY_MP_GIRDER_BOTTOM_FLANGE_THICKNESS,
     KEY_TS_GIRDER_SPACING,
+    KEY_MP_CB_BRACING_SECTION_TYPE,
+    KEY_MP_CB_TOP_CHORD,
+    KEY_MP_CB_BOTTOM_CHORD,
 )
 
 # ---------------------------------------------------------------------------
@@ -149,10 +151,6 @@ from osdagbridge.core.utils.common import (
 
 BRACE_X = "X"
 BRACE_K = "K"
-
-_KEY_TOP_CHORD    = "Cross Bracing Top Chord"
-_KEY_BOTTOM_CHORD = "Cross Bracing Bottom Chord"
-
 
 # ===========================================================================
 class CrossBracingForces:
@@ -214,22 +212,22 @@ class CrossBracingForces:
         if brace_type is not None:
             raw = str(brace_type).strip().upper()
         else:
-            raw = str(ai.get(KEY_MP_CB_TYPE, BRACE_X)).strip().upper()
+            raw = str(ai.get(KEY_MP_CB_BRACING_SECTION_TYPE)).strip().upper()
 
         if raw not in (BRACE_X, BRACE_K):
-            raise ValueError(f"Unsupported brace_type '{raw}'. Choose 'X' or 'K'.")
+            raw = BRACE_X  # TODO: remove fallback once UI always sets brace type
         self.brace_type: str = raw
 
         if top_chord is not None:
             self.top_chord = bool(top_chord)
         else:
-            val = ai.get(_KEY_TOP_CHORD, "Yes")
+            val = ai.get(KEY_MP_CB_TOP_CHORD)
             self.top_chord = str(val).strip().lower() not in ("no", "false", "0")
 
         if bottom_chord is not None:
             self.bottom_chord = bool(bottom_chord)
         else:
-            val = ai.get(_KEY_BOTTOM_CHORD, "Yes")
+            val = ai.get(KEY_MP_CB_BOTTOM_CHORD)
             self.bottom_chord = str(val).strip().lower() not in ("no", "false", "0")
 
     # =======================================================================
@@ -249,7 +247,7 @@ class CrossBracingForces:
         else:
             ai = getattr(self.bridge, "additional_inputs", {})
             self.cb_spacing = float(
-                ai.get(KEY_MP_CB_SPACING, DEFAULT_CROSS_BRACING_SPACING)
+                ai.get(KEY_MP_CB_SPACING) or 3.0  # TODO: remove fallback once UI always sets spacing
             )
 
         # --- Girder section dimensions (metres) ---
