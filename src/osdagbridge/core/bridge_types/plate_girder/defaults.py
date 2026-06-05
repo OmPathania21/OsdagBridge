@@ -42,7 +42,6 @@ from osdagbridge.core.utils.common import (
     KEY_MP_STIFFENER_LONGITUDINAL,
     KEY_MP_STIFFENER_LONGITUDINAL_THICKNESS,
     KEY_MP_STIFFENER_DESIGN_METHOD,
-    KEY_MP_STIFFENER_BEARING_THICKNESS_MODE,
     STIFFENER_DETAILS_DEFAULTS,
 
     KEY_MP_CB_SELECT_GIRDERS,
@@ -70,7 +69,6 @@ from osdagbridge.core.utils.common import (
     KEY_MP_ED_TOP_CHORD_SECTION_DESIG,
     KEY_MP_ED_BOTTOM_CHORD_SECTION_TYPE,
     KEY_MP_ED_BOTTOM_CHORD_SECTION_DESIG,
-    KEY_MP_ED_SPACING,
     VALUES_END_DIAPHRAGM_TYPE,
 
     KEY_DO_GAMMA_C_BASIC, KEY_DO_GAMMA_C_ACCIDENTAL, KEY_DO_GAMMA_M0, KEY_DO_GAMMA_M1, KEY_DO_GAMMA_S,
@@ -458,7 +456,6 @@ def _on_no_of_girders_changed(working_input_dict: dict) -> None:
     MP_STIFFENER_PROPS = [
         (KEY_MP_STIFFENER_NO_BEARING_STIFFENERS,  "bearing_stiffeners_each_end"),
         (KEY_MP_STIFFENER_SPACING,                "bearing_spacing_mm"),
-        (KEY_MP_STIFFENER_BEARING_THICKNESS_MODE, "bearing_thickness_mode"),
         (KEY_MP_STIFFENER_BEARING_THICKNESS,      "bearing_thickness_value"),
         (KEY_MP_STIFFENER_BEARING_OUTSTAND,       "bearing_outstand_mm"),
         (KEY_MP_STIFFENER_INTERMEDIATE,           "intermediate_stiffener"),
@@ -552,7 +549,6 @@ def _on_no_of_girders_changed(working_input_dict: dict) -> None:
         (KEY_MP_ED_TOP_CHORD_SECTION_DESIG,     "top_chord_section_desig"),
         (KEY_MP_ED_BOTTOM_CHORD_SECTION_TYPE,   "bottom_chord_section_type"),
         (KEY_MP_ED_BOTTOM_CHORD_SECTION_DESIG,  "bottom_chord_section_desig"),
-        (KEY_MP_ED_SPACING,                     "spacing"),
     ]
 
     # --- Populate dynamic end diaphragm keys ---
