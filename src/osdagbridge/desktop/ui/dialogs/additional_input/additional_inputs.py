@@ -26,7 +26,6 @@ from osdagbridge.core.bridge_types.plate_girder.ui_fields_additional_input impor
     DESIGN_OPTIONS_CONT_SCHEMA,
     SUPPORT_CONDITIONS_SCHEMA,
 )
-from osdagbridge.core.bridge_types.plate_girder.defaults import _on_no_of_girders_changed
 from osdagbridge.desktop.ui.dialogs.additional_input.ui_builder._load_combination_widget import LoadCombinationWidget
             
 # =================================================================================
@@ -805,11 +804,6 @@ class AdditionalInputs(QDialog):
         # Keep girder count in sync across tabs
         try:
             self.typical_section_tab.girder_count_changed.connect(self.section_properties_tab.set_girder_count)
-
-            # Update working_input_dict when girder count changes
-            self.typical_section_tab.girder_count_changed.connect(
-                lambda count: _on_no_of_girders_changed(self.working_input_dict, count)
-            )
             
             self._sync_member_properties_girder_count()
         except Exception:
@@ -872,6 +866,20 @@ class AdditionalInputs(QDialog):
         self._enforce_decimal_places(2)
         # Normalize existing numeric text to 2 decimal places for consistent display
         self._normalize_numeric_texts(2)
+
+    # Connector on_editing_finished for No of Girders (Typical Section Tab) → refresh Select Girder combo (Member Properties Tab)
+    def on_no_of_girders_changed(self):
+
+        # Update Dynamic Keys in Working Dict for Member Properties Tab
+        from osdagbridge.core.bridge_types.plate_girder.defaults import _on_no_of_girders_changed
+        from pprint import pprint
+        print(f"\n\n@@: Dict before updating dynamic keys:\n")
+        pprint(self.working_input_dict)
+        print("\n\n")
+        _on_no_of_girders_changed(self.working_input_dict)
+        print(f"\n\n@@: Dict after updating dynamic keys:\n")
+        pprint(self.working_input_dict)
+        print("\n\n")
 
     # Update CAD Method for Support Conditions Tab Drawing
     # This function is implicitly connected using Schema of the Tab

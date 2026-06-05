@@ -165,7 +165,7 @@ class TypicalSectionDetailsTab(QWidget):
 
         if "primary_fields" in schema:
             self.primary_widget = UIBuilder(
-                owner=self,
+                owner=self.additional_input_instance,
                 schema=schema["primary_fields"],
                 card_title="Inputs:",
                 main_widget_object_name="primary_fields.main",
