@@ -21,6 +21,11 @@ from osdagbridge.core.utils.common import (
     KEY_RL_TYPE, KEY_RL_WIDTH, KEY_RL_HEIGHT, KEY_RL_LOAD_MODE, KEY_RL_LOAD_VALUE,
     KEY_WC_MATERIAL, KEY_WC_DENSITY, KEY_WC_THICKNESS,
 
+    KEY_MP_SELECT_GIRDER,
+    KEY_MP_MEMBER_ID,
+    KEY_MP_GIRDER_TYPE,
+    KEY_MP_SUPPORT_TYPE,
+    KEY_MP_SUPPORT_WIDTH,
     KEY_MP_GIRDER_SYMMETRY, KEY_MP_GIRDER_DEPTH, KEY_MP_GIRDER_WEB_DEPTH, KEY_MP_GIRDER_WEB_THICKNESS,
     KEY_MP_GIRDER_TOP_FLANGE_WIDTH, KEY_MP_GIRDER_TOP_FLANGE_THICKNESS,
     KEY_MP_GIRDER_BOTTOM_FLANGE_WIDTH, KEY_MP_GIRDER_BOTTOM_FLANGE_THICKNESS,
@@ -31,6 +36,7 @@ from osdagbridge.core.utils.common import (
     KEY_MP_GIRDER_PLASTIC_MODULUS_ZUZ, KEY_MP_GIRDER_PLASTIC_MODULUS_ZUY,
     KEY_MP_GIRDER_TORSION_CONSTANT_IT, KEY_MP_GIRDER_WARPING_CONSTANT_IW,
 
+    KEY_MP_STIFFENER_SELECT_MEMBER_ID,
     KEY_MP_STIFFENER_NO_BEARING_STIFFENERS,
     KEY_MP_STIFFENER_SPACING,
     KEY_MP_STIFFENER_BEARING_THICKNESS,
@@ -65,11 +71,32 @@ from osdagbridge.core.utils.common import (
     KEY_MP_ED_BRACING_TYPE,
     KEY_MP_ED_BRACING_SECTION,
     KEY_MP_ED_BRACING_SECTION_DESIGNATION,
+    KEY_MP_ED_TOP_CHORD,
     KEY_MP_ED_TOP_CHORD_SECTION_TYPE,
     KEY_MP_ED_TOP_CHORD_SECTION_DESIG,
+    KEY_MP_ED_BOTTOM_CHORD,
     KEY_MP_ED_BOTTOM_CHORD_SECTION_TYPE,
     KEY_MP_ED_BOTTOM_CHORD_SECTION_DESIG,
+    KEY_MP_ED_SYMMETRY,
+    KEY_MP_ED_TOTAL_DEPTH,
+    KEY_MP_ED_WEB_THICKNESS,
+    KEY_MP_ED_TOP_FLANGE_WIDTH,
+    KEY_MP_ED_BOTTOM_FLANGE_WIDTH,
+    KEY_MP_ED_TOP_FLANGE_THICKNESS,
+    KEY_MP_ED_BOTTOM_FLANGE_THICKNESS,
+    KEY_MP_ED_IS_SECTION,
+    KEY_MP_ED_MASS,
+    KEY_MP_ED_SECTIONAL_AREA,
+    KEY_MP_ED_SECTIONAL_IY,
+    KEY_MP_ED_SECTIONAL_IZ,
+    KEY_MP_ED_RADIUS_GYRATION_Y,
+    KEY_MP_ED_RADIUS_GYRATION_Z,
+    KEY_MP_ED_ELASTIC_MODULUS_ZZ,
+    KEY_MP_ED_ELASTIC_MODULUS_ZY,
+    KEY_MP_ED_PLASTIC_MODULUS_ZUZ,
+    KEY_MP_ED_PLASTIC_MODULUS_ZUY,
     VALUES_END_DIAPHRAGM_TYPE,
+    get_angle_section_properties,
 
     KEY_DO_GAMMA_C_BASIC, KEY_DO_GAMMA_C_ACCIDENTAL, KEY_DO_GAMMA_M0, KEY_DO_GAMMA_M1, KEY_DO_GAMMA_S,
     KEY_DO_GAMMA_V, KEY_DO_GAMMA_FLT, KEY_DO_GAMMA_MF, KEY_DO_LOAD_CYCLES, KEY_DO_DEFLECTION_LIMIT,
@@ -406,6 +433,31 @@ def _on_no_of_girders_changed(working_input_dict: dict) -> None:
     for k in stale_girder_keys:
         del working_input_dict[k]
 
+    # --- Girder selector key: only a .G{n} suffix, no member id ---
+    for girder_idx in range(1, count + 1):
+        working_input_dict[f"{KEY_MP_SELECT_GIRDER}.G{girder_idx}"] = f"G{girder_idx}"
+
+    # --- Per-girder/member section-input defaults: <base_key>.G{n}.M{m} ---
+    # KEY_MP_MEMBER_ID lives under "member_properties.member_id" (not
+    # ".girder_details."), so it isn't covered by stale_girder_keys above.
+    stale_member_id_keys = [
+        k for k in working_input_dict
+        if k.startswith(f"{KEY_MP_MEMBER_ID}.G")
+    ]
+    for k in stale_member_id_keys:
+        del working_input_dict[k]
+
+    MP_GIRDER_INPUT_DEFAULTS = [
+        (KEY_MP_GIRDER_TYPE,   "welded"),
+        (KEY_MP_SUPPORT_TYPE,  "major laterally supported"),
+        (KEY_MP_SUPPORT_WIDTH, 400.0),
+    ]
+    for girder_idx in range(1, count + 1):
+        for member_id in [1]:
+            working_input_dict[f"{KEY_MP_MEMBER_ID}.G{girder_idx}.M{member_id}"] = f"G{girder_idx}M{member_id}"
+            for base_key, value in MP_GIRDER_INPUT_DEFAULTS:
+                working_input_dict[f"{base_key}.G{girder_idx}.M{member_id}"] = value
+
     # --- Mapping: imported constant value (from common.py) → section_props value ---
     # To add a new property in future, just add one line here.
     # The imported constant's string VALUE is used as the base key,
@@ -468,6 +520,7 @@ def _on_no_of_girders_changed(working_input_dict: dict) -> None:
     ]
     for girder_idx in range(1, count + 1):
         for member_id in [1]:
+            working_input_dict[f"{KEY_MP_STIFFENER_SELECT_MEMBER_ID}.G{girder_idx}.M{member_id}"] = f"G{girder_idx}M{member_id}"
             for base_key, defaults_key in MP_STIFFENER_PROPS:
                 working_input_dict[f"{base_key}.G{girder_idx}.M{member_id}"] = \
                     STIFFENER_DETAILS_DEFAULTS[defaults_key]
@@ -525,17 +578,43 @@ def _on_no_of_girders_changed(working_input_dict: dict) -> None:
         del working_input_dict[k]
 
     # --- End Diaphragm props map ---
+    # Default bracing is an angle; its section properties are queried live from
+    # the Angles table rather than hardcoded.
+    _ED_DEFAULT_ANGLE = "IS 100 x 100 x 10"
+    _ed_angle = get_angle_section_properties(_ED_DEFAULT_ANGLE)
     _ED_DEFAULTS = {
         "select_girders":               "",
         "member_id":                    "",
         "type":                         VALUES_END_DIAPHRAGM_TYPE[0],   # "Cross Bracing"
-        "bracing_type":                 "",
-        "bracing_section":              "",
-        "bracing_section_designation":  "",
+        "bracing_type":                 "K",
+        "bracing_section":              "Angle",
+        "bracing_section_designation":  _ED_DEFAULT_ANGLE,
+        "top_chord":                    "",
         "top_chord_section_type":       "",
         "top_chord_section_desig":      "",
+        "bottom_chord":                 "",
         "bottom_chord_section_type":    "",
         "bottom_chord_section_desig":   "",
+        # Welded/rolled-only fields stay blank until that ED type is chosen.
+        "symmetry":                     "",
+        "total_depth":                  "",
+        "web_thickness":                "",
+        "top_flange_width":             "",
+        "bottom_flange_width":          "",
+        "top_flange_thickness":         "",
+        "bottom_flange_thickness":      "",
+        "is_section":                   "",
+        # Section properties for the default angle, queried from the Angles table.
+        "mass":                         _ed_angle["Mass"],
+        "sectional_area":               _ed_angle["Area"],
+        "sectional_iy":                 _ed_angle["Iy"],
+        "sectional_iz":                 _ed_angle["Iz"],
+        "radius_gyration_y":            _ed_angle["ry"],
+        "radius_gyration_z":            _ed_angle["rz"],
+        "elastic_modulus_zz":           _ed_angle["Zz"],
+        "elastic_modulus_zy":           _ed_angle["Zy"],
+        "plastic_modulus_zuz":          _ed_angle["Zpz"],
+        "plastic_modulus_zuy":          _ed_angle["Zpy"],
         "spacing":                      DEFAULT_CROSS_BRACING_SPACING,  # 3.0
     }
     MP_ED_PROPS = [
@@ -545,10 +624,30 @@ def _on_no_of_girders_changed(working_input_dict: dict) -> None:
         (KEY_MP_ED_BRACING_TYPE,                "bracing_type"),
         (KEY_MP_ED_BRACING_SECTION,             "bracing_section"),
         (KEY_MP_ED_BRACING_SECTION_DESIGNATION, "bracing_section_designation"),
+        (KEY_MP_ED_TOP_CHORD,                   "top_chord"),
         (KEY_MP_ED_TOP_CHORD_SECTION_TYPE,      "top_chord_section_type"),
         (KEY_MP_ED_TOP_CHORD_SECTION_DESIG,     "top_chord_section_desig"),
+        (KEY_MP_ED_BOTTOM_CHORD,                "bottom_chord"),
         (KEY_MP_ED_BOTTOM_CHORD_SECTION_TYPE,   "bottom_chord_section_type"),
         (KEY_MP_ED_BOTTOM_CHORD_SECTION_DESIG,  "bottom_chord_section_desig"),
+        (KEY_MP_ED_SYMMETRY,                    "symmetry"),
+        (KEY_MP_ED_TOTAL_DEPTH,                 "total_depth"),
+        (KEY_MP_ED_WEB_THICKNESS,               "web_thickness"),
+        (KEY_MP_ED_TOP_FLANGE_WIDTH,            "top_flange_width"),
+        (KEY_MP_ED_BOTTOM_FLANGE_WIDTH,         "bottom_flange_width"),
+        (KEY_MP_ED_TOP_FLANGE_THICKNESS,        "top_flange_thickness"),
+        (KEY_MP_ED_BOTTOM_FLANGE_THICKNESS,     "bottom_flange_thickness"),
+        (KEY_MP_ED_IS_SECTION,                  "is_section"),
+        (KEY_MP_ED_MASS,                        "mass"),
+        (KEY_MP_ED_SECTIONAL_AREA,              "sectional_area"),
+        (KEY_MP_ED_SECTIONAL_IY,                "sectional_iy"),
+        (KEY_MP_ED_SECTIONAL_IZ,                "sectional_iz"),
+        (KEY_MP_ED_RADIUS_GYRATION_Y,           "radius_gyration_y"),
+        (KEY_MP_ED_RADIUS_GYRATION_Z,           "radius_gyration_z"),
+        (KEY_MP_ED_ELASTIC_MODULUS_ZZ,          "elastic_modulus_zz"),
+        (KEY_MP_ED_ELASTIC_MODULUS_ZY,          "elastic_modulus_zy"),
+        (KEY_MP_ED_PLASTIC_MODULUS_ZUZ,         "plastic_modulus_zuz"),
+        (KEY_MP_ED_PLASTIC_MODULUS_ZUY,         "plastic_modulus_zuy"),
     ]
 
     # --- Populate dynamic end diaphragm keys ---

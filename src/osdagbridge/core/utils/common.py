@@ -1010,6 +1010,49 @@ def connectdb(table_name: str) -> list[str]:
         raise LookupError(f"Error querying database in connectdb(): {e}")
 
 
+def get_angle_section_properties(designation: str) -> dict:
+    """
+    Fetch section properties for a single angle from the Angles table.
+
+    Parameters
+    ----------
+    designation : str
+        Angle designation as stored in the DB, e.g. "100 x 100 x 10".
+        A leading "IS " prefix (as shown in the UI) is stripped automatically.
+
+    Returns
+    -------
+    dict
+        All columns of the matching Angles row, keyed by column name
+        (e.g. {"Mass": 15.04, "Area": 19.1, "Iz": 180.0, ...}).
+
+    Raises
+    ------
+    LookupError
+        If the database is missing, the query fails, or no row matches.
+    """
+    if not _DB_PATH.exists():
+        raise LookupError(f"Material database not found at {_DB_PATH} in get_angle_section_properties")
+
+    designation = designation.strip()
+    if designation.upper().startswith("IS "):
+        designation = designation[3:].strip()
+
+    try:
+        con = sqlite3.connect(_DB_PATH)
+        con.row_factory = sqlite3.Row
+        cur = con.cursor()
+        cur.execute("SELECT * FROM Angles WHERE Designation = ?", (designation,))
+        row = cur.fetchone()
+        con.close()
+    except sqlite3.Error as e:
+        raise LookupError(f"Error querying database in get_angle_section_properties(): {e}")
+
+    if row is None:
+        raise LookupError(f"Angle designation '{designation}' not found in Angles table")
+    return dict(row)
+
+
 import platform
 import os
 
