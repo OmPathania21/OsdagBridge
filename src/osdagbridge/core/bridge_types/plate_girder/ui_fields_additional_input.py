@@ -51,7 +51,7 @@ _DECK_DETAILS_TAB_SCHEMA = {
 }
 
 _CRASH_BARRIER_TAB_SCHEMA = {
-    "id": KEY_CB_TAB,
+    "id": KEY_MP_CB_TAB,
     "label": "Crash Barrier",
     "label_width": 210,
     "rows": [
@@ -1820,7 +1820,7 @@ from osdagbridge.desktop.ui.dialogs.additional_input.ui_builder._segment_table_w
 from osdagbridge.desktop.ui.dialogs.additional_input.drawings.rolled_section_preview import RolledSectionPreview
 
 GIRDER_DETAILS_SCHEMA = {
-    "id": KEY_GD_TAB,
+    "id": KEY_MP_GD_TAB,
     "layout": {
         "type":          "columns",
         "columns":       2,
@@ -1849,14 +1849,14 @@ GIRDER_DETAILS_SCHEMA = {
             "column":  0,
             "title":   "Girder Overview",
             "refresh": [{
-                "widget_id": KEY_GD_SELECT_GIRDER,
+                "widget_id": KEY_MP_SELECT_GIRDER,
                 "path":      [KEY_TS_NO_OF_GIRDERS],
                 "on_refresh": "_on_girder_count_refreshed",
             }],
             "rows": [
                 {
                     "fields": [{
-                        "id":          KEY_GD_SELECT_GIRDER,
+                        "id":          KEY_MP_SELECT_GIRDER,
                         "label":       "Select Girder:",
                         "type":        TYPE_COMBOBOX,
                         "choices":     [],
@@ -1868,7 +1868,7 @@ GIRDER_DETAILS_SCHEMA = {
                 },
                 {
                     "fields": [{
-                        "id":        KEY_GD_TOTAL_SPAN,
+                        "id":        KEY_MP_TOTAL_SPAN,
                         "label":     "Total Span (m):",
                         "type":      TYPE_TEXTBOX,
                         "read_only": True,
@@ -1921,7 +1921,7 @@ GIRDER_DETAILS_SCHEMA = {
                 # Member ID selector
                 {
                     "fields": [{
-                        "id":        KEY_GD_MEMBER_ID,
+                        "id":        KEY_MP_MEMBER_ID,
                         "label":     "Member ID:",
                         "type":      TYPE_COMBOBOX,
                         "choices":   [],
@@ -1932,7 +1932,7 @@ GIRDER_DETAILS_SCHEMA = {
                 # Type (Welded / Rolled)
                 {
                     "fields": [{
-                        "id":        KEY_GD_TYPE,
+                        "id":        KEY_MP_GIRDER_TYPE,
                         "label":     "Type:",
                         "type":      TYPE_COMBOBOX,
                         "choices":   VALUES_GIRDER_TYPE,
@@ -1943,7 +1943,7 @@ GIRDER_DETAILS_SCHEMA = {
                 # Symmetry — welded only
                 {
                     "fields": [{
-                        "id":      KEY_GD_SYMMETRY,
+                        "id":      KEY_MP_GIRDER_SYMMETRY,
                         "label":   "Symmetry:",
                         "type":    TYPE_COMBOBOX,
                         "choices": VALUES_GIRDER_SYMMETRY,
@@ -1954,7 +1954,7 @@ GIRDER_DETAILS_SCHEMA = {
                 # Welded dimensions
                 {
                     "fields": [{
-                        "id":         KEY_GD_DEPTH,
+                        "id":         KEY_MP_GIRDER_DEPTH,
                         "label":      "Total Depth, d (mm):",
                         "type":       TYPE_ADAPTIVE,
                         "controller": KEY_DESIGN_MODE,
@@ -1977,7 +1977,7 @@ GIRDER_DETAILS_SCHEMA = {
                 },
                 {
                     "fields": [{
-                        "id":         KEY_GD_TOP_FLANGE_WIDTH,
+                        "id":         KEY_MP_GIRDER_TOP_FLANGE_WIDTH,
                         "label":      "Width of Top Flange, t<sub>fw</sub> (mm):",
                         "type":       TYPE_ADAPTIVE,
                         "controller": KEY_DESIGN_MODE,
@@ -2000,7 +2000,7 @@ GIRDER_DETAILS_SCHEMA = {
                 },
                 {
                     "fields": [{
-                        "id":         KEY_GD_TOP_FLANGE_THICKNESS,
+                        "id":         KEY_MP_GIRDER_TOP_FLANGE_THICKNESS,
                         "label":      "Top Flange Thickness, t<sub>ft</sub> (mm):",
                         "type":       TYPE_ADAPTIVE,
                         "controller": KEY_DESIGN_MODE,
@@ -2020,7 +2020,7 @@ GIRDER_DETAILS_SCHEMA = {
                 },
                 {
                     "fields": [{
-                        "id":         KEY_GD_BOTTOM_FLANGE_WIDTH,
+                        "id":         KEY_MP_GIRDER_BOTTOM_FLANGE_WIDTH,
                         "label":      "Width of Bottom Flange, b<sub>fw</sub> (mm):",
                         "type":       TYPE_ADAPTIVE,
                         "controller": KEY_DESIGN_MODE,
@@ -2043,7 +2043,7 @@ GIRDER_DETAILS_SCHEMA = {
                 },
                 {
                     "fields": [{
-                        "id":         KEY_GD_BOTTOM_FLANGE_THICKNESS,
+                        "id":         KEY_MP_GIRDER_BOTTOM_FLANGE_THICKNESS,
                         "label":      "Bottom Flange Thickness, b<sub>ft</sub> (mm):",
                         "type":       TYPE_ADAPTIVE,
                         "controller": KEY_DESIGN_MODE,
@@ -2063,7 +2063,7 @@ GIRDER_DETAILS_SCHEMA = {
                 },
                 {
                     "fields": [{
-                        "id":      KEY_GD_SUPPORT_TYPE,
+                        "id":      KEY_MP_SUPPORT_TYPE,
                         "label":   "Support Type:",
                         "type":    TYPE_COMBOBOX,
                         "choices": VALUES_GIRDER_SUPPORT_TYPE,
@@ -2072,7 +2072,7 @@ GIRDER_DETAILS_SCHEMA = {
                 },
                 {
                     "fields": [{
-                        "id":    KEY_GD_SUPPORT_WIDTH,
+                        "id":    KEY_MP_SUPPORT_WIDTH,
                         "label": "Support Width (mm):",
                         "type":  TYPE_TEXTBOX,
                         "bind":  "support_width_input",
@@ -2080,7 +2080,7 @@ GIRDER_DETAILS_SCHEMA = {
                 },
                 {
                     "fields": [{
-                        "id":         KEY_GD_WEB_THICKNESS,
+                        "id":         KEY_MP_GIRDER_WEB_THICKNESS,
                         "label":      "Web Thickness, w<sub>t</sub> (mm):",
                         "type":       TYPE_ADAPTIVE,
                         "controller": KEY_DESIGN_MODE,
@@ -2102,7 +2102,7 @@ GIRDER_DETAILS_SCHEMA = {
                 # Rolled section
                 {
                     "fields": [{
-                        "id":        KEY_GD_IS_SECTION,
+                        "id":        KEY_MP_GIRDER_IS_SECTION,
                         "label":     "IS Section:",
                         "type":      TYPE_COMBOBOX,
                         "choices":   [],
@@ -2114,7 +2114,7 @@ GIRDER_DETAILS_SCHEMA = {
                 # Restraints — common to welded + rolled
                 {
                     "fields": [{
-                        "id":      KEY_GD_TORSIONAL_RESTRAINT,
+                        "id":      KEY_MP_GIRDER_TORSIONAL_RESTRAINT,
                         "label":   "Torsional Restraint:",
                         "type":    TYPE_COMBOBOX,
                         "choices": VALUES_TORSIONAL_RESTRAINT,
@@ -2123,7 +2123,7 @@ GIRDER_DETAILS_SCHEMA = {
                 },
                 {
                     "fields": [{
-                        "id":      KEY_GD_WARPING_RESTRAINT,
+                        "id":      KEY_MP_GIRDER_WARPING_RESTRAINT,
                         "label":   "Warping Restraint:",
                         "type":    TYPE_COMBOBOX,
                         "choices": VALUES_WARPING_RESTRAINT,
@@ -2132,7 +2132,7 @@ GIRDER_DETAILS_SCHEMA = {
                 },
                 {
                     "fields": [{
-                        "id":      KEY_GD_WEB_TYPE,
+                        "id":      KEY_MP_GIRDER_WEB_TYPE,
                         "label":   "Web Type:",
                         "type":    TYPE_COMBOBOX,
                         "choices": VALUES_WEB_TYPE,
@@ -2265,7 +2265,7 @@ GIRDER_DETAILS_SCHEMA = {
 
 from osdagbridge.desktop.ui.dialogs.additional_input.drawings.stiffener_details_cad import StiffenerDetailsCad
 STIFFENER_DETAILS_SCHEMA = {
-    "id": KEY_SD_TAB,
+    "id": KEY_MP_SD_TAB,
     "layout": {
         "type":          "columns",
         "columns":       2,
@@ -2296,7 +2296,7 @@ STIFFENER_DETAILS_SCHEMA = {
             "rows": [
                 {
                     "fields": [{
-                        "id":      KEY_SD_MEMBER_ID,
+                        "id":      KEY_MP_STIFFENER_SELECT_MEMBER_ID,
                         "label":   "Select Member ID:",
                         "type":    TYPE_COMBOBOX,
                         "choices": [],
@@ -2346,7 +2346,7 @@ STIFFENER_DETAILS_SCHEMA = {
 
                 {
                     "fields": [{
-                        "id":      KEY_SD_BEARING_COUNT,
+                        "id":      KEY_MP_STIFFENER_NO_BEARING_STIFFENERS,
                         "label":   "No. of Bearing Stiffeners\n(on one side only):",
                         "type":    TYPE_COMBOBOX,
                         "choices": VALUES_BEARING_STIFFENER_COUNT,
@@ -2356,7 +2356,7 @@ STIFFENER_DETAILS_SCHEMA = {
                 },
                 {
                     "fields": [{
-                        "id":    KEY_SD_BEARING_SPACING,
+                        "id":    KEY_MP_STIFFENER_SPACING,
                         "label": "Bearing Stiffener Spacing (mm):",
                         "type":  TYPE_TEXTBOX,
                         "bind":  "bearing_spacing_input",
@@ -2365,7 +2365,7 @@ STIFFENER_DETAILS_SCHEMA = {
                 },
                 {
                     "fields": [{
-                        "id":      KEY_SD_BEARING_THICKNESS,
+                        "id":      KEY_MP_STIFFENER_BEARING_THICKNESS,
                         "label":   "Bearing Stiffener Thickness (mm):",
                         "type":    TYPE_COMBOBOX,
                         "choices": [str(v) for v in SAIL_APPROVED_THICKNESS_VALUES],
@@ -2374,7 +2374,7 @@ STIFFENER_DETAILS_SCHEMA = {
                 },
                 {
                     "fields": [{
-                        "id":    KEY_SD_BEARING_OUTSTAND,
+                        "id":    KEY_MP_STIFFENER_BEARING_OUTSTAND,
                         "label": "Outstand of Bearing Stiffener (mm):",
                         "type":  TYPE_TEXTBOX,
                         "bind":  "bearing_outstand_input",
@@ -2382,7 +2382,7 @@ STIFFENER_DETAILS_SCHEMA = {
                 },
                 {
                     "fields": [{
-                        "id":      KEY_SD_INTERMEDIATE,
+                        "id":      KEY_MP_STIFFENER_INTERMEDIATE,
                         "label":   "Intermediate Stiffener:",
                         "type":    TYPE_COMBOBOX,
                         "choices": VALUES_NO_YES,
@@ -2392,7 +2392,7 @@ STIFFENER_DETAILS_SCHEMA = {
                 },
                 {
                     "fields": [{
-                        "id":    KEY_SD_INTERMEDIATE_SPACING,
+                        "id":    KEY_MP_STIFFENER_INTERMEDIATE_SPACING,
                         "label": "Intermediate Stiffener Spacing (mm):",
                         "type":  TYPE_TEXTBOX,
                         "bind":  "intermediate_spacing_input",
@@ -2401,7 +2401,7 @@ STIFFENER_DETAILS_SCHEMA = {
                 },
                 {
                     "fields": [{
-                        "id":      KEY_SD_INTERMEDIATE_THICKNESS,
+                        "id":      KEY_MP_STIFFENER_INTERMEDIATE_THICKNESS,
                         "label":   "Intermediate Stiffener Thickness (mm):",
                         "type":    TYPE_COMBOBOX,
                         "choices": [str(v) for v in SAIL_APPROVED_THICKNESS_VALUES],
@@ -2410,7 +2410,7 @@ STIFFENER_DETAILS_SCHEMA = {
                 },
                 {
                     "fields": [{
-                        "id":    KEY_SD_INTERMEDIATE_OUTSTAND,
+                        "id":    KEY_MP_STIFFENER_INTERMEDIATE_OUTSTAND,
                         "label": "Outstand of Intermediate Stiffener (mm):",
                         "type":  TYPE_TEXTBOX,
                         "bind":  "intermediate_outstand_input",
@@ -2418,7 +2418,7 @@ STIFFENER_DETAILS_SCHEMA = {
                 },
                 {
                     "fields": [{
-                        "id":      KEY_SD_LONGITUDINAL,
+                        "id":      KEY_MP_STIFFENER_LONGITUDINAL,
                         "label":   "Longitudinal Stiffener:",
                         "type":    TYPE_COMBOBOX,
                         "choices": VALUES_LONGITUDINAL_STIFFENER,
@@ -2428,7 +2428,7 @@ STIFFENER_DETAILS_SCHEMA = {
                 },
                 {
                     "fields": [{
-                        "id":      KEY_SD_LONGITUDINAL_THICKNESS,
+                        "id":      KEY_MP_STIFFENER_LONGITUDINAL_THICKNESS,
                         "label":   "Longitudinal Stiffener Thickness (mm):",
                         "type":    TYPE_COMBOBOX,
                         "choices": [str(v) for v in SAIL_APPROVED_THICKNESS_VALUES],
@@ -2445,7 +2445,7 @@ STIFFENER_DETAILS_SCHEMA = {
             "rows": [
                 {
                     "fields": [{
-                        "id":      KEY_SD_SHEAR_BUCKLING_METHOD,
+                        "id":      KEY_MP_STIFFENER_DESIGN_METHOD,
                         "label":   "Shear Buckling Design Method:",
                         "type":    TYPE_COMBOBOX,
                         "choices": VALUES_STIFFENER_DESIGN,

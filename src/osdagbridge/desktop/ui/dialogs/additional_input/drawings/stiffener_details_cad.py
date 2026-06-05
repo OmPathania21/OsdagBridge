@@ -16,12 +16,12 @@ from PySide6.QtWidgets import QSizePolicy, QWidget
 
 from osdagbridge.core.utils.common import (
     MIN_BEARING_STIFFENER_SPACING_MM,
-    KEY_SD_MEMBER_ID,
-    KEY_SD_BEARING_COUNT,
-    KEY_SD_BEARING_SPACING,
-    KEY_SD_INTERMEDIATE,
-    KEY_SD_INTERMEDIATE_SPACING,
-    KEY_SD_LONGITUDINAL,
+    KEY_MP_STIFFENER_SELECT_MEMBER_ID,
+    KEY_MP_STIFFENER_NO_BEARING_STIFFENERS,
+    KEY_MP_STIFFENER_SPACING,
+    KEY_MP_STIFFENER_INTERMEDIATE,
+    KEY_MP_STIFFENER_INTERMEDIATE_SPACING,
+    KEY_MP_STIFFENER_LONGITUDINAL,
 )
 
 MIN_BEARING_SPACING_MM: int = int(MIN_BEARING_STIFFENER_SPACING_MM)
@@ -92,8 +92,8 @@ class StiffenerDetailsCad(QWidget):
 
     # Reads all stiffener values and active member from working_input_dict directly.
     def update_stiffener(self, working_input_dict: dict) -> None:
-        from osdagbridge.core.utils.common import KEY_SD_MEMBER_ID
-        active_member_id = str(working_input_dict.get(KEY_SD_MEMBER_ID) or "").strip()
+        from osdagbridge.core.utils.common import KEY_MP_STIFFENER_SELECT_MEMBER_ID
+        active_member_id = str(working_input_dict.get(KEY_MP_STIFFENER_SELECT_MEMBER_ID) or "").strip()
 
         if active_member_id:
             self._stiffener_by_member[active_member_id] = dict(working_input_dict)
@@ -229,16 +229,16 @@ class StiffenerDetailsCad(QWidget):
         px_per_mm = girder_rect.width() / max(1.0, total_length * 1000.0)
 
         def resolve_bearing_params(seg_state: dict, seg_len_mm: float):
-            # Support both old keys (bearing_stiffeners_each_end) and new KEY_SD_BEARING_COUNT
+            # Support both old keys (bearing_stiffeners_each_end) and new KEY_MP_STIFFENER_NO_BEARING_STIFFENERS
             raw_count = (
-                seg_state.get(KEY_SD_BEARING_COUNT)
+                seg_state.get(KEY_MP_STIFFENER_NO_BEARING_STIFFENERS)
                 or seg_state.get("bearing_stiffeners_each_end")
             )
             count = self._parse_positive_int(raw_count) or 2
             count = max(1, min(8, count))
 
             raw_spacing = (
-                seg_state.get(KEY_SD_BEARING_SPACING)
+                seg_state.get(KEY_MP_STIFFENER_SPACING)
                 or seg_state.get("bearing_spacing_mm")
             )
             custom_spacing_mm = self._parse_positive_int(raw_spacing)
@@ -306,14 +306,14 @@ class StiffenerDetailsCad(QWidget):
 
             # Intermediate stiffeners — support both old and new keys
             intermediate_val = (
-                seg_state.get(KEY_SD_INTERMEDIATE)
+                seg_state.get(KEY_MP_STIFFENER_INTERMEDIATE)
                 or seg_state.get("intermediate_stiffener")
                 or ""
             )
             include_intermediate = str(intermediate_val).strip() == "Yes"
 
             spacing_raw = (
-                seg_state.get(KEY_SD_INTERMEDIATE_SPACING)
+                seg_state.get(KEY_MP_STIFFENER_INTERMEDIATE_SPACING)
                 or seg_state.get("intermediate_spacing_mm")
             )
             spacing_mm = self._parse_positive_int(spacing_raw)
@@ -349,7 +349,7 @@ class StiffenerDetailsCad(QWidget):
 
             # Longitudinal stiffeners — support both old and new keys
             long_mode = str(
-                seg_state.get(KEY_SD_LONGITUDINAL)
+                seg_state.get(KEY_MP_STIFFENER_LONGITUDINAL)
                 or seg_state.get("longitudinal_stiffener")
                 or ""
             )

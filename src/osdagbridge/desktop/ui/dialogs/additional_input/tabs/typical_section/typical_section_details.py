@@ -66,7 +66,7 @@ class TypicalSectionDetailsTab(QWidget):
         return tab.main_widget.findChild(widget_type, widget_id) if tab else None
 
     def _find_crash_barrier_widget(self, widget_id, widget_type=QWidget):
-        return self._find_tab_widget(KEY_CB_TAB, widget_id, widget_type)
+        return self._find_tab_widget(KEY_MP_CB_TAB, widget_id, widget_type)
 
     def _find_median_widget(self, widget_id, widget_type=QWidget):
         return self._find_tab_widget(KEY_MD_TAB, widget_id, widget_type)

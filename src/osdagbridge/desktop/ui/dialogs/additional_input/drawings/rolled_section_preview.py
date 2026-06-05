@@ -65,20 +65,20 @@ class RolledSectionPreview(QWidget):
     # on_editing_finished on all section input fields.
     def update_section(self, working_input_dict: dict) -> None:
         from osdagbridge.core.utils.common import (
-            KEY_GD_TYPE, KEY_GD_IS_SECTION,
-            KEY_GD_DEPTH, KEY_GD_TOP_FLANGE_WIDTH, KEY_GD_BOTTOM_FLANGE_WIDTH,
-            KEY_GD_TOP_FLANGE_THICKNESS, KEY_GD_BOTTOM_FLANGE_THICKNESS,
-            KEY_GD_WEB_THICKNESS,
+            KEY_MP_GIRDER_TYPE, KEY_MP_GIRDER_IS_SECTION,
+            KEY_MP_GIRDER_DEPTH, KEY_MP_GIRDER_TOP_FLANGE_WIDTH, KEY_MP_GIRDER_BOTTOM_FLANGE_WIDTH,
+            KEY_MP_GIRDER_TOP_FLANGE_THICKNESS, KEY_MP_GIRDER_BOTTOM_FLANGE_THICKNESS,
+            KEY_MP_GIRDER_WEB_THICKNESS,
         )
-        is_welded = str(working_input_dict.get(KEY_GD_TYPE) or "").lower() == "welded"
+        is_welded = str(working_input_dict.get(KEY_MP_GIRDER_TYPE) or "").lower() == "welded"
 
         if is_welded:
-            depth = float(working_input_dict.get(KEY_GD_DEPTH) or 0)
-            top_w = float(working_input_dict.get(KEY_GD_TOP_FLANGE_WIDTH) or 0)
-            bot_w = float(working_input_dict.get(KEY_GD_BOTTOM_FLANGE_WIDTH) or top_w)
-            web_t = float(working_input_dict.get(KEY_GD_WEB_THICKNESS) or 0)
-            top_t = float(working_input_dict.get(KEY_GD_TOP_FLANGE_THICKNESS) or 0)
-            bot_t = float(working_input_dict.get(KEY_GD_BOTTOM_FLANGE_THICKNESS) or top_t)
+            depth = float(working_input_dict.get(KEY_MP_GIRDER_DEPTH) or 0)
+            top_w = float(working_input_dict.get(KEY_MP_GIRDER_TOP_FLANGE_WIDTH) or 0)
+            bot_w = float(working_input_dict.get(KEY_MP_GIRDER_BOTTOM_FLANGE_WIDTH) or top_w)
+            web_t = float(working_input_dict.get(KEY_MP_GIRDER_WEB_THICKNESS) or 0)
+            top_t = float(working_input_dict.get(KEY_MP_GIRDER_TOP_FLANGE_THICKNESS) or 0)
+            bot_t = float(working_input_dict.get(KEY_MP_GIRDER_BOTTOM_FLANGE_THICKNESS) or top_t)
             if not depth or not top_w:
                 self.clear()
                 return
@@ -96,7 +96,7 @@ class RolledSectionPreview(QWidget):
 
         else:
             from osdagbridge.desktop.ui.dialogs.tabs.sub_tabs.section_properties.girder_details_tab import girder_properties
-            designation = str(working_input_dict.get(KEY_GD_IS_SECTION) or "")
+            designation = str(working_input_dict.get(KEY_MP_GIRDER_IS_SECTION) or "")
             if not designation:
                 self.clear()
                 return

@@ -135,8 +135,8 @@ class AdditionalInputs(QDialog):
  
     def _on_apply_exterior_clicked(self) -> None:
         """Connector: Apply changes to first and last girders."""
-        from osdagbridge.core.utils.common import KEY_GD_SELECT_GIRDER
-        girder_w = self.findChild(QWidget, KEY_GD_SELECT_GIRDER)
+        from osdagbridge.core.utils.common import KEY_MP_SELECT_GIRDER
+        girder_w = self.findChild(QWidget, KEY_MP_SELECT_GIRDER)
         pass
 
     def _on_apply_interior_clicked(self) -> None:
@@ -151,12 +151,12 @@ class AdditionalInputs(QDialog):
         is_welded = girder_type.strip().lower() == "welded"
 
         welded_keys = [
-            KEY_GD_SYMMETRY, KEY_GD_DEPTH, KEY_GD_TOP_FLANGE_WIDTH,
-            KEY_GD_TOP_FLANGE_THICKNESS, KEY_GD_BOTTOM_FLANGE_WIDTH,
-            KEY_GD_BOTTOM_FLANGE_THICKNESS, KEY_GD_SUPPORT_TYPE,
-            KEY_GD_SUPPORT_WIDTH, KEY_GD_WEB_THICKNESS, KEY_GD_WEB_TYPE,
+            KEY_MP_GIRDER_SYMMETRY, KEY_MP_GIRDER_DEPTH, KEY_MP_GIRDER_TOP_FLANGE_WIDTH,
+            KEY_MP_GIRDER_TOP_FLANGE_THICKNESS, KEY_MP_GIRDER_BOTTOM_FLANGE_WIDTH,
+            KEY_MP_GIRDER_BOTTOM_FLANGE_THICKNESS, KEY_MP_SUPPORT_TYPE,
+            KEY_MP_SUPPORT_WIDTH, KEY_MP_GIRDER_WEB_THICKNESS, KEY_MP_GIRDER_WEB_TYPE,
         ]
-        rolled_keys = [KEY_GD_IS_SECTION]
+        rolled_keys = [KEY_MP_GIRDER_IS_SECTION]
 
         for key in welded_keys:
             w   = self.findChild(QWidget, key)
@@ -177,7 +177,7 @@ class AdditionalInputs(QDialog):
     def design_mode_trigger(self, mode_str: str):
 
         # Ensures IS Section hidden and welded fields shown correctly on first open
-        gd_type_w = self.findChild(QComboBox, KEY_GD_TYPE)
+        gd_type_w = self.findChild(QComboBox, KEY_MP_GIRDER_TYPE)
         if gd_type_w:
             self._on_girder_type_changed(gd_type_w.currentText())
 
@@ -197,13 +197,13 @@ class AdditionalInputs(QDialog):
                 adaptive.switch_mode(normalized)
 
         # Type & Symmetry — disabled when Optimized
-        for key in [KEY_GD_TYPE, KEY_GD_SYMMETRY]:
+        for key in [KEY_MP_GIRDER_TYPE, KEY_MP_GIRDER_SYMMETRY]:
             w = self.findChild(QWidget, key)
             if w:
                 w.setEnabled(not is_optimized)
 
         # Web Type — read-only and forced to "Thin Web with ITS" when Optimized
-        web_type_w = self.findChild(QComboBox, KEY_GD_WEB_TYPE)
+        web_type_w = self.findChild(QComboBox, KEY_MP_GIRDER_WEB_TYPE)
         if web_type_w:
             web_type_w.setEnabled(not is_optimized)
             if is_optimized:
@@ -223,12 +223,12 @@ class AdditionalInputs(QDialog):
         
         # Stiffener fields — all greyed out when Optimized
         stiffener_keys = [
-            KEY_SD_BEARING_COUNT, KEY_SD_BEARING_SPACING,
-            KEY_SD_BEARING_THICKNESS, KEY_SD_BEARING_OUTSTAND,
-            KEY_SD_INTERMEDIATE, KEY_SD_INTERMEDIATE_SPACING,
-            KEY_SD_INTERMEDIATE_THICKNESS, KEY_SD_INTERMEDIATE_OUTSTAND,
-            KEY_SD_LONGITUDINAL, KEY_SD_LONGITUDINAL_THICKNESS,
-            KEY_SD_SHEAR_BUCKLING_METHOD,
+            KEY_MP_STIFFENER_NO_BEARING_STIFFENERS, KEY_MP_STIFFENER_SPACING,
+            KEY_MP_STIFFENER_BEARING_THICKNESS, KEY_MP_STIFFENER_BEARING_OUTSTAND,
+            KEY_MP_STIFFENER_INTERMEDIATE, KEY_MP_STIFFENER_INTERMEDIATE_SPACING,
+            KEY_MP_STIFFENER_INTERMEDIATE_THICKNESS, KEY_MP_STIFFENER_INTERMEDIATE_OUTSTAND,
+            KEY_MP_STIFFENER_LONGITUDINAL, KEY_MP_STIFFENER_LONGITUDINAL_THICKNESS,
+            KEY_MP_STIFFENER_DESIGN_METHOD,
         ]
         for key in stiffener_keys:
             w = self.findChild(QWidget, key)
@@ -239,9 +239,9 @@ class AdditionalInputs(QDialog):
     def _on_intermediate_stiffener_changed(self, value: str) -> None:
         is_yes = str(value).strip() == "Yes"
         for key in [
-            KEY_SD_INTERMEDIATE_SPACING,
-            KEY_SD_INTERMEDIATE_THICKNESS,
-            KEY_SD_INTERMEDIATE_OUTSTAND,
+            KEY_MP_STIFFENER_INTERMEDIATE_SPACING,
+            KEY_MP_STIFFENER_INTERMEDIATE_THICKNESS,
+            KEY_MP_STIFFENER_INTERMEDIATE_OUTSTAND,
         ]:
             w   = self.findChild(QWidget, key)
             lbl = self.findChild(QLabel,  key + "_label")
@@ -255,10 +255,10 @@ class AdditionalInputs(QDialog):
     def _on_girder_count_refreshed(self, widget_id: str, value) -> None:
         """Connector: refresh mechanism updates Select Girder combo
         when girder count changes in working_input_dict (from Typical Section).
-        Called by UIBuilder's refresh path with widget_id=KEY_GD_SELECT_GIRDER.
+        Called by UIBuilder's refresh path with widget_id=KEY_MP_SELECT_GIRDER.
         """
-        from osdagbridge.core.utils.common import KEY_GD_SELECT_GIRDER
-        combo = self.findChild(QComboBox, KEY_GD_SELECT_GIRDER)
+        from osdagbridge.core.utils.common import KEY_MP_SELECT_GIRDER
+        combo = self.findChild(QComboBox, KEY_MP_SELECT_GIRDER)
         if combo is None:
             return
         try:
