@@ -105,7 +105,6 @@ def _cracked_section(As_mm2: float, d_mm: float, Es_MPa: float, Ecm_MPa: float,
                      b_mm: float = 1000.0) -> tuple:
     """
     Cracked-section neutral axis depth x (mm), I_cr (mm⁴), and αe = Es/Ecm.
-    Ecm per IRC 112:2020 Cl.6.4.2.3 — 22·(fck/10)^0.3 GPa.
     Solves b/2·x² + αe·As·x − αe·As·d = 0.
     """
     alpha_e = Es_MPa / Ecm_MPa
@@ -142,7 +141,7 @@ def _sls_crack_width(M_SLS_kNm: float, As_mm2: float, dia_mm: float,
                      fctm_MPa: float, Es_MPa: float, Ecm_MPa: float,
                      b_mm: float = 1000.0) -> dict:
     """
-    IRC 112:2020 Cl.12.3.4 — crack width check (frequent combination).
+    IRC 112:2020 Cl.12.3.2 — crack width check (frequent combination).
     wk limit = 0.3 mm (exposure XS2/XD2 for bridge decks).
     x and d are both measured from the compressive face, so this function
     works identically for sagging (compressive face = top) and hogging
