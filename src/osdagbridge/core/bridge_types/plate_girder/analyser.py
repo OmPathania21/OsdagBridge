@@ -408,7 +408,7 @@ class BridgeGrillageModel:
             )
             return girder_areas[idx] if idx < len(girder_areas) else girder_areas[-1]
 
-        DL_self_weight = og.create_load_case(name="girder self weight")
+        DL_self_weight = og.create_load_case(name="SW")
 
         # iterate through all grillage transverse positions (except extreme edges)
         for z_pos in model.Mesh_obj.noz[1:-1]:
@@ -507,7 +507,7 @@ class BridgeGrillageModel:
         # -------------------------------------------------
         # Create & register load case
         # -------------------------------------------------
-        DL_deck = og.create_load_case(name="Deck slab load")
+        DL_deck = og.create_load_case(name="DD")
         DL_deck.add_load(deck_load)
         model.add_load_case(DL_deck)
 
@@ -1267,8 +1267,12 @@ class BridgeGrillageModel:
         Creates a single ``"DL"`` load case by adding all individual dead-load
         sub-case loads into it.
 
-        Must be called after all individual dead-load methods have been invoked.
-        Sub-cases that were skipped (returned ``None``) are automatically excluded.
+        Must be called after all individual dead-load methods — and
+        ``create_sidl_combination()`` — have been invoked. The superimposed
+        dead loads (crash barrier, railing, median) enter via the ``SIDL``
+        combination rather than as individual sub-cases, so SIDL must be built
+        first. Sub-cases that were skipped (returned ``None``) are automatically
+        excluded.
         """
         model = model or self.model
         if model is None:
@@ -1278,9 +1282,7 @@ class BridgeGrillageModel:
             "self_weight_load_case",
             "deck_load_case",
             "footpath_load_case",
-            "crash_barrier_load_case",
-            "railing_load_case",
-            "median_load_case",
+            "sidl_combination",
         ]
 
         DL_combined = og.create_load_case(name=f"{partial_safety_factor} DL")
@@ -1303,6 +1305,54 @@ class BridgeGrillageModel:
         model.add_load_case(DL_combined, load_factor=partial_safety_factor)
         self.dead_load_combination = DL_combined
         return DL_combined
+
+    # ============================================================
+    #   SIDL (Superimposed Dead Load) Combination
+    # ============================================================
+
+    def create_sidl_combination(self, model=None, partial_safety_factor=1.0):
+        """
+        Creates a single ``"SIDL"`` load case by adding the superimposed
+        dead-load sub-case loads into it.
+
+        SIDL (Superimposed Dead Load) groups the non-structural permanent loads
+        carried on the deck — crash barrier, railing and median — as distinct
+        from the structural dead load (self weight, deck slab, footpath).
+
+        Must be called after the relevant individual dead-load methods have been
+        invoked. Sub-cases that were skipped (returned ``None``) are
+        automatically excluded.
+        """
+        model = model or self.model
+        if model is None:
+            raise ValueError("Model is not available. Create model before adding loads.")
+
+        _SIDL_ATTRS = [
+            "crash_barrier_load_case",
+            "railing_load_case",
+            "median_load_case",
+        ]
+
+        SIDL_combined = og.create_load_case(name=f"{partial_safety_factor} SIDL")
+        added = False
+
+        for attr in _SIDL_ATTRS:
+            lc = getattr(self, attr, None)
+            if lc is not None:
+                for entry in lc.load_groups:
+                    SIDL_combined.add_load(entry["load"])
+                added = True
+
+        if not added:
+            warnings.warn(
+                "create_sidl_combination: no SIDL sub-cases found. "
+                "Call the crash barrier / railing / median load creation methods first."
+            )
+            return None
+
+        model.add_load_case(SIDL_combined, load_factor=partial_safety_factor)
+        self.sidl_combination = SIDL_combined
+        return SIDL_combined
 
     # ============================================================
     #   Live Load
@@ -2236,14 +2286,14 @@ class BridgeGrillageModel:
         og.plt.show()
 
         # load case specific results
-        static_lc_result = model.get_results(load_case=['Deck slab load'])
+        static_lc_result = model.get_results(load_case=['DW'])
         print("static_lc_result")
         print(static_lc_result)
 
         static_lc_forces = static_lc_result.forces
 
         # Select a specific load case from result
-        load_case_name = 'Deck slab load'
+        load_case_name = 'DW'
 
         # extract elements and nodes of beam 1
         member_name = "exterior_main_beam_1"
