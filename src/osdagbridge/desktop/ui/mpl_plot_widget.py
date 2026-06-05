@@ -326,9 +326,16 @@ class MplPlotWidget(QWidget):
         # 1. Connect Load Combinations
         combo_lc = output_dock.output_widget.findChild(QComboBox, "analysis.load_combination")
         if combo_lc is not None:
+            # Hide the per-position moving load cases ("Moving Case1", ...) —
+            # they are numerous and clutter the dropdown. The dataset still
+            # retains them; they are simply not offered for selection here.
+            visible_loadcases = [
+                lc for lc in self._loadcases
+                if not str(lc).strip().lower().startswith("moving case")
+            ]
             combo_lc.blockSignals(True)
             combo_lc.clear()
-            combo_lc.addItems(self._loadcases)
+            combo_lc.addItems(visible_loadcases)
             combo_lc.blockSignals(False)
             combo_lc.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
             combo_lc.setMinimumContentsLength(12)
