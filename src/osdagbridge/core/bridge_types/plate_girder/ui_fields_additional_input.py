@@ -2263,101 +2263,196 @@ GIRDER_DETAILS_SCHEMA = {
     ],
 }
 
+from osdagbridge.desktop.ui.dialogs.additional_input.drawings.stiffener_details_cad import StiffenerDetailsCad
 STIFFENER_DETAILS_SCHEMA = {
-    "id": "stiffener_details_tab",
-    "overview": [
+    "id": KEY_SD_TAB,
+    "layout": {
+        "type":          "columns",
+        "columns":       2,
+        "column_widths": [2, 3],
+    },
+    "sections": [
+
+        # ── CAD Preview — full width at top ───────────────────────────────────
         {
-            "id": "member_id",
-            "label": "Select Member ID:",
-            "type": "combo_dynamic",
-            "bind": "girder_member_combo",
+            "column":   0,
+            "col_span": 2,
+            "title":    "",
+            "rows": [
+                {
+                    "fields": [{
+                        "id":           KEY_SD_STIFFENER_DETAILS,
+                        "type":         TYPE_DIRECT_WIDGET,
+                        "widget_class": StiffenerDetailsCad,
+                    }]
+                },
+            ],
         },
-    ],
-    "stiffener_inputs": [
+
+        # ── Col 0: Member ID + Apply button ──────────────────────────────────
         {
-            "id": "bearing_stiffeners_each_end",
-            "label": "No. of Bearing Stiffeners\n(on one side only):",
-            "type": "combo",
-            "choices": VALUES_BEARING_STIFFENER_COUNT,
-            "default": str(STIFFENER_DETAILS_DEFAULTS.get("bearing_stiffeners_each_end", "2")),
-            "bind": "bearing_count_combo",
+            "column": 0,
+            "title":  "",
+            "rows": [
+                {
+                    "fields": [{
+                        "id":      KEY_SD_MEMBER_ID,
+                        "label":   "Select Member ID:",
+                        "type":    TYPE_COMBOBOX,
+                        "choices": [],
+                        "bind":    "girder_member_combo",
+                        "on_change": "_on_stiffener_member_changed",
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":       "stiffener_apply_all",
+                        "type":     TYPE_BUTTON,
+                        "text":     "Apply changes to all custom",
+                        # "on_click": "_on_stiffener_apply_all_clicked",
+                    }]
+                },
+            ],
         },
+
+        # ── Col 1: Description — row_span to cover all col 0 rows below ───────
         {
-            "id": "bearing_spacing_mm",
-            "label": "Bearing Stiffener Spacing (mm):",
-            "type": "line",
-            "validator": {"type": "int_range", "bottom": 1, "top": 1000000000},
-            "bind": "bearing_spacing_input",
+            "column":   1,
+            "row_span": 3,
+            "type":     TYPE_DESCRIPTION,
+            "title":    "Stiffener Details",
+            "text":     (
+                "Bearing Stiffeners:\n"
+                "Provided at support locations to transfer reaction forces into the web. "
+                "Number and spacing are configurable per member end.\n\n"
+                "Intermediate Stiffeners:\n"
+                "Used to improve shear resistance of slender webs. "
+                "Enable and specify spacing when required.\n\n"
+                "Longitudinal Stiffeners:\n"
+                "Reduce web slenderness for heavily loaded girders. "
+                "One or two levels can be added at 1/3 depth intervals.\n\n"
+                "Web Buckling:\n"
+                "Select between Simple Post Critical and Tension Field methods "
+                "per IRC/IS code requirements."
+            ),
+            "stretch":  True,
         },
+
+        # ── Col 0: Stiffener Inputs ───────────────────────────────────────────
         {
-            "id": "bearing_thickness",
-            "label": "Bearing Stiffener Thickness (mm):",
-            "type": "mode_value",
-            "mode_choices": VALUES_PROFILE_SCOPE,
-            "default_mode": VALUES_PROFILE_SCOPE[0],
-            "bind_mode": "bearing_thick_combo",
-            "bind_value": "bearing_thick_value_combo",
+            "column": 0,
+            "title":  "Stiffener Inputs",
+            "rows": [
+
+                {
+                    "fields": [{
+                        "id":      KEY_SD_BEARING_COUNT,
+                        "label":   "No. of Bearing Stiffeners\n(on one side only):",
+                        "type":    TYPE_COMBOBOX,
+                        "choices": VALUES_BEARING_STIFFENER_COUNT,
+                        "bind":    "bearing_count_combo",
+                        "on_change": "_update_stiffener_cad",
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":    KEY_SD_BEARING_SPACING,
+                        "label": "Bearing Stiffener Spacing (mm):",
+                        "type":  TYPE_TEXTBOX,
+                        "bind":  "bearing_spacing_input",
+                        "on_text_changed": "_update_stiffener_cad",
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":      KEY_SD_BEARING_THICKNESS,
+                        "label":   "Bearing Stiffener Thickness (mm):",
+                        "type":    TYPE_COMBOBOX,
+                        "choices": [str(v) for v in SAIL_APPROVED_THICKNESS_VALUES],
+                        "bind":    "bearing_thick_value_combo",
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":    KEY_SD_BEARING_OUTSTAND,
+                        "label": "Outstand of Bearing Stiffener (mm):",
+                        "type":  TYPE_TEXTBOX,
+                        "bind":  "bearing_outstand_input",
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":      KEY_SD_INTERMEDIATE,
+                        "label":   "Intermediate Stiffener:",
+                        "type":    TYPE_COMBOBOX,
+                        "choices": VALUES_NO_YES,
+                        "bind":    "intermediate_combo",
+                        "on_change": "_on_intermediate_stiffener_changed",
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":    KEY_SD_INTERMEDIATE_SPACING,
+                        "label": "Intermediate Stiffener Spacing (mm):",
+                        "type":  TYPE_TEXTBOX,
+                        "bind":  "intermediate_spacing_input",
+                        "on_text_changed": "_update_stiffener_cad",
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":      KEY_SD_INTERMEDIATE_THICKNESS,
+                        "label":   "Intermediate Stiffener Thickness (mm):",
+                        "type":    TYPE_COMBOBOX,
+                        "choices": [str(v) for v in SAIL_APPROVED_THICKNESS_VALUES],
+                        "bind":    "intermediate_thick_value_combo",
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":    KEY_SD_INTERMEDIATE_OUTSTAND,
+                        "label": "Outstand of Intermediate Stiffener (mm):",
+                        "type":  TYPE_TEXTBOX,
+                        "bind":  "intermediate_outstand_input",
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":      KEY_SD_LONGITUDINAL,
+                        "label":   "Longitudinal Stiffener:",
+                        "type":    TYPE_COMBOBOX,
+                        "choices": VALUES_LONGITUDINAL_STIFFENER,
+                        "bind":    "longitudinal_combo",
+                        "on_change": "_update_stiffener_cad",
+                    }]
+                },
+                {
+                    "fields": [{
+                        "id":      KEY_SD_LONGITUDINAL_THICKNESS,
+                        "label":   "Longitudinal Stiffener Thickness (mm):",
+                        "type":    TYPE_COMBOBOX,
+                        "choices": [str(v) for v in SAIL_APPROVED_THICKNESS_VALUES],
+                        "bind":    "long_thick_value_combo",
+                    }]
+                },
+            ],
         },
+
+        # ── Col 0: Web Buckling ───────────────────────────────────────────────
         {
-            "id": "bearing_outstand_mm",
-            "label": "Outstand of Bearing Stiffener (mm):",
-            "type": "line",
-            "bind": "bearing_outstand_input",
-        },
-        {
-            "id": "intermediate_stiffener",
-            "label": "Intermediate Stiffener:",
-            "type": "combo",
-            "choices": VALUES_NO_YES,
-            "bind": "intermediate_combo",
-        },
-        {
-            "id": "intermediate_spacing_mm",
-            "label": "Intermediate Stiffener Spacing:",
-            "type": "line",
-            "validator": {"type": "int_range", "bottom": 1, "top": 1000000000},
-            "default": "NA",
-            "bind": "intermediate_spacing_input",
-        },
-        {
-            "id": "intermediate_thickness",
-            "label": "Intermediate Stiffener Thickness (mm):",
-            "type": "mode_value",
-            "mode_choices": VALUES_PROFILE_SCOPE,
-            "default_mode": VALUES_PROFILE_SCOPE[0],
-            "bind_mode": "intermediate_thick_combo",
-            "bind_value": "intermediate_thick_value_combo",
-        },
-        {
-            "id": "intermediate_outstand_mm",
-            "label": "Outstand of Intermediate Stiffener (mm):",
-            "type": "line",
-            "bind": "intermediate_outstand_input",
-        },
-        {
-            "id": "longitudinal_stiffener",
-            "label": "Longitudinal Stiffener:",
-            "type": "combo",
-            "choices": VALUES_LONGITUDINAL_STIFFENER,
-            "bind": "longitudinal_combo",
-        },
-        {
-            "id": "longitudinal_thickness",
-            "label": "Longitudinal Stiffener Thickness (mm):",
-            "type": "mode_value",
-            "mode_choices": VALUES_PROFILE_SCOPE,
-            "default_mode": VALUES_PROFILE_SCOPE[0],
-            "bind_mode": "long_thick_combo",
-            "bind_value": "long_thick_value_combo",
-        },
-    ],
-    "web_buckling_inputs": [
-        {
-            "id": "shear_buckling_method",
-            "label": "Shear Buckling Design Method:",
-            "type": "combo",
-            "choices": VALUES_STIFFENER_DESIGN,
-            "bind": "method_combo",
+            "column": 0,
+            "title":  "Web Buckling Details",
+            "rows": [
+                {
+                    "fields": [{
+                        "id":      KEY_SD_SHEAR_BUCKLING_METHOD,
+                        "label":   "Shear Buckling Design Method:",
+                        "type":    TYPE_COMBOBOX,
+                        "choices": VALUES_STIFFENER_DESIGN,
+                        "bind":    "method_combo",
+                    }]
+                },
+            ],
         },
     ],
 }

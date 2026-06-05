@@ -354,6 +354,7 @@ KEY_SD_TAB                          = "member_properties.stiffener_details"
 KEY_SD_MEMBER_ID                    = "member_properties.stiffener_details.member_id"
  
 # Stiffener inputs
+KEY_SD_STIFFENER_DETAILS            = "member_properties.stiffener_details.stiffener_details_cad"
 KEY_SD_BEARING_COUNT                = "member_properties.stiffener_details.bearing_count"
 KEY_SD_BEARING_SPACING              = "member_properties.stiffener_details.bearing_spacing"
 KEY_SD_BEARING_THICKNESS            = "member_properties.stiffener_details.bearing_thickness"

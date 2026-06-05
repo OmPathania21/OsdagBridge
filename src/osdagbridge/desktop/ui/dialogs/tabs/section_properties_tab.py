@@ -5,7 +5,6 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from osdagbridge.core.utils.common import *
-from osdagbridge.core.bridge_types.plate_girder.ui_fields_additional_input import GIRDER_DETAILS_SCHEMA
 from osdagbridge.desktop.ui.dialogs.additional_input.ui_builder.common_ui_builder import UIBuilder
 
 from osdagbridge.desktop.ui.dialogs.tabs.sub_tabs.section_properties.stiffener_details_tab   import StiffenerDetailsTab
@@ -48,6 +47,7 @@ class SectionPropertiesTab(QWidget):
         # ── Tab 1: Girder Details — built by UIBuilder from schema ────────────
         # owner and additional_input_instance are AdditionalInputs so that
         # bind attrs and _on_field_edited signals land on the correct object.
+        from osdagbridge.core.bridge_types.plate_girder.ui_fields_additional_input import GIRDER_DETAILS_SCHEMA
         self.girder_details_tab = UIBuilder(
             owner=self.additional_input_instance,
             schema=GIRDER_DETAILS_SCHEMA,
@@ -58,8 +58,18 @@ class SectionPropertiesTab(QWidget):
         )
         self.girder_details_tab.setObjectName(GIRDER_DETAILS_SCHEMA["id"])
 
-        # ── Tabs 2-4: unchanged specialist tabs ───────────────────────────────
-        self.stiffener_details_tab = StiffenerDetailsTab()
+        # ── Tab 1: Girder Details — built by UIBuilder from schema ────────────
+        from osdagbridge.core.bridge_types.plate_girder.ui_fields_additional_input import STIFFENER_DETAILS_SCHEMA
+        self.stiffener_details_tab = UIBuilder(
+            owner=self.additional_input_instance,
+            schema=STIFFENER_DETAILS_SCHEMA,
+            card_title="",
+            main_widget_object_name=STIFFENER_DETAILS_SCHEMA["id"],
+            additional_input_instance=self.additional_input_instance,
+            with_scroll=True,
+        )
+
+        # ── Tabs 3-4: unchanged specialist tabs ───────────────────────────────
         self.cross_bracing_tab     = CrossBracingDetailsTab()
         self.end_diaphragm_tab     = EndDiaphragmDetailsTab()
 

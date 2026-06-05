@@ -392,13 +392,6 @@ class CustomWindow(QWidget):
         """
         dlg = self._get_additional_inputs()
 
-        # Sync design mode
-        if self.input_dock:
-            try:
-                dlg.set_member_properties_design_mode(self.input_dock._current_design_mode)
-            except Exception:
-                pass
-
         # Optionally jump to a specific tab
         if target_tab:
             try:
@@ -419,7 +412,7 @@ class CustomWindow(QWidget):
         # Sync design mode to additional_inputs
         if self.input_dock:
             print(f"\n@@ Syncing design mode to Additional Inputs: {self.input_dock._current_design_mode}")
-            dlg.set_member_properties_design_mode(self.input_dock._current_design_mode)
+            dlg.design_mode_trigger(self.input_dock._current_design_mode)
 
         # Sync carriageway width so Lane Details reflects the latest value
         if self.input_dock:

@@ -175,7 +175,7 @@ class AdditionalInputs(QDialog):
         self._update_section_drawing()
 
     # Set Design Mode (Optimized/Custom) for Member Properties Tab and sync AdaptiveWidgets
-    def set_member_properties_design_mode(self, mode_str: str):
+    def design_mode_trigger(self, mode_str: str):
 
         # Ensures IS Section hidden and welded fields shown correctly on first open
         gd_type_w = self.findChild(QComboBox, KEY_GD_TYPE)
@@ -221,6 +221,36 @@ class AdditionalInputs(QDialog):
         wrapper = self.findChild(QWidget, KEY_GD_SECTION_DRAWING)
         if wrapper:
             wrapper.setVisible(not is_optimized)
+        
+        # Stiffener fields — all greyed out when Optimized
+        stiffener_keys = [
+            KEY_SD_BEARING_COUNT, KEY_SD_BEARING_SPACING,
+            KEY_SD_BEARING_THICKNESS, KEY_SD_BEARING_OUTSTAND,
+            KEY_SD_INTERMEDIATE, KEY_SD_INTERMEDIATE_SPACING,
+            KEY_SD_INTERMEDIATE_THICKNESS, KEY_SD_INTERMEDIATE_OUTSTAND,
+            KEY_SD_LONGITUDINAL, KEY_SD_LONGITUDINAL_THICKNESS,
+            KEY_SD_SHEAR_BUCKLING_METHOD,
+        ]
+        for key in stiffener_keys:
+            w = self.findChild(QWidget, key)
+            if w:
+                w.setEnabled(not is_optimized)
+    
+    # Greys out intermediate sub-fields when Intermediate Stiffener = No.
+    def _on_intermediate_stiffener_changed(self, value: str) -> None:
+        is_yes = str(value).strip() == "Yes"
+        for key in [
+            KEY_SD_INTERMEDIATE_SPACING,
+            KEY_SD_INTERMEDIATE_THICKNESS,
+            KEY_SD_INTERMEDIATE_OUTSTAND,
+        ]:
+            w   = self.findChild(QWidget, key)
+            lbl = self.findChild(QLabel,  key + "_label")
+            if w:   w.setEnabled(is_yes)
+            if lbl: lbl.setEnabled(is_yes)
+        
+        # Update stiffener
+        self._update_stiffener_cad()
 
     # === Refresh Girder List in Member Properties ===========================================
     def _on_girder_count_refreshed(self, widget_id: str, value) -> None:
@@ -245,6 +275,14 @@ class AdditionalInputs(QDialog):
         idx = combo.findText(current)
         combo.setCurrentIndex(idx if idx >= 0 else 0)
         combo.blockSignals(False)
+
+    # Updates StiffenerDetailsCad in Stiffener Details tab.
+    def _update_stiffener_cad(self) -> None:
+        from osdagbridge.desktop.ui.dialogs.additional_input.drawings.stiffener_details_cad import StiffenerDetailsCad
+        widget = self.findChild(StiffenerDetailsCad, "stiffener_cad_preview")
+        if widget is None:
+            return
+        widget.update_stiffener(self.working_input_dict)
 
     def reset_active_tab_defaults(self) -> None:
         """

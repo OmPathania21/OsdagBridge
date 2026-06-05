@@ -298,7 +298,8 @@ class UIBuilder(QWidget):
                     wrapper_layout = QVBoxLayout(wrapper)
                     wrapper_layout.setContentsMargins(0, 0, 0, 0)
                     self._build_description_box(section, wrapper_layout, stretch=stretch)
-                    grid.addWidget(wrapper, grid_row, col, 1, col_span)
+                    row_span = int(section.get("row_span", 1))
+                    grid.addWidget(wrapper, grid_row, col, row_span, col_span)
                 else:
                     section_widget = QWidget()
                     section_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
