@@ -32,10 +32,58 @@ def _build_nodes_members() -> tuple[dict, dict]:
     return nodes, members
 
 
+def dump_full_data(
+    model,
+    edge_dist: float = 0.0,
+    out_path: str | Path | None = None,
+    dataset=None,
+) -> dict:
+    """
+    Dump the *entire* extracted result data to a JSON file.
+
+    Unlike ``restructure_data(model, dev=True)``, this writes the complete,
+    un-filtered data dict (including ``groups``, ``reactions``,
+    ``forces_shell``, ``stresses_shell`` and ``edge_dist`` — keys that
+    ``post_process`` would otherwise drop) and performs **no** other side
+    effects (no crossbracing dump, no plotly HTML generation).
+
+    Parameters
+    ----------
+    model : OspGrillage
+        Fully analysed ospgrillage model (analyze() already called).
+    edge_dist : float
+        Deck overhang distance in metres (0.0 when no overhang).
+    out_path : str | Path, optional
+        Destination JSON path.  Defaults to ``tools/bridge_full_data.json``.
+
+    Returns
+    -------
+    dict — the full data dict that was written.
+    """
+    data = _build_full_data(model, edge_dist, dataset=dataset)
+
+    if out_path is None:
+        _TOOLS_DIR.mkdir(exist_ok=True)
+        out_path = _TOOLS_DIR / "bridge_full_data.json"
+    else:
+        out_path = Path(out_path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(out_path, "w") as f:
+        json.dump(data, f, indent=2)
+
+    print("=" * 60)
+    print(f"[full data] saved → {out_path.resolve()}")
+    print("=" * 60)
+
+    return data
+
+
 def restructure_data(
     model,
     edge_dist: float = 0.0,
     dev: bool = False,
+    dataset=None,
 ) -> dict:
     """
     Restructure xarray analysis results into a flat dict for plot_generator and
@@ -228,7 +276,33 @@ def restructure_data(
         }
     }
     """
-    ds_all = model.get_results()
+    data = _build_full_data(model, edge_dist, dataset=dataset)
+
+    if dev:
+        _dump(data, "bridge_plot_data_raw.json")
+
+    data = post_process(data)
+
+    if dev:
+        _dump(data)
+        _dump_crossbracing(data)
+        _plot_dev(model, model.get_results())
+
+    return data
+
+
+def _build_full_data(model, edge_dist: float = 0.0, dataset=None) -> dict:
+    """
+    Build the complete, un-filtered result data dict from the live model and
+    its xarray results.  This is the shared extraction step used by both
+    ``restructure_data`` (before post-processing) and ``dump_full_data``.
+
+    When ``dataset`` is provided it is used in place of ``model.get_results()``.
+    This is how the envelope pseudo load cases (``Envelope ULS`` /
+    ``Envelope SLS``) reach the dump: they live only on the cached, augmented
+    dataset, never on the model's freshly-rebuilt results.
+    """
+    ds_all = model.get_results() if dataset is None else dataset
     # Deduplicate: ospgrillage appends results on every analyze() call, so
     # a second analyze() (e.g. after adding the governing LL case) produces
     # duplicate Loadcase entries.  Keep first occurrence of each name and
@@ -357,16 +431,6 @@ def restructure_data(
                 str(int(e)): dict(zip(cids, row.tolist()))
                 for e, row in zip(eids, arr)
             }
-
-    if dev:
-        _dump(data, "bridge_plot_data_raw.json")
-
-    data = post_process(data)
-
-    if dev:
-        _dump(data)
-        _dump_crossbracing(data)
-        _plot_dev(model, ds_all)
 
     return data
 

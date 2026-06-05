@@ -254,6 +254,9 @@ class PlateGirderBridge:
         # Analyser — populated by setup_grillage()
         self.grillage_model: BridgeGrillageModel = BridgeGrillageModel()
 
+        # When True, design() writes tools/bridge_full_data.json. Off by default.
+        self.dump_json: bool = False
+
     def input_values(self) -> list:
         """Return UI field definitions for the InputDock (delegated to FrontendData)."""
         return self._frontend.input_values()
@@ -314,6 +317,7 @@ class PlateGirderBridge:
         self.create_uls_combinations()
         self.create_sls_combinations()
         dataset = self._reanalyze_with_dedup()
+        self.create_envelope_load_case(dataset)
 
         inp = self.input_dict
         header = (
@@ -350,6 +354,20 @@ class PlateGirderBridge:
 
         self._run_dcr_checks(dataset)
         self.result_data = self.grillage_model.get_result_data()
+
+        # Dump the complete, un-filtered result data to JSON (no other side
+        # effects). Writes tools/bridge_full_data.json. Off by default — set
+        # self.dump_json = True to enable.
+        if self.dump_json:
+            from osdagbridge.core.bridge_types.plate_girder.results_data import dump_full_data
+            dump_full_data(
+                self.grillage_model.model,
+                edge_dist=self.grillage_model.edge_dist or 0.0,
+                # Use the envelope-augmented dataset so the Envelope ULS / Envelope
+                # SLS pseudo load cases appear in the dump; falls back to
+                # model.get_results() if absent.
+                dataset=getattr(self.grillage_model, "_deduplicated_results", None),
+            )
 
         self.crossbracing_design_results = self._design_cross_bracing_members()
         self.output_dict["crossbracing_design_results"] = self.crossbracing_design_results
@@ -1400,6 +1418,35 @@ class PlateGirderBridge:
 
         self.grillage_model._deduplicated_results = ds
         return ds
+
+    def create_envelope_load_case(self, dataset=None):
+        """
+        Build two worst-signed-magnitude force/displacement envelopes — one over
+        the ULS combinations and one over the SLS combinations — and inject them
+        into the results dataset as the pseudo load cases ``Envelope ULS`` and
+        ``Envelope SLS``.
+
+        Delegates to BridgeGrillageModel.create_envelope_load_case(), which
+        caches the augmented dataset on the grillage model's
+        ``_deduplicated_results`` and the standalone enveloped DataArrays on its
+        ``result_envelopes`` (``{label: {"forces", "displacements"}}``). Both are
+        mirrored onto this object.
+
+        Parameters
+        ----------
+        dataset : xarray.Dataset, optional
+            Results dataset to envelope. Defaults to the deduplicated results
+            cached on the grillage model.
+
+        Returns
+        -------
+        xarray.Dataset
+            The augmented dataset with the ``Envelope ULS`` / ``Envelope SLS`` rows.
+        """
+        augmented = self.grillage_model.create_envelope_load_case(dataset=dataset)
+        self.result_envelopes = self.grillage_model.result_envelopes
+        self._results_with_envelope = augmented
+        return augmented
 
     # ─────────────────────────────────────────────────────────────────────────
     # Load combinations

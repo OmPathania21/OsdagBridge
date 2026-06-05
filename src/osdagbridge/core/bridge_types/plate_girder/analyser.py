@@ -1,4 +1,5 @@
 import ospgrillage as og
+import xarray as xr
 # from math import sqrt, pi
 # import openseespy.opensees as ops
 from osdagbridge.core.utils.codes.irc6_2017 import IRC6_2017
@@ -1661,24 +1662,45 @@ class BridgeGrillageModel:
                 pass
         girder_elements = list(set(girder_elements))
 
-        # Find governing LC: max |Mz_i| on girder elements
-        governing_lc = None
-        governing_val = -1.0
+        # Find governing LC via ospgrillage's create_envelope (replaces the
+        # manual per-load-case max loop). Restrict the dataset to the static
+        # vehicle cases (and girder elements), then envelope |Mz_i| across the
+        # Loadcase dimension:
+        #   value_mode -> max |Mz_i| per element,
+        #   query_mode -> the load-case label producing that max per element.
+        # The single governing case is the one at the element carrying the
+        # overall largest |Mz_i|.
+        sub = dataset.sel(Loadcase=static_lcs)
+        if girder_elements:
+            sub = sub.sel(Element=girder_elements)
 
-        for lc in static_lcs:
-            try:
-                if girder_elements:
-                    mz = dataset["forces"].sel(Loadcase=lc, Element=girder_elements, Component="Mz_i")
-                else:
-                    mz = dataset["forces"].sel(Loadcase=lc, Component="Mz_i")
-                val = float(abs(mz).max())
-                if val > governing_val:
-                    governing_val = val
-                    governing_lc = lc
-            except Exception:
-                continue
+        # Envelope on absolute moment so hogging and sagging are compared on
+        # magnitude (create_envelope only does signed max/min).
+        abs_ds = sub.copy()
+        abs_ds["forces"] = abs(sub["forces"])
 
-        if governing_lc is None:
+        try:
+            env_val = og.create_envelope(
+                ds=abs_ds, load_effect="Mz_i", array="forces",
+                extrema="max", value_mode=True,
+            ).get().sel(Component="Mz_i")
+            env_lc = og.create_envelope(
+                ds=abs_ds, load_effect="Mz_i", array="forces",
+                extrema="max", query_mode=True,
+            ).get().sel(Component="Mz_i")
+
+            gov_element = env_val.idxmax("Element").item()
+            governing_lc = str(env_lc.sel(Element=gov_element).values)
+            governing_val = float(env_val.sel(Element=gov_element).values)
+        except Exception as exc:
+            warnings.warn(
+                f"Envelope-based governing LL detection failed ({exc}); "
+                "skipping LL creation."
+            )
+            self.ll_load_case = None
+            return dataset
+
+        if not governing_lc or governing_val < 0:
             warnings.warn("Could not determine governing LL case; skipping LL creation.")
             self.ll_load_case = None
             return dataset
@@ -1726,6 +1748,161 @@ class BridgeGrillageModel:
         # of calling model.get_results() which always has duplicates.
         self._deduplicated_results = ds
         return ds
+
+    # ============================================================
+    #   Result Envelope  (max / min across ALL load cases)
+    # ============================================================
+
+    #: Loadcase labels for the injected envelope pseudo load cases, one per
+    #: limit state (enveloped over that limit state's combinations only).
+    ENVELOPE_ULS = "Envelope ULS"
+    ENVELOPE_SLS = "Envelope SLS"
+
+    def create_envelope_load_case(self, model=None, dataset=None):
+        """
+        Build **two** force/displacement envelopes — one over the ULS
+        combinations and one over the SLS combinations — and inject them back
+        into the results dataset as the pseudo load cases ``Envelope ULS`` and
+        ``Envelope SLS``.
+
+        An envelope is a post-processing result rather than a re-analyzable
+        input load case. For every element/node component this records the
+        **worst signed magnitude** across that limit state's combinations: of
+        the across-loadcase maximum and minimum, whichever has the larger
+        absolute value is kept, with its sign preserved (e.g. a cell seeing
+        ``+120`` and ``-300`` records ``-300``). Because the reduction only
+        collapses the ``Loadcase`` dimension, each enveloped array keeps its
+        spatial axis:
+
+            ``forces`` envelope is **element-wise**  (dims ``Element, Component``)
+            ``displacements`` envelope is **node-wise** (dims ``Node, Component``)
+
+        Membership comes from ``self.uls_combinations`` / ``self.sls_combinations``
+        (the lists returned by :meth:`create_uls_combinations` /
+        :meth:`create_sls_combinations`); only combinations actually present in
+        the dataset are enveloped. Each reduced row is concatenated back onto the
+        ``Loadcase`` dimension of a *copy* of the results dataset, so the
+        envelopes show up as ``Envelope ULS`` / ``Envelope SLS`` alongside the
+        real load cases in ``forces``, ``displacements``, etc. The augmented
+        dataset is cached on ``self._deduplicated_results`` (this cannot be
+        persisted into the OpenSees model — ``model.get_results()`` always
+        rebuilds it fresh).
+
+        The standalone enveloped DataArrays are also cached on
+        ``self.result_envelopes`` as
+        ``{label: {"forces": DataArray, "displacements": DataArray}}`` for
+        convenient direct access.
+
+        Must be called after the model has been analysed (and after the ULS/SLS
+        combinations have been created and analysed) so a results dataset is
+        available.
+
+        Parameters
+        ----------
+        dataset : xarray.Dataset, optional
+            Results dataset to envelope. Defaults to the deduplicated results
+            cached by the analysis, falling back to ``model.get_results()``.
+
+        Returns
+        -------
+        xarray.Dataset
+            The augmented dataset with ``Envelope ULS`` / ``Envelope SLS`` added
+            on the ``Loadcase`` dimension.
+        """
+        model = model or self.model
+        if model is None:
+            raise ValueError("Model is not available. Create and analyze the model first.")
+
+        if dataset is None:
+            dataset = getattr(self, "_deduplicated_results", None)
+            if dataset is None:
+                dataset = model.get_results()
+
+        if "Loadcase" not in dataset.dims:
+            warnings.warn("Results dataset has no 'Loadcase' dimension; skipping envelope.")
+            return dataset
+
+        # Idempotency: strip any previously injected envelope rows so re-running
+        # envelopes the real combinations only.
+        env_labels = {self.ENVELOPE_ULS, self.ENVELOPE_SLS}
+        all_lcs = [str(lc) for lc in dataset.coords["Loadcase"].values]
+        base_lcs = [lc for lc in all_lcs if lc not in env_labels]
+        base = dataset.sel(Loadcase=base_lcs) if len(base_lcs) < len(all_lcs) else dataset
+
+        # Split Loadcase-bearing data vars (forces, displacements, velocity,
+        # acceleration) from static ones (e.g. ele_nodes) so they can be
+        # concatenated and merged back cleanly.
+        loadcase_vars = [v for v in base.data_vars if "Loadcase" in base[v].dims]
+        static_vars = [v for v in base.data_vars if "Loadcase" not in base[v].dims]
+
+        # Group the real load cases by limit state from the registered
+        # combination lists, keeping only those present in the dataset.
+        base_set = set(base_lcs)
+        uls_names = [lc.name for lc in (getattr(self, "uls_combinations", None) or [])]
+        sls_names = [lc.name for lc in (getattr(self, "sls_combinations", None) or [])]
+        groups = {
+            self.ENVELOPE_ULS: [n for n in uls_names if n in base_set],
+            self.ENVELOPE_SLS: [n for n in sls_names if n in base_set],
+        }
+
+        def _envelope(sub):
+            """Worst-signed-magnitude reduction of ``sub`` over Loadcase.
+
+            Takes ospgrillage's across-loadcase max and min (create_envelope's
+            load_effect is required but does NOT filter — get() reduces the whole
+            array along Loadcase) and keeps whichever has the larger absolute
+            value, preserving sign.
+            """
+            out = {}
+            for var_name in loadcase_vars:
+                da_max = og.create_envelope(
+                    ds=sub, load_effect=var_name, array=var_name,
+                    extrema="max", value_mode=True,
+                ).get()
+                da_min = og.create_envelope(
+                    ds=sub, load_effect=var_name, array=var_name,
+                    extrema="min", value_mode=True,
+                ).get()
+                out[var_name] = xr.where(abs(da_max) >= abs(da_min), da_max, da_min)
+            return out
+
+        env_rows = []
+        self.result_envelopes = {}
+        for label, group_lcs in groups.items():
+            if not group_lcs:
+                warnings.warn(
+                    f"No load cases found for '{label}'; skipping "
+                    "(create the combinations and analyse before enveloping)."
+                )
+                continue
+            env_arrays = _envelope(base.sel(Loadcase=group_lcs))
+            env_rows.append(xr.Dataset(env_arrays).expand_dims(Loadcase=[label]))
+            self.result_envelopes[label] = env_arrays
+
+        # Concat the envelope rows onto the Loadcase axis and merge static vars.
+        base_lc = base[loadcase_vars]
+        combined_lc = xr.concat([base_lc, *env_rows], dim="Loadcase") if env_rows else base_lc
+        combined = xr.merge([combined_lc, base[static_vars]]) if static_vars else combined_lc
+
+        self._deduplicated_results = combined
+
+        # Brief console summary (best-effort — never fail the pipeline on it).
+        for label, group_lcs in groups.items():
+            if label not in self.result_envelopes:
+                continue
+            try:
+                arrs = self.result_envelopes[label]
+                mz = arrs["forces"].sel(Component="Mz_i")
+                dy = arrs["displacements"].sel(Component="y")
+                print(
+                    f"{label} (worst signed magnitude) over {len(group_lcs)} "
+                    f"combinations: peak |Mz_i|={float(abs(mz).max()) / 1000:.2f} kNm  "
+                    f"peak |dy|={float(abs(dy).max()) * 1000:.2f} mm"
+                )
+            except Exception:
+                pass
+
+        return combined
 
     # ============================================================
     #   ULS Load Combinations  (IRC:6-2017 Table B.2)
