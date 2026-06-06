@@ -220,43 +220,10 @@ class LoadCombinationWidget(QWidget):
         'floating_bodies':    'FB',
     }
 
-    # ── Key map: (combination_type, leading_or_condition, accidental_load, direction)
-    #            → KEY string
-    _ULS_CASE_KEYS = {
-        ('basic',       'live_load',  None,                'adding'):    'loading.load_combination.basic.ll_leading.adding',
-        ('basic',       'wind_load',  None,                'adding'):    'loading.load_combination.basic.wl_leading.adding',
-        ('basic',       'thermal_load', None,              'adding'):    'loading.load_combination.basic.tl_leading.adding',
-        ('basic',       'live_load',  None,                'relieving'): 'loading.load_combination.basic.ll_leading.relieving',
-        ('basic',       'wind_load',  None,                'relieving'): 'loading.load_combination.basic.wl_leading.relieving',
-        ('basic',       'thermal_load', None,              'relieving'): 'loading.load_combination.basic.tl_leading.relieving',
-        ('accidental',  'live_load',  'vehicle_collision', 'adding'):    'loading.load_combination.accidental.vc.ll_leading.adding',
-        ('accidental',  'live_load',  'barge_impact',      'adding'):    'loading.load_combination.accidental.bi.ll_leading.adding',
-        ('accidental',  'live_load',  'floating_bodies',   'adding'):    'loading.load_combination.accidental.fb.ll_leading.adding',
-        ('accidental',  'live_load',  'vehicle_collision', 'relieving'): 'loading.load_combination.accidental.vc.ll_leading.relieving',
-        ('accidental',  'live_load',  'barge_impact',      'relieving'): 'loading.load_combination.accidental.bi.ll_leading.relieving',
-        ('accidental',  'live_load',  'floating_bodies',   'relieving'): 'loading.load_combination.accidental.fb.ll_leading.relieving',
-        ('seismic',     'service',    None,                'adding'):    'loading.load_combination.seismic.service.adding',
-        ('seismic',     'construction', None,              'adding'):    'loading.load_combination.seismic.construction.adding',
-        ('seismic',     'service',    None,                'relieving'): 'loading.load_combination.seismic.service.relieving',
-        ('seismic',     'construction', None,              'relieving'): 'loading.load_combination.seismic.construction.relieving',
-    }
-
-    _SLS_CASE_KEYS = {
-        ('rare',            'live_load',    'adding'):    'loading.load_combination.sls.rare.ll_leading.adding',
-        ('rare',            'wind_load',    'adding'):    'loading.load_combination.sls.rare.wl_leading.adding',
-        ('rare',            'thermal_load', 'adding'):    'loading.load_combination.sls.rare.tl_leading.adding',
-        ('rare',            'live_load',    'relieving'): 'loading.load_combination.sls.rare.ll_leading.relieving',
-        ('rare',            'wind_load',    'relieving'): 'loading.load_combination.sls.rare.wl_leading.relieving',
-        ('rare',            'thermal_load', 'relieving'): 'loading.load_combination.sls.rare.tl_leading.relieving',
-        ('frequent',        'live_load',    'adding'):    'loading.load_combination.sls.frequent.ll_leading.adding',
-        ('frequent',        'wind_load',    'adding'):    'loading.load_combination.sls.frequent.wl_leading.adding',
-        ('frequent',        'thermal_load', 'adding'):    'loading.load_combination.sls.frequent.tl_leading.adding',
-        ('frequent',        'live_load',    'relieving'): 'loading.load_combination.sls.frequent.ll_leading.relieving',
-        ('frequent',        'wind_load',    'relieving'): 'loading.load_combination.sls.frequent.wl_leading.relieving',
-        ('frequent',        'thermal_load', 'relieving'): 'loading.load_combination.sls.frequent.tl_leading.relieving',
-        ('quasi_permanent', None,           'adding'):    'loading.load_combination.sls.quasi_permanent.adding',
-        ('quasi_permanent', None,           'relieving'): 'loading.load_combination.sls.quasi_permanent.relieving',
-    }
+    # Combination → KEY maps live in core (single source of truth shared with the
+    # analyser's combination builder); aliased here for brevity.
+    _ULS_CASE_KEYS = IRC6_2017.ULS_COMBINATION_KEYS
+    _SLS_CASE_KEYS = IRC6_2017.SLS_COMBINATION_KEYS
 
     def _populate_default_combinations(self):
         """

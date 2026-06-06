@@ -2021,9 +2021,9 @@ class BridgeGrillageModel:
     #   ULS Load Combinations  (IRC:6-2017 Table B.2)
     # ============================================================
 
-    def create_uls_combinations(self, model=None):
+    def create_uls_combinations(self, model=None, included_keys=None):
         """
-        Creates all ULS load combinations per IRC:6-2017 Table B.2.
+        Creates the selected ULS load combinations per IRC:6-2017 Table B.2.
 
         Permanent loads (dead_load, surfacing) are applied in **both** directions
         — adding and relieving — for every combination type so that the full
@@ -2036,11 +2036,12 @@ class BridgeGrillageModel:
             Adding   (DL=1.35, Surf=1.75): BASIC_1 LL-lead, BASIC_2 WL-lead, BASIC_3 TL-lead
             Relieving (DL=1.00, Surf=1.00): BASIC_4 LL-lead, BASIC_5 WL-lead, BASIC_6 TL-lead
 
-        ACCIDENTAL_1  … ACCIDENTAL_6  (6 total)
-            2 permanent directions  ×  3 accidental events  ×  1 valid leading
+        ACCIDENTAL_1  … ACCIDENTAL_3  (3 total)
+            3 accidental events  ×  1 valid leading
             (only live_load leading is valid; wind/thermal leading = None → skipped).
-            DL and Surf adding = relieving = 1.0 for accidental, so pairs are
-            numerically identical but both are registered for consistency.
+            DL and Surf are γ=1.0 for both adding and relieving in the accidental
+            column, so the two directions are numerically identical — only one is
+            generated per event (no direction loop).
             Note: accidental event load cases have no model load case; silently omitted.
 
         SEISMIC_1  … SEISMIC_4  (4 total)
@@ -2049,7 +2050,16 @@ class BridgeGrillageModel:
             Relieving  (DL=1.00, Surf=1.00): SEISMIC_3 service, SEISMIC_4 construction
             Wind load accompanying = None for seismic → omitted.
 
-        Total: 16 ULS combinations.
+        Total: 13 ULS combinations when all are selected.
+
+        Parameters
+        ----------
+        included_keys : set[str] | None
+            Set of canonical combination keys (see
+            ``IRC6_2017.ULS_COMBINATION_KEYS``) to generate. ``None`` (default)
+            generates every combination; an empty set generates none. Each combo
+            is registered only when its key is in this set, letting the user
+            choose which combinations are built via the load-combination UI.
 
         Notes
         -----
@@ -2071,6 +2081,16 @@ class BridgeGrillageModel:
             'thermal_load': 'temperature_load_case',
             'seismic':      'seismic_load_case',
         }
+        # Short load symbols used to spell out the factored combination in the
+        # load-case name, e.g. "BASIC_1: 1.35DL + 1.75DW + 1.5LL".
+        LOAD_ABBR = {
+            'dead_load':    'DL',
+            'surfacing':    'DW',
+            'live_load':    'LL',
+            'wind_load':    'WL',
+            'thermal_load': 'TL',
+            'seismic':      'EL',
+        }
         ACCIDENTAL_LOADS = ['vehicle_collision', 'barge_impact', 'floating_bodies']
         VARIABLE_LOADS   = ['live_load', 'wind_load', 'thermal_load']
         DIRECTIONS       = ['adding', 'relieving']
@@ -2089,37 +2109,61 @@ class BridgeGrillageModel:
         counters: dict = {}
         created: list = []
 
-        def _register(prefix, perm_factors, var_factors, seismic_factor=None, label=""):
-            counters[prefix] = counters.get(prefix, 0) + 1
-            lc_name  = f"{prefix}_{counters[prefix]}"
-            combo_lc = og.create_load_case(name=lc_name)
-            n = 0
+        def _register(prefix, perm_factors, var_factors, seismic_factor=None, label="", key=""):
+            # Skip combinations the user has de-selected. included_keys is None
+            # → generate everything (back-compat); an empty/unknown key always
+            # passes so a mapping miss can never silently drop a combination.
+            if included_keys is not None and key and key not in included_keys:
+                return
+
+            # Resolve which sub-cases actually contribute (mirrors _copy_loads:
+            # a load is included only when its factor is non-zero and its
+            # sub-case exists). Collect both the loads to copy and the factored
+            # terms used to spell out the combination in its name.
+            seq = counters.get(prefix, 0) + 1
+            terms   = []   # display terms, e.g. "1.35DL"
+            to_copy = []   # (src_lc, factor) actually added to the combo
+
             for key, fac in perm_factors.items():
-                n += _copy_loads(combo_lc, _lc(key), fac)
+                src = _lc(key)
+                if src is None or fac is None or fac == 0:
+                    continue
+                terms.append(f"{fac}{LOAD_ABBR[key]}")
+                to_copy.append((src, fac))
+
             for key, fac in var_factors.items():
                 if fac is None or fac == 0:
                     continue
                 src = _lc(key)
                 if src is None:
                     warnings.warn(
-                        f"{lc_name}: '{key}' load case not available — "
+                        f"{prefix}_{seq}: '{key}' load case not available — "
                         "create it before calling create_uls_combinations()."
                     )
                     continue
-                n += _copy_loads(combo_lc, src, fac)
-            if seismic_factor is not None:
+                terms.append(f"{fac}{LOAD_ABBR[key]}")
+                to_copy.append((src, fac))
+
+            if seismic_factor is not None and seismic_factor != 0:
                 src = _lc('seismic')
                 if src is None:
-                    warnings.warn(f"{lc_name}: seismic load case not available.")
+                    warnings.warn(f"{prefix}_{seq}: seismic load case not available.")
                 else:
-                    n += _copy_loads(combo_lc, src, seismic_factor)
-            if n == 0:
-                warnings.warn(f"{lc_name}: no loads added — skipping.")
-                counters[prefix] -= 1
+                    terms.append(f"{seismic_factor}{LOAD_ABBR['seismic']}")
+                    to_copy.append((src, seismic_factor))
+
+            if not to_copy:
+                warnings.warn(f"{prefix}_{seq}: no loads added — skipping.")
                 return
+
+            counters[prefix] = seq
+            lc_name  = f"{prefix}_{seq}: " + " + ".join(terms)
+            combo_lc = og.create_load_case(name=lc_name)
+            for src, fac in to_copy:
+                _copy_loads(combo_lc, src, fac)
             model.add_load_case(combo_lc)
             created.append(combo_lc)
-            print(f"  Created: {lc_name:<25s}  {label}")
+            print(f"  Created: {lc_name:<45s}  {label}")
 
         # ── BASIC (6 combos: 2 directions × 3 leading) ───────────────────────
         print("ULS Basic combinations:")
@@ -2135,24 +2179,29 @@ class BridgeGrillageModel:
                 if var[leading] is None:
                     continue
                 _register('BASIC', perm, var,
-                          label=f"DL={dl_f}({direction})  Surf={surf_f}  {leading} leading")
+                          label=f"DL={dl_f}({direction})  Surf={surf_f}  {leading} leading",
+                          key=IRC6_2017.ULS_COMBINATION_KEYS.get(('basic', leading, None, direction), ""))
 
-        # ── ACCIDENTAL (6 combos: 2 directions × 3 events × 1 valid leading) ─
+        # ── ACCIDENTAL (3 combos: 3 events × 1 valid leading) ────────────────
+        # In the accidental column of Table B.2 the permanent loads carry
+        # γ=1.0 for BOTH adding and relieving, so the two directions are
+        # numerically identical — only one is generated per accidental event
+        # (3 events × 1 valid leading = 3 combinations).
         print("\nULS Accidental combinations:")
-        for direction in DIRECTIONS:
-            dl_f   = γ('dead_load', direction, 'accidental')
-            surf_f = γ('surfacing',  direction, 'accidental')
-            perm   = {'dead_load': dl_f, 'surfacing': surf_f}
-            for acc in ACCIDENTAL_LOADS:
-                for leading in VARIABLE_LOADS:
-                    var = {
-                        vl: γ(vl, 'leading' if vl == leading else 'accompanying', 'accidental')
-                        for vl in VARIABLE_LOADS
-                    }
-                    if var[leading] is None:
-                        continue
-                    _register('ACCIDENTAL', perm, var,
-                              label=f"DL={dl_f}({direction})  {acc}(no lc)  {leading} leading")
+        dl_f   = γ('dead_load', 'adding', 'accidental')
+        surf_f = γ('surfacing',  'adding', 'accidental')
+        perm   = {'dead_load': dl_f, 'surfacing': surf_f}
+        for acc in ACCIDENTAL_LOADS:
+            for leading in VARIABLE_LOADS:
+                var = {
+                    vl: γ(vl, 'leading' if vl == leading else 'accompanying', 'accidental')
+                    for vl in VARIABLE_LOADS
+                }
+                if var[leading] is None:
+                    continue
+                _register('ACCIDENTAL', perm, var,
+                          label=f"DL={dl_f}  {acc}(no lc)  {leading} leading",
+                          key=IRC6_2017.ULS_COMBINATION_KEYS.get(('accidental', leading, acc, 'adding'), ""))
 
         # ── SEISMIC (4 combos: 2 directions × 2 conditions) ──────────────────
         print("\nULS Seismic combinations:")
@@ -2164,7 +2213,8 @@ class BridgeGrillageModel:
             for condition in ['service', 'construction']:
                 el_f = γ('seismic', condition, 'seismic')
                 _register('SEISMIC', perm, var_seis, seismic_factor=el_f,
-                          label=f"DL={dl_f}({direction})  EL={el_f}({condition})")
+                          label=f"DL={dl_f}({direction})  EL={el_f}({condition})",
+                          key=IRC6_2017.ULS_COMBINATION_KEYS.get(('seismic', condition, None, direction), ""))
 
         print(f"\nTotal ULS combinations created: {len(created)}")
         self.uls_combinations = created
@@ -2174,9 +2224,9 @@ class BridgeGrillageModel:
     #   SLS Load Combinations  (IRC:6-2017 Table B.3)
     # ============================================================
 
-    def create_sls_combinations(self, model=None):
+    def create_sls_combinations(self, model=None, included_keys=None):
         """
-        Creates all SLS load combinations per IRC:6-2017 Table B.3.
+        Creates the selected SLS load combinations per IRC:6-2017 Table B.3.
 
         Dead load is always γ=1.0 in SLS regardless of direction.  Surfacing
         carries different adding (1.2) / relieving (1.0) factors, so both
@@ -2198,7 +2248,16 @@ class BridgeGrillageModel:
             SLS_QP_1: Surf adding  (1.2)   DL=1.0  TL=0.5
             SLS_QP_2: Surf relieving (1.0)  DL=1.0  TL=0.5
 
-        Total: 14 SLS combinations.
+        Total: 14 SLS combinations when all are selected.
+
+        Parameters
+        ----------
+        included_keys : set[str] | None
+            Set of canonical combination keys (see
+            ``IRC6_2017.SLS_COMBINATION_KEYS``) to generate. ``None`` (default)
+            generates every combination; an empty set generates none. Each combo
+            is registered only when its key is in this set, letting the user
+            choose which combinations are built via the load-combination UI.
 
         Notes
         -----
@@ -2219,6 +2278,15 @@ class BridgeGrillageModel:
             'wind_load':    'wind_load_case',
             'thermal_load': 'temperature_load_case',
         }
+        # Short load symbols used to spell out the factored combination in the
+        # load-case name, e.g. "SLS_RARE_1: 1.0DL + 1.2DW + 1.0LL".
+        LOAD_ABBR = {
+            'dead_load':    'DL',
+            'surfacing':    'DW',
+            'live_load':    'LL',
+            'wind_load':    'WL',
+            'thermal_load': 'TL',
+        }
         VARIABLE_LOADS = ['live_load', 'wind_load', 'thermal_load']
         DIRECTIONS     = ['adding', 'relieving']
 
@@ -2236,31 +2304,53 @@ class BridgeGrillageModel:
         counters: dict = {}
         created: list = []
 
-        def _register(prefix, dl_f, surf_f, var_factors, label=""):
-            counters[prefix] = counters.get(prefix, 0) + 1
-            lc_name  = f"{prefix}_{counters[prefix]}"
-            combo_lc = og.create_load_case(name=lc_name)
-            n = 0
-            n += _copy_loads(combo_lc, _lc('dead_load'), dl_f)
-            n += _copy_loads(combo_lc, _lc('surfacing'),  surf_f)
+        def _register(prefix, dl_f, surf_f, var_factors, label="", key=""):
+            # Skip combinations the user has de-selected. included_keys is None
+            # → generate everything (back-compat); an empty/unknown key always
+            # passes so a mapping miss can never silently drop a combination.
+            if included_keys is not None and key and key not in included_keys:
+                return
+
+            # Resolve which sub-cases actually contribute (mirrors _copy_loads:
+            # a load is included only when its factor is non-zero and its
+            # sub-case exists). Collect both the loads to copy and the factored
+            # terms used to spell out the combination in its name.
+            seq = counters.get(prefix, 0) + 1
+            terms   = []   # display terms, e.g. "1.2DW"
+            to_copy = []   # (src_lc, factor) actually added to the combo
+
+            for key, fac in [('dead_load', dl_f), ('surfacing', surf_f)]:
+                src = _lc(key)
+                if src is None or fac is None or fac == 0:
+                    continue
+                terms.append(f"{fac}{LOAD_ABBR[key]}")
+                to_copy.append((src, fac))
+
             for key, fac in var_factors.items():
                 if fac is None or fac == 0:
                     continue
                 src = _lc(key)
                 if src is None:
                     warnings.warn(
-                        f"{lc_name}: '{key}' load case not available — "
+                        f"{prefix}_{seq}: '{key}' load case not available — "
                         "create it before calling create_sls_combinations()."
                     )
                     continue
-                n += _copy_loads(combo_lc, src, fac)
-            if n == 0:
-                warnings.warn(f"{lc_name}: no loads added — skipping.")
-                counters[prefix] -= 1
+                terms.append(f"{fac}{LOAD_ABBR[key]}")
+                to_copy.append((src, fac))
+
+            if not to_copy:
+                warnings.warn(f"{prefix}_{seq}: no loads added — skipping.")
                 return
+
+            counters[prefix] = seq
+            lc_name  = f"{prefix}_{seq}: " + " + ".join(terms)
+            combo_lc = og.create_load_case(name=lc_name)
+            for src, fac in to_copy:
+                _copy_loads(combo_lc, src, fac)
             model.add_load_case(combo_lc)
             created.append(combo_lc)
-            print(f"  Created: {lc_name:<30s}  {label}")
+            print(f"  Created: {lc_name:<45s}  {label}")
 
         # ── RARE & FREQUENT (6 + 6 combos) ───────────────────────────────────
         for combo_type, prefix in [('rare', 'SLS_RARE'), ('frequent', 'SLS_FREQUENT')]:
@@ -2276,7 +2366,8 @@ class BridgeGrillageModel:
                     if var[leading] is None:
                         continue
                     _register(prefix, dl_f, surf_f, var,
-                              label=f"DL={dl_f}  Surf={surf_f}({direction})  {leading} leading")
+                              label=f"DL={dl_f}  Surf={surf_f}({direction})  {leading} leading",
+                              key=IRC6_2017.SLS_COMBINATION_KEYS.get((combo_type, leading, direction), ""))
             print()
 
         # ── QUASI-PERMANENT (2 combos: adding & relieving surfacing) ─────────
@@ -2287,7 +2378,8 @@ class BridgeGrillageModel:
         for direction in DIRECTIONS:
             surf_f = γ('surfacing', direction, 'quasi_permanent')
             _register('SLS_QP', dl_f, surf_f, var_qp,
-                      label=f"DL={dl_f}  Surf={surf_f}({direction})  TL=0.5")
+                      label=f"DL={dl_f}  Surf={surf_f}({direction})  TL=0.5",
+                      key=IRC6_2017.SLS_COMBINATION_KEYS.get(('quasi_permanent', None, direction), ""))
 
         print(f"\nTotal SLS combinations created: {len(created)}")
         self.sls_combinations = created

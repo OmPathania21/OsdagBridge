@@ -1453,14 +1453,42 @@ class PlateGirderBridge:
     # Load combinations
     # ─────────────────────────────────────────────────────────────────────────
 
+    #: Input-dict key holding the per-combination include/exclude selection
+    #: persisted by the load-combination checkbox widget (LoadCombinationWidget).
+    _LC_SELECTION_KEY = "irc6_default_combinations"
+
+    def _combination_keys(self, namespace_filter):
+        """
+        Return the set of selected (included) combination keys, or ``None``.
+
+        Reads the per-combination selection saved by the load-combination UI
+        (a list of ``{"key", "included", ...}`` dicts). ``namespace_filter`` is
+        a predicate on the key string used to keep only ULS or only SLS keys.
+
+        Returns ``None`` when no selection exists (dialog never opened) so the
+        analyser falls back to generating every combination. Returns a (possibly
+        empty) ``set`` otherwise — an empty set means the user de-selected every
+        combination in that limit state, so none should be generated.
+        """
+        sel = self.additional_inputs.get(self._LC_SELECTION_KEY)
+        if not sel:
+            return None
+        return {
+            e["key"] for e in sel
+            if e.get("included") and e.get("key") and namespace_filter(e["key"])
+        }
+
     def create_uls_combinations(self) -> list:
         """
-        Create all ULS load combinations per IRC:6-2017 Table B.2.
+        Create the user-selected ULS load combinations per IRC:6-2017 Table B.2.
 
-        Produces 16 combinations:
+        When all are selected, produces 13 combinations:
           BASIC_1 … BASIC_6        — 2 permanent directions × 3 variable leaders
-          ACCIDENTAL_1 … ACCIDENTAL_6 — 2 directions × 3 events × 1 valid leader
+          ACCIDENTAL_1 … ACCIDENTAL_3 — 3 events × 1 valid leader
           SEISMIC_1 … SEISMIC_4    — 2 directions × 2 seismic conditions
+
+        The combinations the user de-selected in the load-combination UI are
+        skipped; with no saved selection every combination is generated.
 
         Must be called after create_governing_ll_load_case() so that the LL
         load case (``ll_load_case``) is available for combination.
@@ -1471,16 +1499,20 @@ class PlateGirderBridge:
         -------
         list — ospgrillage load-case objects registered with the model.
         """
-        return self.grillage_model.create_uls_combinations()
+        included = self._combination_keys(lambda k: ".sls." not in k)
+        return self.grillage_model.create_uls_combinations(included_keys=included)
 
     def create_sls_combinations(self) -> list:
         """
-        Create all SLS load combinations per IRC:6-2017 Table B.3.
+        Create the user-selected SLS load combinations per IRC:6-2017 Table B.3.
 
-        Produces 14 combinations:
+        When all are selected, produces 14 combinations:
           SLS_RARE_1 … SLS_RARE_6          — 2 surfacing directions × 3 variable leaders
           SLS_FREQUENT_1 … SLS_FREQUENT_6  — same structure, frequent-column factors
           SLS_QP_1, SLS_QP_2               — quasi-permanent; only TL (0.5) contributes
+
+        The combinations the user de-selected in the load-combination UI are
+        skipped; with no saved selection every combination is generated.
 
         Must be called after create_governing_ll_load_case() so that the LL
         load case is available for combination.
@@ -1491,7 +1523,8 @@ class PlateGirderBridge:
         -------
         list — ospgrillage load-case objects registered with the model.
         """
-        return self.grillage_model.create_sls_combinations()
+        included = self._combination_keys(lambda k: ".sls." in k)
+        return self.grillage_model.create_sls_combinations(included_keys=included)
 
     def create_dl_ll_combination(self, dl_factor: float = 1.0, ll_factor: float = 1.0):
         """

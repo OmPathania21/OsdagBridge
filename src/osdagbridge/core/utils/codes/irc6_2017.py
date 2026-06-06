@@ -1688,6 +1688,52 @@ class IRC6_2017:
     # ANNEX B: PARTIAL SAFETY FACTORS FOR LOADS
     # =========================================================================
 
+    # Canonical stable keys for each ULS / SLS load combination. These are the
+    # single source of truth shared by the core combination builder
+    # (BridgeGrillageModel.create_uls_combinations / create_sls_combinations) and
+    # the desktop per-combination checkbox widget (LoadCombinationWidget), so the
+    # two agree on which combination a checkbox refers to regardless of display
+    # numbering. Do NOT key off the display number — the widget numbers combos
+    # leading-first while the analyser numbers them direction-first.
+    #
+    # ULS key tuple: (combination_type, leading_or_condition, accidental_load, direction)
+    ULS_COMBINATION_KEYS = {
+        ('basic',       'live_load',  None,                'adding'):    'loading.load_combination.basic.ll_leading.adding',
+        ('basic',       'wind_load',  None,                'adding'):    'loading.load_combination.basic.wl_leading.adding',
+        ('basic',       'thermal_load', None,              'adding'):    'loading.load_combination.basic.tl_leading.adding',
+        ('basic',       'live_load',  None,                'relieving'): 'loading.load_combination.basic.ll_leading.relieving',
+        ('basic',       'wind_load',  None,                'relieving'): 'loading.load_combination.basic.wl_leading.relieving',
+        ('basic',       'thermal_load', None,              'relieving'): 'loading.load_combination.basic.tl_leading.relieving',
+        ('accidental',  'live_load',  'vehicle_collision', 'adding'):    'loading.load_combination.accidental.vc.ll_leading.adding',
+        ('accidental',  'live_load',  'barge_impact',      'adding'):    'loading.load_combination.accidental.bi.ll_leading.adding',
+        ('accidental',  'live_load',  'floating_bodies',   'adding'):    'loading.load_combination.accidental.fb.ll_leading.adding',
+        ('accidental',  'live_load',  'vehicle_collision', 'relieving'): 'loading.load_combination.accidental.vc.ll_leading.relieving',
+        ('accidental',  'live_load',  'barge_impact',      'relieving'): 'loading.load_combination.accidental.bi.ll_leading.relieving',
+        ('accidental',  'live_load',  'floating_bodies',   'relieving'): 'loading.load_combination.accidental.fb.ll_leading.relieving',
+        ('seismic',     'service',    None,                'adding'):    'loading.load_combination.seismic.service.adding',
+        ('seismic',     'construction', None,              'adding'):    'loading.load_combination.seismic.construction.adding',
+        ('seismic',     'service',    None,                'relieving'): 'loading.load_combination.seismic.service.relieving',
+        ('seismic',     'construction', None,              'relieving'): 'loading.load_combination.seismic.construction.relieving',
+    }
+
+    # SLS key tuple: (combination_type, leading, direction)
+    SLS_COMBINATION_KEYS = {
+        ('rare',            'live_load',    'adding'):    'loading.load_combination.sls.rare.ll_leading.adding',
+        ('rare',            'wind_load',    'adding'):    'loading.load_combination.sls.rare.wl_leading.adding',
+        ('rare',            'thermal_load', 'adding'):    'loading.load_combination.sls.rare.tl_leading.adding',
+        ('rare',            'live_load',    'relieving'): 'loading.load_combination.sls.rare.ll_leading.relieving',
+        ('rare',            'wind_load',    'relieving'): 'loading.load_combination.sls.rare.wl_leading.relieving',
+        ('rare',            'thermal_load', 'relieving'): 'loading.load_combination.sls.rare.tl_leading.relieving',
+        ('frequent',        'live_load',    'adding'):    'loading.load_combination.sls.frequent.ll_leading.adding',
+        ('frequent',        'wind_load',    'adding'):    'loading.load_combination.sls.frequent.wl_leading.adding',
+        ('frequent',        'thermal_load', 'adding'):    'loading.load_combination.sls.frequent.tl_leading.adding',
+        ('frequent',        'live_load',    'relieving'): 'loading.load_combination.sls.frequent.ll_leading.relieving',
+        ('frequent',        'wind_load',    'relieving'): 'loading.load_combination.sls.frequent.wl_leading.relieving',
+        ('frequent',        'thermal_load', 'relieving'): 'loading.load_combination.sls.frequent.tl_leading.relieving',
+        ('quasi_permanent', None,           'adding'):    'loading.load_combination.sls.quasi_permanent.adding',
+        ('quasi_permanent', None,           'relieving'): 'loading.load_combination.sls.quasi_permanent.relieving',
+    }
+
     # IRC:6-2017 Table B.2 — Partial Safety Factor for Verification of Structural Strength
     # key: (load_type, qualifier)  →  {combination: γ}
     # qualifier: sub-row label (effect or load_category); None for single-row entries
