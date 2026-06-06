@@ -1808,6 +1808,69 @@ class BridgeGrillageModel:
     ENVELOPE_ULS = "Envelope ULS"
     ENVELOPE_SLS = "Envelope SLS"
 
+    # ============================================================
+    #   Dead Load + Live Load Combination
+    # ============================================================
+
+    def create_dl_ll_combination(self, model=None, dl_factor: float = 1.0, ll_factor: float = 1.0):
+        """
+        Creates a single ``"{dl_factor} DL + {ll_factor} LL"`` load case by
+        combining the dead-load combination and the governing live-load case,
+        each scaled by its own partial safety factor.
+
+        With the defaults this produces a load case named ``"1.0 DL + 1.0 LL"``
+        carrying the unfactored sum of dead and live loads.
+
+        Must be called after ``create_dead_load_combination()`` and
+        ``create_governing_ll_load_case()`` so both sub-cases exist.
+
+        Parameters
+        ----------
+        dl_factor : float
+            Partial safety factor applied to the dead-load loads (default 1.0).
+        ll_factor : float
+            Partial safety factor applied to the live-load loads (default 1.0).
+
+        The created load case is stored on ``self.dl_ll_combination``.
+        """
+        model = model or self.model
+        if model is None:
+            raise ValueError("Model is not available. Create model before adding loads.")
+
+        dl_lc = getattr(self, "dead_load_combination", None)
+        ll_lc = getattr(self, "ll_load_case", None)
+
+        combo = og.create_load_case(name=f"{dl_factor} DL + {ll_factor} LL")
+        n = 0
+
+        if dl_lc is not None:
+            for entry in dl_lc.load_groups:
+                combo.add_load(entry["load"], load_factor=float(dl_factor))
+            n += len(dl_lc.load_groups)
+        else:
+            warnings.warn(
+                "create_dl_ll_combination: dead-load combination not available — "
+                "call create_dead_load_combination() first."
+            )
+
+        if ll_lc is not None:
+            for entry in ll_lc.load_groups:
+                combo.add_load(entry["load"], load_factor=float(ll_factor))
+            n += len(ll_lc.load_groups)
+        else:
+            warnings.warn(
+                "create_dl_ll_combination: live-load case not available — "
+                "call create_governing_ll_load_case() first."
+            )
+
+        if n == 0:
+            warnings.warn("create_dl_ll_combination: no loads added — skipping.")
+            return None
+
+        model.add_load_case(combo)
+        self.dl_ll_combination = combo
+        return combo
+
     def create_envelope_load_case(self, model=None, dataset=None):
         """
         Build **two** force/displacement envelopes — one over the ULS

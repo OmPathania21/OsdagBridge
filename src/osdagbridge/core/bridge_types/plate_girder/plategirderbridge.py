@@ -314,6 +314,7 @@ class PlateGirderBridge:
         dataset = self.analyze()
         dataset = self.create_governing_ll_load_case(dataset, partial_safety_factor=1.0)
 
+        self.create_dl_ll_combination(dl_factor=1.0, ll_factor=1.0)
         self.create_uls_combinations()
         self.create_sls_combinations()
         dataset = self._reanalyze_with_dedup()
@@ -1491,6 +1492,28 @@ class PlateGirderBridge:
         list — ospgrillage load-case objects registered with the model.
         """
         return self.grillage_model.create_sls_combinations()
+
+    def create_dl_ll_combination(self, dl_factor: float = 1.0, ll_factor: float = 1.0):
+        """
+        Create the ``"{dl_factor} DL + {ll_factor} LL"`` load case combining the
+        dead-load combination with the governing live-load case.
+
+        With the defaults this registers a ``"1.0 DL + 1.0 LL"`` case carrying
+        the unfactored sum of dead and live loads.
+
+        Must be called after create_dead_load_combination() (via add_dead_loads())
+        and create_governing_ll_load_case() so both sub-cases are available.
+
+        Delegates to BridgeGrillageModel.create_dl_ll_combination().
+
+        Returns
+        -------
+        The ospgrillage load-case object registered with the model, or ``None``
+        if neither sub-case was available.
+        """
+        return self.grillage_model.create_dl_ll_combination(
+            dl_factor=dl_factor, ll_factor=ll_factor
+        )
 
     # ─────────────────────────────────────────────────────────────────────────
     # DCR checks
