@@ -606,6 +606,10 @@ class PlateGirderBridge:
         self.create_uls_combinations()
         self.create_sls_combinations()
         dataset = self._reanalyze_with_dedup()
+        # Capture the augmented dataset so the DCR pipeline sees the injected
+        # "Envelope ULS" / "Envelope SLS" pseudo load cases — without this the
+        # SLS envelope demand (M_sls) is 0 and the steel/concrete/rebar SLS
+        # stress checks never fire.
         dataset = self.create_envelope_load_case(dataset)
 
         inp = self.input_dict
@@ -679,6 +683,7 @@ class PlateGirderBridge:
         sep = "=" * 60
         print(f"\n{sep}\n  OUTPUT DICT (frozen) — {len(self.output_dict)} keys\n{sep}")
 
+        self.compute_load_effects_cache()
 
     def _export_cad_figures(self, cad_generator) -> dict:
         """
@@ -3054,6 +3059,33 @@ class PlateGirderBridge:
             dataset=results,
             bridge=self.grillage_model,
         )
+
+    def compute_load_effects_cache(self) -> None:
+        """
+        Pre-compute per-girder, per-load-case max/min Mz and Vy and store on
+        ``self._load_effects_cache``.  Called once at the end of design() so
+        that Generate Results tables open instantly without re-querying OpenSeesPy.
+
+        The handler is built with the actual deck-overhang edge_dist so that
+        build_girders() labels the first/last members as EB1/EB2 when an
+        overhang exists — allowing build_load_effects_cache() to skip them.
+        """
+        from osdagbridge.core.bridge_types.plate_girder.results_data import (
+            build_load_effects_cache, build_deflections_cache,
+        )
+        results = self.get_results_dataset()
+        if results is None:
+            self._load_effects_cache = {}
+            self._deflections_cache = {}
+            return
+        edge_dist = self.get_edge_dist()
+        rh = PlateGirderAnalysisResults(
+            dataset=results,
+            bridge=self.grillage_model,
+            edge_dist=edge_dist,
+        )
+        self._load_effects_cache = build_load_effects_cache(rh)
+        self._deflections_cache = build_deflections_cache(rh)
 
     def get_3d_cad_parameters(self) -> BridgeParametersDTO:
         """
