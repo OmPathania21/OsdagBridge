@@ -338,14 +338,26 @@ class IRC22_2014:
         Outstanding element of compression flange.
 
         Returns:
-            list: [section_class, ratio]
+            list: [section_class, ratio, class_limit]
         """
-        return IS800_2007.Table2_i(
+        section_class, ratio = IS800_2007.Table2_i(
             width=width_mm,
             thickness=thickness_mm,
             f_y=fy_MPa,
             section_type=section_type
         )
+        # Limiting b/t ratios per IS 800:2007 Table 2 (i); ε = sqrt(250/fy).
+        # The branch mirrors IS800_2007.Table2_i's own comparison ('Rolled')
+        # so the returned limit always matches the class it produced.
+        eps = math.sqrt(250.0 / fy_MPa)
+        if section_type == 'Rolled':
+            limits = {"Plastic": 9.4 * eps, "Compact": 10.5 * eps,
+                      "Semi-Compact": 15.7 * eps, "Slender": 15.7 * eps}
+        else:
+            limits = {"Plastic": 8.4 * eps, "Compact": 9.4 * eps,
+                      "Semi-Compact": 13.6 * eps, "Slender": 13.6 * eps}
+        class_limit = round(limits.get(section_class, limits["Semi-Compact"]), 2)
+        return [section_class, ratio, class_limit]
 
     @staticmethod
     def cl_602_table2_iii_web_classification(

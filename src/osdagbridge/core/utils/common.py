@@ -459,6 +459,7 @@ KEY_SD_MD_CAPACITY     = "steeldesign.details.moment.md_capacity"               
 KEY_SD_FLANGE_SLENDERNESS = "steeldesign.details.classification.flange_slenderness"  # only for report
 KEY_SD_WEB_SLENDERNESS    = "steeldesign.details.classification.web_slenderness"     # only for report
 KEY_SD_WEB_CLASS_LIMIT    = "steeldesign.details.classification.web_class_limit"     # only for report
+KEY_SD_FLANGE_CLASS_LIMIT = "steeldesign.details.classification.flange_class_limit"  # only for report
 KEY_SD_CLASS_FLANGE       = "steeldesign.details.classification.flange_class"        # only for report
 KEY_SD_CLASS_WEB          = "steeldesign.details.classification.web_class"           # only for report
 

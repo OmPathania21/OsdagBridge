@@ -235,6 +235,7 @@ from osdagbridge.core.utils.common import (
     KEY_SD_FLANGE_SLENDERNESS,
     KEY_SD_WEB_SLENDERNESS,
     KEY_SD_WEB_CLASS_LIMIT,
+    KEY_SD_FLANGE_CLASS_LIMIT,
     KEY_SD_CLASS_FLANGE,
     KEY_SD_CLASS_WEB,
     KEY_SD_SECTION_CLASS,
@@ -1428,7 +1429,7 @@ def ch5_design_checks(checks_data, bridge: "ReportDataBridge"):
     t52_rows = []
     for lbl, _ in girder_entries:
         t52_rows.append(
-            r"\multirow{3}{*}{\makecell{" + lbl + r"""}} & Top Flange & """ + _render_value(bridge.output_dict, KEY_SD_FLANGE_SLENDERNESS) + r""" & --- & """ + _render_value(bridge.output_dict, KEY_SD_CLASS_FLANGE) + r""" \\[6pt]
+            r"\multirow{3}{*}{\makecell{" + lbl + r"""}} & Top Flange & """ + _render_value(bridge.output_dict, KEY_SD_FLANGE_SLENDERNESS) + r""" & """ + _render_value(bridge.output_dict, KEY_SD_FLANGE_CLASS_LIMIT) + r""" & """ + _render_value(bridge.output_dict, KEY_SD_CLASS_FLANGE) + r""" \\[6pt]
 \cline{2-5}
  & Web & """ + _render_value(bridge.output_dict, KEY_SD_WEB_SLENDERNESS) + r""" & """ + _render_value(bridge.output_dict, KEY_SD_WEB_CLASS_LIMIT) + r""" & """ + _render_value(bridge.output_dict, KEY_SD_CLASS_WEB) + r""" \\[6pt]
 \cline{2-5}

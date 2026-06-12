@@ -699,8 +699,9 @@ class IRC22CapacityCalculator:
             fy_MPa=fy,
             section_type=sec.fabrication,   # "rolled" or "welded" — as stored in SteelSection
         )
-        # IS800_2007.Table2_i returns [section_class, b/t ratio]
+        # cl_602 wrapper returns [section_class, b/t ratio, class_limit]
         flange_class = flange_result[0]
+        flange_limit = flange_result[2]
         b_tf = b_outstanding / sec.tf_top
 
         # Web class limit — pick the limit for the achieved web class from the
@@ -720,6 +721,7 @@ class IRC22CapacityCalculator:
             "d_tw_ratio"     : round(web_res["d_by_t"], 2),
             "b_tf_ratio"     : round(b_tf, 2),
             "web_limit"      : round(web_limit, 2),
+            "flange_limit"   : round(flange_limit, 2),
             "web_class"      : web_class,
             "flange_class"   : flange_class,
             "governing_class": governing,
@@ -3326,6 +3328,7 @@ def run_design_check(
         "d_tw_ratio"               : capacity.details["section_class"]["d_tw_ratio"],
         "b_tf_ratio"               : capacity.details["section_class"]["b_tf_ratio"],
         "web_class_limit"          : capacity.details["section_class"]["web_limit"],
+        "flange_class_limit"       : capacity.details["section_class"]["flange_limit"],
         "section_designation"      : _sec.designation,
         "stiffener_grade"          : _mat.steel_grade,
         # -- capacities: LTB --

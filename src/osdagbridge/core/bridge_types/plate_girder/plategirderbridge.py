@@ -166,6 +166,7 @@ from osdagbridge.core.utils.common import (
     KEY_SD_FLANGE_SLENDERNESS,
     KEY_SD_WEB_SLENDERNESS,
     KEY_SD_WEB_CLASS_LIMIT,
+    KEY_SD_FLANGE_CLASS_LIMIT,
     KEY_SD_CLASS_FLANGE,
     KEY_SD_CLASS_WEB,
     # Stiffener table
@@ -579,7 +580,7 @@ class PlateGirderBridge:
         self.create_uls_combinations()
         self.create_sls_combinations()
         dataset = self._reanalyze_with_dedup()
-        self.create_envelope_load_case(dataset)
+        dataset = self.create_envelope_load_case(dataset)
 
         inp = self.input_dict
         header = (
@@ -3815,6 +3816,7 @@ class PlateGirderBridge:
         out[KEY_SD_FLANGE_SLENDERNESS] = dr["b_tf_ratio"]                                         # b/tf
         out[KEY_SD_WEB_SLENDERNESS]    = dr["d_tw_ratio"]                                         # d/tw
         out[KEY_SD_WEB_CLASS_LIMIT]    = dr["web_class_limit"]                                    # limit (×ε)
+        out[KEY_SD_FLANGE_CLASS_LIMIT] = dr["flange_class_limit"]                                 # limit (×ε)
         out[KEY_SD_CLASS_FLANGE]       = dr["section_class_flange"]
         out[KEY_SD_CLASS_WEB]          = dr["section_class_web"]
 
