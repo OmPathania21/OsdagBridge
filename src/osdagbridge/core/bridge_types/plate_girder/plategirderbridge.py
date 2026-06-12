@@ -304,12 +304,15 @@ class PlateGirderBridge:
         - ``self.basic_inputs``  — keys from the main input dock
         - ``self.additional_inputs`` — all remaining keys (additional-input dialog, etc.)
 
+        All values are normalised so that numeric strings are coerced to
+        ``int`` / ``float`` before any downstream consumer touches them.
+
         Parameters
         ----------
         input_dict : dict
             The flat dictionary built and maintained by ``CustomWindow``.
         """
-        self.input_dict = dict(input_dict)
+        self.input_dict = self._normalize_input_dict(input_dict)
         self.basic_inputs = {
             k: v for k, v in self.input_dict.items()
             if k in self._BASIC_INPUT_KEYS
@@ -319,9 +322,191 @@ class PlateGirderBridge:
             if k not in self._BASIC_INPUT_KEYS
         }
 
+    # ------------------------------------------------------------------
+    # Input normalisation
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _coerce(value):
+        """Convert a value to its natural Python type, recursively.
+
+        * Numeric strings → ``int`` (if no decimal point) or ``float``.
+        * ``bool``, ``int``, ``float`` pass through as-is.
+        * ``list`` → each element is coerced recursively.
+        * ``dict`` → each value is coerced recursively.
+        * Everything else (non-numeric strings) is returned unchanged.
+        """
+        # --- scalars already in the right type ---
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return value
+
+        # --- lists: recurse into each element ---
+        if isinstance(value, list):
+            return [PlateGirderBridge._coerce(item) for item in value]
+
+        # --- dicts: coerce each value, keep keys as-is ---
+        if isinstance(value, dict):
+            return {k: PlateGirderBridge._coerce(v) for k, v in value.items()}
+
+        # --- strings: try numeric conversion ---
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return value
+            # int check first — ``"400"`` should stay int, not float
+            try:
+                int_val = int(text)
+                if str(int_val) == text:
+                    return int_val
+            except (ValueError, TypeError):
+                pass
+            try:
+                return float(text)
+            except (ValueError, TypeError):
+                pass
+        return value
+
+    @classmethod
+    def _normalize_input_dict(cls, raw: dict) -> dict:
+        """Return a copy of *raw* with all values coerced to native types."""
+        return {k: cls._coerce(v) for k, v in raw.items()}
+
     # ─────────────────────────────────────────────────────────────────────────
     # Design pipeline
     # ─────────────────────────────────────────────────────────────────────────
+
+    def _resolve_optimized_bounds_to_mm(self) -> None:
+        """
+        For Optimised design, per-girder dimensional keys may hold list values
+        (user-supplied optimisation bounds in mm) or the string "All".
+        This method collapses each such key to a single float **stored in metres**
+        so that designer and analyser remain in SI units.
+
+        Resolution rule (applied only to list / string values):
+          * list  → floor(min(min(list), max(list), initial_sizing_default_mm)) / 1000
+          * "All" → snap the initial-sizing default UP to the next SAIL-approved
+                    thickness (smallest SAIL value >= initial_sizing_mm), / 1000.
+                    "All" is only ever stored for the three thickness keys.
+          * float (mm) → left for _convert_girder_dims_mm_to_m to divide by 1000.
+
+        ``initial_sizing_default_mm`` is BridgeConfigurationSolver
+        .compute_section_properties() value × 1000.
+
+        Keys resolved (per girder, suffix ``.G{n}.M1``):
+            KEY_MP_GIRDER_DEPTH, KEY_MP_GIRDER_WEB_DEPTH,
+            KEY_MP_GIRDER_TOP_FLANGE_WIDTH, KEY_MP_GIRDER_BOTTOM_FLANGE_WIDTH,
+            KEY_MP_GIRDER_TOP_FLANGE_THICKNESS, KEY_MP_GIRDER_BOTTOM_FLANGE_THICKNESS,
+            KEY_MP_GIRDER_WEB_THICKNESS
+        """
+        import math
+        from .initial_sizing import BridgeConfigurationSolver
+        from osdagbridge.core.utils.common import SAIL_APPROVED_THICKNESS_VALUES
+
+        inp = self.input_dict
+        if str(inp.get(KEY_DESIGN_MODE, '')).strip() != 'Optimized':
+            return
+
+        sail_mm = sorted(float(s) for s in SAIL_APPROVED_THICKNESS_VALUES)
+
+        def _snap_up_to_sail(value_mm: float) -> float:
+            """Smallest SAIL-approved thickness >= value_mm.
+
+            If value_mm exceeds the largest SAIL value, use value_mm itself
+            (no clamping to the SAIL maximum).
+            """
+            for s in sail_mm:
+                if s >= value_mm:
+                    return s
+            return value_mm
+
+        span  = float(inp[KEY_SPAN])
+        count = self._girder_count()
+
+        _DIM_KEYS = [
+            (KEY_MP_GIRDER_DEPTH,                   'D'),
+            (KEY_MP_GIRDER_WEB_DEPTH,               'd_web'),
+            (KEY_MP_GIRDER_TOP_FLANGE_WIDTH,        'B_top'),
+            (KEY_MP_GIRDER_BOTTOM_FLANGE_WIDTH,     'B_bot'),
+            (KEY_MP_GIRDER_TOP_FLANGE_THICKNESS,    't_f_top'),
+            (KEY_MP_GIRDER_BOTTOM_FLANGE_THICKNESS, 't_f_bot'),
+            (KEY_MP_GIRDER_WEB_THICKNESS,           't_w'),
+        ]
+
+        solver = BridgeConfigurationSolver(
+            carriageway_width=float(inp.get(KEY_CARRIAGEWAY_WIDTH))
+        )
+
+        for gi in range(count):
+            suffix   = f".G{gi + 1}.M1"
+            symmetry = inp.get(f"{KEY_MP_GIRDER_SYMMETRY}{suffix}")
+            props    = solver.compute_section_properties(span=span, symmetry=symmetry)
+
+            for base_key, prop_key in _DIM_KEYS:
+                full_key          = f"{base_key}{suffix}"
+                raw               = inp.get(full_key)
+                initial_sizing_mm = props[prop_key] * 1e3  # m → mm
+
+                if isinstance(raw, list) and raw:
+                    list_min = min(float(v) for v in raw)
+                    list_max = max(float(v) for v in raw)
+                    resolved_mm = min(list_min, list_max, initial_sizing_mm)
+                    inp[full_key] = math.floor(resolved_mm) / 1000.0  # floor in mm, store as m
+                elif isinstance(raw, str):
+                    # "All" → snap initial sizing up to the next SAIL-approved thickness.
+                    inp[full_key] = _snap_up_to_sail(initial_sizing_mm) / 1000.0
+                # float mm value — left for _convert_girder_dims_mm_to_m to divide by 1000
+
+    def _convert_girder_dims_mm_to_m(self) -> None:
+        """
+        Convert per-girder dimensional keys from mm back to SI metres in
+        input_dict before the design pipeline consumes them.
+
+        defaults.py stores these keys in mm for UI display. The analyser,
+        designer, and all section-property helpers expect SI metres.
+
+        Keys converted for ALL design modes (always numeric mm):
+            KEY_MP_GIRDER_DEPTH, KEY_MP_GIRDER_WEB_DEPTH,
+            KEY_MP_GIRDER_TOP_FLANGE_WIDTH, KEY_MP_GIRDER_BOTTOM_FLANGE_WIDTH
+
+        Keys converted only for non-Optimized mode (numeric mm). Optimized mode
+        stores "All" for these and _resolve_optimized_bounds_to_mm handles them:
+            KEY_MP_GIRDER_TOP_FLANGE_THICKNESS,
+            KEY_MP_GIRDER_BOTTOM_FLANGE_THICKNESS,
+            KEY_MP_GIRDER_WEB_THICKNESS
+        """
+        _DIM_KEYS_ALL_MODES = [
+            KEY_MP_GIRDER_DEPTH,
+            KEY_MP_GIRDER_WEB_DEPTH,
+            KEY_MP_GIRDER_TOP_FLANGE_WIDTH,
+            KEY_MP_GIRDER_BOTTOM_FLANGE_WIDTH,
+        ]
+        _DIM_KEYS_NON_OPTIMIZED = [
+            KEY_MP_GIRDER_TOP_FLANGE_THICKNESS,
+            KEY_MP_GIRDER_BOTTOM_FLANGE_THICKNESS,
+            KEY_MP_GIRDER_WEB_THICKNESS,
+        ]
+
+        inp = self.input_dict
+        is_optimized = str(inp.get(KEY_DESIGN_MODE, '')).strip() == 'Optimized'
+        count = self._girder_count()
+
+        keys_to_convert = list(_DIM_KEYS_ALL_MODES)
+        if not is_optimized:
+            keys_to_convert.extend(_DIM_KEYS_NON_OPTIMIZED)
+
+        for gi in range(count):
+            suffix = f".G{gi + 1}.M1"
+            for base_key in keys_to_convert:
+                full_key = f"{base_key}{suffix}"
+                val = inp.get(full_key)
+                if val is None:
+                    continue
+                try:
+                    inp[full_key] = float(val) / 1000.0
+                except (ValueError, TypeError):
+                    pass  # leave non-numeric strings ("All") for _resolve_optimized_bounds_to_mm
 
     def design(self) -> None:
         """
@@ -334,6 +519,11 @@ class PlateGirderBridge:
           6. Apply live loads
           7. Run DCR checks, cross-bracing and deck-slab design
         """
+        # Resolve optimised bounds (lists / "All") to a single metre value; for
+        # "All" thicknesses snap initial sizing up to the next SAIL value.
+        self._resolve_optimized_bounds_to_mm()
+        # Convert UI mm values back to SI metres before any pipeline step.
+        self._convert_girder_dims_mm_to_m()
         self.output_dict = dict(self.input_dict)   # mutable until end of design()
         self._build_dtos()
         self.setup_grillage()
@@ -603,7 +793,7 @@ class PlateGirderBridge:
             raise LookupError(f"Error querying material database in PlateGirderBridge._lookup_material: {sqlite3.Error}")
 
     def _build_material_props(self) -> MaterialProperties:
-        """Build a MaterialProperties from the selected girder material in basic_inputs.
+        """Build a MaterialProperties from the selected girder material in input_dict.
         
         For DB grades (e.g. 'E 250A') properties are looked up from the SQLite database.
         For custom grades (those not found in the DB) the sub-values already stored in
@@ -613,7 +803,7 @@ class PlateGirderBridge:
         _DEFAULT_DENSITY = 78500.0  # N/m³ — fallback when not available in DB
 
         # ── Steel (Girder) ────────────────────────────────────────────────────
-        steel_grade = str(self.basic_inputs.get(KEY_GIRDER, "")).strip()
+        steel_grade = str(self.input_dict.get(KEY_GIRDER, "")).strip()
         e = self._lookup_material(steel_grade, "Modulus of Elasticity")
         if e is None:
             # Custom grade — read from the material sub-keys populated by the UI
@@ -651,7 +841,7 @@ class PlateGirderBridge:
         )
 
         # ── Concrete (Deck) ───────────────────────────────────────────────────
-        concrete_grade = str(self.basic_inputs.get(KEY_DECK_CONCRETE_GRADE_BASIC, "")).strip()
+        concrete_grade = str(self.input_dict.get(KEY_DECK_CONCRETE_GRADE_BASIC, "")).strip()
         fck = self._lookup_material(concrete_grade, "fck")
         if fck is None:
             raw_fck = self.input_dict.get(KEY_MATERIAL_DECK_FCK)
@@ -758,11 +948,11 @@ class PlateGirderBridge:
 
         Must be called after setup_grillage() has built and registered the model.
         """
-        deck_t_m = deck_thickness_from_inputs(self.additional_inputs, _DEFAULT_DECK_THICKNESS_MM)
+        deck_t_m = deck_thickness_from_inputs(self.input_dict, _DEFAULT_DECK_THICKNESS_MM)
         wc_t_m = float(self.input_dict[KEY_WC_THICKNESS]) / 1000.0
         wc_rho  = float(self.input_dict[KEY_WC_DENSITY])
-        barrier_load_kN_m = crash_barrier_load_from_inputs(self.additional_inputs)
-        railing_load_kN_m = railing_load_from_inputs(self.additional_inputs)
+        barrier_load_kN_m = crash_barrier_load_from_inputs(self.input_dict)
+        railing_load_kN_m = railing_load_from_inputs(self.input_dict)
 
         model = self.grillage_model
         model.create_self_weight_load()
@@ -798,7 +988,7 @@ class PlateGirderBridge:
         """
         Apply wind loads to the grillage model per IRC:6-2017 Cl.209.3.3–209.3.5.
 
-        Wind parameters are read from ``self.additional_inputs`` (the
+        Wind parameters are read from ``self.input_dict`` (the
         Additional Inputs dialog).  Any parameter not yet supplied falls back
         to a sensible default so the method is always safe to call.
 
@@ -1296,7 +1486,7 @@ class PlateGirderBridge:
 
         Delegates to BridgeGrillageModel.create_temperature_load().
         """
-        tl_raw = self.additional_inputs.get("temperature_load_kN_m2")
+        tl_raw = self.input_dict.get("temperature_load_kN_m2")
         if not tl_raw:
             return
         tl_kN_m2 = float(tl_raw)
@@ -1312,13 +1502,13 @@ class PlateGirderBridge:
         Apply seismic (earthquake) load to the grillage model as a patch load
         over the full deck footprint per IRC:6-2017 Cl.219 / IS 1893 (Part 3).
 
-        The load intensity is read from ``self.additional_inputs`` using the key
+        The load intensity is read from ``self.input_dict`` using the key
         ``"seismic_load_kN_m2"``.  If the key is absent or zero the load is
         silently skipped (seismic load is optional).
 
         Delegates to BridgeGrillageModel.create_seismic_load().
         """
-        el_raw = self.additional_inputs.get("seismic_load_kN_m2")
+        el_raw = self.input_dict.get("seismic_load_kN_m2")
         if not el_raw:
             return
         el_kN_m2 = float(el_raw)
@@ -1516,7 +1706,7 @@ class PlateGirderBridge:
         empty) ``set`` otherwise — an empty set means the user de-selected every
         combination in that limit state, so none should be generated.
         """
-        sel = self.additional_inputs.get(self._LC_SELECTION_KEY)
+        sel = self.input_dict.get(self._LC_SELECTION_KEY)
         if not sel:
             return None
         return {
@@ -2817,19 +3007,19 @@ class PlateGirderBridge:
             girder_segments_dict={},
         )
 
-    def get_ifc_export_parameters(self, additional_inputs: dict | None = None) -> BridgeParametersDTO:
+    def get_ifc_export_parameters(self, input_dict: dict | None = None) -> BridgeParametersDTO:
         """
         Build a BridgeParametersDTO for IFC export.
 
         Identical to get_3d_cad_parameters() but overrides crash-barrier,
         median, railing, footpath-width and railing-width fields from the
-        supplied additional_inputs dict (values from the Additional Inputs
+        supplied input_dict dict (values from the Additional Inputs
         dialog that are not part of the basic input set).
 
         Must be called after design() has fully run.
         """
         params = self.get_3d_cad_parameters()
-        ai = additional_inputs or {}
+        ai = input_dict or {}
 
         # --- Crash Barrier ---
         barrier_label = str(ai.get("crash_barrier_type", params.barrier_type))
@@ -3102,8 +3292,8 @@ class PlateGirderBridge:
         return None
 
     def _to_float(self, key: str, fallback: float) -> float:
-        """Safely convert a basic_inputs value to float, falling back on error."""
-        val = self.basic_inputs.get(key)
+        """Safely convert a input_dict value to float, falling back on error."""
+        val = self.input_dict.get(key)
         if val is None or str(val).strip().lower() in ("", "none"):
             return fallback
         try:
