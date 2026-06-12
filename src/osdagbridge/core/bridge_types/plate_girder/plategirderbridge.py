@@ -161,6 +161,8 @@ from osdagbridge.core.utils.common import (
     KEY_SD_SECTION_PROP_IW,
     KEY_SD_COMPOSITE_IZ,
     KEY_SD_PNA_DEPTH,
+    KEY_SD_MU_APPLIED,
+    KEY_SD_MD_CAPACITY,
     # Stiffener table
     KEY_SD_STIFFENER_ROW_INTERMEDIATE,
     KEY_SD_STIFFENER_ROW_LONGITUDINAL,
@@ -3797,6 +3799,11 @@ class PlateGirderBridge:
         out[KEY_SD_SECTION_PROP_IW]    = inp.get(KEY_MP_GIRDER_WARPING_CONSTANT_IW,0.0)          # m⁶  (unused in report)
         out[KEY_SD_COMPOSITE_IZ]       = round(dr["I_comp_short_mm4"] / 1e4, 2)                  # mm⁴  → cm⁴
         out[KEY_SD_PNA_DEPTH]          = round(dr["xu_mm"], 1)                                    # mm
+
+        # ── 4b. Flexure check (Table 5.3): applied moment & design capacity ─────
+        # Controlling-girder values from design_results; already in kN·m.
+        out[KEY_SD_MU_APPLIED]         = round(dr["Mu_kNm"], 2)                                   # kN·m
+        out[KEY_SD_MD_CAPACITY]        = round(dr["Md_kNm"], 2)                                   # kN·m
 
         # In store_design_results(), replace the stiffener section (── 5. Stiffener table ──) with:
 

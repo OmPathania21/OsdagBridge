@@ -230,6 +230,8 @@ from osdagbridge.core.utils.common import (
     KEY_SD_EFFECTIVE_SLAB_WIDTH,
     KEY_SD_COMPOSITE_IZ,
     KEY_SD_PNA_DEPTH,
+    KEY_SD_MU_APPLIED,
+    KEY_SD_MD_CAPACITY,
     # Utilizations
     KEY_UTIL_FLEXURE,
     KEY_UTIL_SHEAR,
@@ -1430,14 +1432,20 @@ def ch5_design_checks(checks_data, bridge: "ReportDataBridge"):
     t52_content = "\n".join(t52_rows)
 
     # Generate Table 5.3 rows
+    # Flexure UR is stored as a percent (cat_urs × 100); PASS when ≤ 100%.
+    try:
+        _flex_ur = float(bridge.output_dict.get(KEY_UTIL_FLEXURE))
+        _flex_status = "PASS" if _flex_ur <= 100.0 else r"\textcolor{red}{FAIL}"
+    except (TypeError, ValueError):
+        _flex_status = "---"
     t53_rows = []
     for lbl, _ in girder_entries:
         t53_rows.append(
-            r"\multirow{3}{*}{\makecell{" + lbl + r"""}} & Applied Moment, $M_u$ &  &  & --- \\[6pt]
+            r"\multirow{3}{*}{\makecell{" + lbl + r"""}} & Applied Moment, $M_u$ & Governing LC (ULS) & """ + _render_value(bridge.output_dict, KEY_SD_MU_APPLIED, " kN-m") + r""" & --- \\[6pt]
 \cline{2-5}
- & Design Moment Capacity, Md &  &  & --- \\[6pt]
+ & Design Moment Capacity, Md & IRC 22 Cl. 603.3.1 & """ + _render_value(bridge.output_dict, KEY_SD_MD_CAPACITY, " kN-m") + r""" & --- \\[6pt]
 \cline{2-5}
- & Utilization Ratio, $M_u / M_d$ & --- & """ + _render_value(bridge.output_dict, KEY_UTIL_FLEXURE) + r""" &  \\[6pt]
+ & Utilization Ratio, $M_u / M_d$ & $M_u / M_d$ & """ + _render_value(bridge.output_dict, KEY_UTIL_FLEXURE) + r""" & """ + _flex_status + r""" \\[6pt]
 \hline"""
         )
     t53_content = "\n".join(t53_rows)
