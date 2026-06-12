@@ -1433,9 +1433,7 @@ def ch5_design_checks(checks_data, bridge: "ReportDataBridge"):
     t53_rows = []
     for lbl, _ in girder_entries:
         t53_rows.append(
-            r"\multirow{4}{*}{\makecell{" + lbl + r"""}} & Applied Moment, $M_u$ &  &  & --- \\[6pt]
-\cline{2-5}
- & Plastic Moment, Mp &  &  & --- \\[6pt]
+            r"\multirow{3}{*}{\makecell{" + lbl + r"""}} & Applied Moment, $M_u$ &  &  & --- \\[6pt]
 \cline{2-5}
  & Design Moment Capacity, Md &  &  & --- \\[6pt]
 \cline{2-5}
