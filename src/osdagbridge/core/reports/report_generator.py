@@ -1461,7 +1461,7 @@ def ch5_design_checks(checks_data, bridge: "ReportDataBridge"):
     t54_rows = []
     for lbl, _ in girder_entries:
         t54_rows.append(
-            r"\multirow{9}{*}{\makecell{" + lbl + r"""}} & Applied Shear, $V_u$ &  &  & --- \\[6pt]
+            r"\multirow{8}{*}{\makecell{" + lbl + r"""}} & Applied Shear, $V_u$ &  &  & --- \\[6pt]
 \cline{2-5}
  & Shear Area, Av &  &  & --- \\[6pt]
 \cline{2-5}
@@ -1474,8 +1474,6 @@ def ch5_design_checks(checks_data, bridge: "ReportDataBridge"):
  & Design Shear Stress, tau\_b &  &  & --- \\[6pt]
 \cline{2-5}
  & Shear Buckling Resistance, Vcr &  &  & --- \\[6pt]
-\cline{2-5}
- & Web Crippling Strength, Fg &  &  &  \\[6pt]
 \cline{2-5}
  & Utilization Ratio, $V_u / V_d$ & --- & """ + _render_value(bridge.output_dict, KEY_UTIL_SHEAR) + r""" &  \\[6pt]
 \hline"""
