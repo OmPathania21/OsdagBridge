@@ -438,25 +438,30 @@ class PlateGirderBridge:
             carriageway_width=float(inp.get(KEY_CARRIAGEWAY_WIDTH))
         )
 
+        def _resolve_one(full_key: str, initial_sizing_mm: float) -> None:
+            raw = inp.get(full_key)
+            if isinstance(raw, list) and raw:
+                list_min = min(float(v) for v in raw)
+                list_max = max(float(v) for v in raw)
+                resolved_mm = min(list_min, list_max, initial_sizing_mm)
+                inp[full_key] = math.floor(resolved_mm) / 1000.0  # floor in mm, store as m
+            elif isinstance(raw, str):
+                # "All" → snap initial sizing up to the next SAIL-approved thickness.
+                inp[full_key] = _snap_up_to_sail(initial_sizing_mm) / 1000.0
+            # float mm value — left for _convert_girder_dims_mm_to_m to divide by 1000
+
         for gi in range(count):
             suffix   = f".G{gi + 1}.M1"
             symmetry = inp.get(f"{KEY_MP_GIRDER_SYMMETRY}{suffix}")
             props    = solver.compute_section_properties(span=span, symmetry=symmetry)
 
             for base_key, prop_key in _DIM_KEYS:
-                full_key          = f"{base_key}{suffix}"
-                raw               = inp.get(full_key)
                 initial_sizing_mm = props[prop_key] * 1e3  # m → mm
-
-                if isinstance(raw, list) and raw:
-                    list_min = min(float(v) for v in raw)
-                    list_max = max(float(v) for v in raw)
-                    resolved_mm = min(list_min, list_max, initial_sizing_mm)
-                    inp[full_key] = math.floor(resolved_mm) / 1000.0  # floor in mm, store as m
-                elif isinstance(raw, str):
-                    # "All" → snap initial sizing up to the next SAIL-approved thickness.
-                    inp[full_key] = _snap_up_to_sail(initial_sizing_mm) / 1000.0
-                # float mm value — left for _convert_girder_dims_mm_to_m to divide by 1000
+                _resolve_one(f"{base_key}{suffix}", initial_sizing_mm)
+                # Legacy scalar (un-suffixed) key, resolved first by no-index
+                # consumers (e.g. SteelSection); use the first girder's sizing.
+                if gi == 0:
+                    _resolve_one(base_key, initial_sizing_mm)
 
     def _convert_girder_dims_mm_to_m(self) -> None:
         """
@@ -496,17 +501,22 @@ class PlateGirderBridge:
         if not is_optimized:
             keys_to_convert.extend(_DIM_KEYS_NON_OPTIMIZED)
 
-        for gi in range(count):
-            suffix = f".G{gi + 1}.M1"
-            for base_key in keys_to_convert:
-                full_key = f"{base_key}{suffix}"
-                val = inp.get(full_key)
-                if val is None:
-                    continue
-                try:
-                    inp[full_key] = float(val) / 1000.0
-                except (ValueError, TypeError):
-                    pass  # leave non-numeric strings ("All") for _resolve_optimized_bounds_to_mm
+        def _to_m(full_key: str) -> None:
+            val = inp.get(full_key)
+            if val is None:
+                return
+            try:
+                inp[full_key] = float(val) / 1000.0
+            except (ValueError, TypeError):
+                pass  # leave non-numeric strings ("All") for _resolve_optimized_bounds_to_mm
+
+        for base_key in keys_to_convert:
+            # The legacy scalar (un-suffixed) key must be converted too: SteelSection
+            # and other no-index consumers resolve it FIRST via resolve_girder_value,
+            # so leaving it in mm yields a mm×1000 unit blow-up (negative web depth).
+            _to_m(base_key)
+            for gi in range(count):
+                _to_m(f"{base_key}.G{gi + 1}.M1")
 
     def design(self) -> None:
         """
@@ -611,13 +621,7 @@ class PlateGirderBridge:
         import pprint
         sep = "=" * 60
         print(f"\n{sep}\n  OUTPUT DICT (frozen) — {len(self.output_dict)} keys\n{sep}")
-        for k, v in self.output_dict.items():
-            if k in ("crossbracing_design_results", "deck_design_results"):
-                print(f"  {k!r} :")
-                pprint.pprint(v, indent=4, width=120)
-            else:
-                print(f"  {k!r:50s} : {v!r}")
-        print(sep)
+
 
     def _build_dtos(self) -> None:
         """Construct GrillageGeometry and DeckLayoutProperties DTOs from solved results."""
