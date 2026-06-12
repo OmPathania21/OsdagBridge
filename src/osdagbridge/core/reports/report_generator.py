@@ -232,6 +232,12 @@ from osdagbridge.core.utils.common import (
     KEY_SD_PNA_DEPTH,
     KEY_SD_MU_APPLIED,
     KEY_SD_MD_CAPACITY,
+    KEY_SD_FLANGE_SLENDERNESS,
+    KEY_SD_WEB_SLENDERNESS,
+    KEY_SD_WEB_CLASS_LIMIT,
+    KEY_SD_CLASS_FLANGE,
+    KEY_SD_CLASS_WEB,
+    KEY_SD_SECTION_CLASS,
     # Utilizations
     KEY_UTIL_FLEXURE,
     KEY_UTIL_SHEAR,
@@ -1422,11 +1428,11 @@ def ch5_design_checks(checks_data, bridge: "ReportDataBridge"):
     t52_rows = []
     for lbl, _ in girder_entries:
         t52_rows.append(
-            r"\multirow{3}{*}{\makecell{" + lbl + r"""}} & Top Flange &  &  &  \\[6pt]
+            r"\multirow{3}{*}{\makecell{" + lbl + r"""}} & Top Flange & """ + _render_value(bridge.output_dict, KEY_SD_FLANGE_SLENDERNESS) + r""" & --- & """ + _render_value(bridge.output_dict, KEY_SD_CLASS_FLANGE) + r""" \\[6pt]
 \cline{2-5}
- & Web &  &  &  \\[6pt]
+ & Web & """ + _render_value(bridge.output_dict, KEY_SD_WEB_SLENDERNESS) + r""" & """ + _render_value(bridge.output_dict, KEY_SD_WEB_CLASS_LIMIT) + r""" & """ + _render_value(bridge.output_dict, KEY_SD_CLASS_WEB) + r""" \\[6pt]
 \cline{2-5}
- & Overall Section & --- & --- &  \\[6pt]
+ & Overall Section & --- & --- & """ + _render_value(bridge.output_dict, KEY_SD_SECTION_CLASS) + r""" \\[6pt]
 \hline"""
         )
     t52_content = "\n".join(t52_rows)

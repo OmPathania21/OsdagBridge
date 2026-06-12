@@ -456,6 +456,11 @@ KEY_SD_COMPOSITE_IZ    = "steeldesign.details.section_properties.composite_iz"  
 KEY_SD_PNA_DEPTH       = "steeldesign.details.section_properties.pna_depth"       # only for report
 KEY_SD_MU_APPLIED      = "steeldesign.details.moment.mu_applied"                  # only for report
 KEY_SD_MD_CAPACITY     = "steeldesign.details.moment.md_capacity"                 # only for report
+KEY_SD_FLANGE_SLENDERNESS = "steeldesign.details.classification.flange_slenderness"  # only for report
+KEY_SD_WEB_SLENDERNESS    = "steeldesign.details.classification.web_slenderness"     # only for report
+KEY_SD_WEB_CLASS_LIMIT    = "steeldesign.details.classification.web_class_limit"     # only for report
+KEY_SD_CLASS_FLANGE       = "steeldesign.details.classification.flange_class"        # only for report
+KEY_SD_CLASS_WEB          = "steeldesign.details.classification.web_class"           # only for report
 
 #-------------- Stiffener Details Sub-Tab --------------------------------------------
 KEY_SD_STIFFENER_DETAILS            = "member_properties.stiffener_details.stiffener_details_cad"

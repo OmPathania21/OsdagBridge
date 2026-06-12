@@ -703,6 +703,15 @@ class IRC22CapacityCalculator:
         flange_class = flange_result[0]
         b_tf = b_outstanding / sec.tf_top
 
+        # Web class limit — pick the limit for the achieved web class from the
+        # values the irc22 web classification already returns (no new constants).
+        web_limit = {
+            "Plastic":      web_res["plastic_limit"],
+            "Compact":      web_res["compact_limit"],
+            "Semi-Compact": web_res["semi_compact_limit"],
+            "Slender":      web_res["semi_compact_limit"],
+        }.get(web_class, web_res["semi_compact_limit"])
+
         class_order = {"Plastic": 1, "Compact": 2, "Semi-Compact": 3, "Slender": 4}
         governing = max(web_class, flange_class, key=lambda c: class_order.get(c, 4))
 
@@ -710,6 +719,7 @@ class IRC22CapacityCalculator:
             "epsilon"        : round(web_res["epsilon"], 4),
             "d_tw_ratio"     : round(web_res["d_by_t"], 2),
             "b_tf_ratio"     : round(b_tf, 2),
+            "web_limit"      : round(web_limit, 2),
             "web_class"      : web_class,
             "flange_class"   : flange_class,
             "governing_class": governing,
@@ -3313,6 +3323,9 @@ def run_design_check(
         "section_class_flange"     : capacity.details["section_class"]["flange_class"],
         "section_class_governing"  : capacity.details["section_class"]["governing_class"],
         "section_epsilon"          : capacity.details["section_class"]["epsilon"],
+        "d_tw_ratio"               : capacity.details["section_class"]["d_tw_ratio"],
+        "b_tf_ratio"               : capacity.details["section_class"]["b_tf_ratio"],
+        "web_class_limit"          : capacity.details["section_class"]["web_limit"],
         "section_designation"      : _sec.designation,
         "stiffener_grade"          : _mat.steel_grade,
         # -- capacities: LTB --

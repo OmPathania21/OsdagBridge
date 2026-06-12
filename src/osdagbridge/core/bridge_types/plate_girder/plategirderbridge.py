@@ -163,6 +163,11 @@ from osdagbridge.core.utils.common import (
     KEY_SD_PNA_DEPTH,
     KEY_SD_MU_APPLIED,
     KEY_SD_MD_CAPACITY,
+    KEY_SD_FLANGE_SLENDERNESS,
+    KEY_SD_WEB_SLENDERNESS,
+    KEY_SD_WEB_CLASS_LIMIT,
+    KEY_SD_CLASS_FLANGE,
+    KEY_SD_CLASS_WEB,
     # Stiffener table
     KEY_SD_STIFFENER_ROW_INTERMEDIATE,
     KEY_SD_STIFFENER_ROW_LONGITUDINAL,
@@ -3804,6 +3809,14 @@ class PlateGirderBridge:
         # Controlling-girder values from design_results; already in kN·m.
         out[KEY_SD_MU_APPLIED]         = round(dr["Mu_kNm"], 2)                                   # kN·m
         out[KEY_SD_MD_CAPACITY]        = round(dr["Md_kNm"], 2)                                   # kN·m
+
+        # ── 4c. Section classification (Table 5.2): slenderness, limit, class ───
+        # Ratios & web limit from classify_section(); classes already strings.
+        out[KEY_SD_FLANGE_SLENDERNESS] = dr["b_tf_ratio"]                                         # b/tf
+        out[KEY_SD_WEB_SLENDERNESS]    = dr["d_tw_ratio"]                                         # d/tw
+        out[KEY_SD_WEB_CLASS_LIMIT]    = dr["web_class_limit"]                                    # limit (×ε)
+        out[KEY_SD_CLASS_FLANGE]       = dr["section_class_flange"]
+        out[KEY_SD_CLASS_WEB]          = dr["section_class_web"]
 
         # In store_design_results(), replace the stiffener section (── 5. Stiffener table ──) with:
 
