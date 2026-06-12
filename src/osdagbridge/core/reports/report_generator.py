@@ -1420,9 +1420,7 @@ def ch5_design_checks(checks_data, bridge: "ReportDataBridge"):
     t52_rows = []
     for lbl, _ in girder_entries:
         t52_rows.append(
-            r"\multirow{4}{*}{\makecell{" + lbl + r"""}} & Top Flange &  &  &  \\[6pt]
-\cline{2-5}
- & Bottom Flange &  &  &  \\[6pt]
+            r"\multirow{3}{*}{\makecell{" + lbl + r"""}} & Top Flange &  &  &  \\[6pt]
 \cline{2-5}
  & Web &  &  &  \\[6pt]
 \cline{2-5}
