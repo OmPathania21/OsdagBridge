@@ -261,6 +261,10 @@ from osdagbridge.core.utils.common import (
     KEY_SD_STIFF_END_THICK,
     KEY_SD_STIFF_END_COUNT,
     KEY_SD_STIFF_LONG,
+    KEY_SD_IS_IYS_MIN,
+    KEY_SD_IS_IYS_PROV,
+    KEY_SD_IS_FQ,
+    KEY_SD_IS_FQD,
     # Utilizations
     KEY_UTIL_FLEXURE,
     KEY_UTIL_SHEAR,
@@ -1599,15 +1603,46 @@ def ch5_design_checks(checks_data, bridge: "ReportDataBridge"):
     t57_content = "\n".join(t57_rows)
 
     # Generate Table 5.8 rows
+    # Status: PASS when Provided ≥ Required.
+    def _ge_status(provided, required):
+        try:
+            return "PASS" if float(provided) >= float(required) else r"\textcolor{red}{FAIL}"
+        except (TypeError, ValueError):
+            return "---"
+    _iys_status = _ge_status(bridge.output_dict.get(KEY_SD_IS_IYS_PROV),
+                             bridge.output_dict.get(KEY_SD_IS_IYS_MIN))
+    _fqd_status = _ge_status(bridge.output_dict.get(KEY_SD_IS_FQD),
+                             bridge.output_dict.get(KEY_SD_IS_FQ))
     t58_rows = []
     for lbl, _ in girder_entries:
         t58_rows.append(
-            r"\multirow{2}{*}{\makecell{" + lbl + r"""}} & Min. Moment of Inertia, Is &  &  &  \\[6pt]
+            r"\multirow{2}{*}{\makecell{" + lbl + r"""}} & Min. Moment of Inertia, $I_s$ & """ + _render_value(bridge.output_dict, KEY_SD_IS_IYS_MIN, " mm$^4$") + r""" & """ + _render_value(bridge.output_dict, KEY_SD_IS_IYS_PROV, " mm$^4$") + r""" & """ + _iys_status + r""" \\[6pt]
 \cline{2-5}
- & Critical Buckling Stress, tau\_cr,e &  &  & --- \\[6pt]
+ & Buckling Resistance, $F_{qd} \geq F_q$ & """ + _render_value(bridge.output_dict, KEY_SD_IS_FQ, " kN") + r""" & """ + _render_value(bridge.output_dict, KEY_SD_IS_FQD, " kN") + r""" & """ + _fqd_status + r""" \\[6pt]
 \hline"""
         )
     t58_content = "\n".join(t58_rows)
+
+    # Table 5.8 (Intermediate Stiffener Checks) is a verification table — it only
+    # has data when the user supplied stiffener sizes (Design Type = Custom). In
+    # Optimized mode the stiffeners are auto-sized (nothing to verify), so the
+    # whole table is omitted from the report.
+    _is_custom = str(bridge.input_dict.get(KEY_DESIGN_MODE, "Optimized")).strip().lower() in {"custom", "customized"}
+    if _is_custom:
+        t58_block = r"""
+\vspace{1em}
+\noindent\textbf{Table 5.8  Intermediate Stiffener Checks}
+
+\begin{longtable}{|C{2.5cm}|C{3.5cm}|C{3.5cm}|>{\centering\arraybackslash}p{4.2cm}|C{1.8cm}|}
+\hline
+\textbf{} & \textbf{Check} & \textbf{Required} & \textbf{Provided} & \textbf{Status} \\[6pt]
+\hline
+""" + t58_content + r"""
+\end{longtable}
+\noindent\textit{Note: IS 800 Cl. 8.7.1.2}
+"""
+    else:
+        t58_block = ""
 
     # Generate Table 5.9 rows
     t59_rows = []
@@ -1904,18 +1939,7 @@ This section presents all structural design checks performed by OsdagBridge. For
 \hline
 """ + t57_content + r"""
 \end{longtable}
-
-\vspace{1em}
-\noindent\textbf{Table 5.8  Intermediate Stiffener Checks}
-
-\begin{longtable}{|C{2.5cm}|C{3.5cm}|C{3.5cm}|>{\centering\arraybackslash}p{4.2cm}|C{1.8cm}|}
-\hline
-\textbf{} & \textbf{Check} & \textbf{Required} & \textbf{Provided} & \textbf{Status} \\[6pt]
-\hline
-""" + t58_content + r"""
-\end{longtable}
-\noindent\textit{Note: IS 800 Cl. 8.7.1.2}
-
+""" + t58_block + r"""
 \vspace{1em}
 \noindent\textbf{Table 5.9  End Panel Stiffener Checks}
 

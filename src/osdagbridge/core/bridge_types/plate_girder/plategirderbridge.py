@@ -191,6 +191,10 @@ from osdagbridge.core.utils.common import (
     KEY_SD_STIFF_END_THICK,
     KEY_SD_STIFF_END_COUNT,
     KEY_SD_STIFF_LONG,
+    KEY_SD_IS_IYS_MIN,
+    KEY_SD_IS_IYS_PROV,
+    KEY_SD_IS_FQ,
+    KEY_SD_IS_FQD,
     # Stiffener table
     KEY_SD_STIFFENER_ROW_INTERMEDIATE,
     KEY_SD_STIFFENER_ROW_LONGITUDINAL,
@@ -3881,6 +3885,14 @@ class PlateGirderBridge:
         _long_val    = str((_first_stiff or {}).get("longitudinal_stiffener", "No")).strip()
         out[KEY_SD_STIFF_LONG]         = ((_long_val if _long_val and _long_val not in ("None", "NA", "") else "No")
                                           if _is_custom_stiff else "None")
+
+        # ── 4h. Intermediate stiffener checks (Table 5.8 — Custom only) ──────────
+        # Verification values; only meaningful in Custom mode (table is omitted in
+        # the report otherwise). Iys in mm⁴; Fq/Fqd in kN.
+        out[KEY_SD_IS_IYS_MIN]         = round(dr["is_Iys_min_mm4"], 0)                           # mm⁴
+        out[KEY_SD_IS_IYS_PROV]        = round(dr["is_Iys_prov_mm4"], 0)                          # mm⁴
+        out[KEY_SD_IS_FQ]              = round(dr["is_Fq_kN"], 2)                                 # kN
+        out[KEY_SD_IS_FQD]             = round(dr["is_Fqd_kN"], 2)                                # kN
 
         # In store_design_results(), replace the stiffener section (── 5. Stiffener table ──) with:
 

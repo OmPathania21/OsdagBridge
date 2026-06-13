@@ -482,6 +482,10 @@ KEY_SD_STIFF_INT_SPACING= "steeldesign.details.stiffener_summary.int_spacing"   
 KEY_SD_STIFF_END_THICK  = "steeldesign.details.stiffener_summary.end_thickness"  # only for report
 KEY_SD_STIFF_END_COUNT  = "steeldesign.details.stiffener_summary.end_count"      # only for report
 KEY_SD_STIFF_LONG       = "steeldesign.details.stiffener_summary.longitudinal"   # only for report
+KEY_SD_IS_IYS_MIN       = "steeldesign.details.int_stiffener.iys_min"      # only for report
+KEY_SD_IS_IYS_PROV      = "steeldesign.details.int_stiffener.iys_prov"     # only for report
+KEY_SD_IS_FQ            = "steeldesign.details.int_stiffener.fq"           # only for report
+KEY_SD_IS_FQD           = "steeldesign.details.int_stiffener.fqd"          # only for report
 KEY_SD_CLASS_FLANGE       = "steeldesign.details.classification.flange_class"        # only for report
 KEY_SD_CLASS_WEB          = "steeldesign.details.classification.web_class"           # only for report
 
