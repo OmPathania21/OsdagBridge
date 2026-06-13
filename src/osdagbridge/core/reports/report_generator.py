@@ -184,8 +184,8 @@ from osdagbridge.core.utils.common import (
     # Lane Details
     KEY_WC_LD_LANE_TABLE_COUNT,
     # Girder selector / Member ID (suffixed: .G{n} and .G{n}.M1)
-    KEY_MP_SELECT_GIRDER,
-    KEY_MP_MEMBER_ID,
+    KEY_MP_GD_SELECT_GIRDER,
+    KEY_MP_GD_MEMBER_ID,
     # Steel design section designation
     KEY_SD_SECTION_DESIGNATION,
     # Permanent Load
@@ -217,10 +217,10 @@ from osdagbridge.core.utils.common import (
     KEY_SD_TOP_FLANGE_WIDTH,
     KEY_SD_TOP_FLANGE_THICKNESS,
     KEY_SD_WEB_THICKNESS,
-    KEY_SD_SECTION_PROP_AREA,
-    KEY_SD_SECTION_PROP_IZ,
-    KEY_SD_SECTION_PROP_ZZ,
-    KEY_SD_SECTION_PROP_ZUZ,
+    KEY_MP_GIRDER_SECTIONAL_AREA,
+    KEY_MP_GIRDER_SECTIONAL_IZ,
+    KEY_MP_GIRDER_ELASTIC_MODULUS_ZZ,
+    KEY_MP_GIRDER_PLASTIC_MODULUS_ZUZ,
     KEY_SD_EFFECTIVE_SLAB_WIDTH,
     # Utilizations
     KEY_UTIL_FLEXURE,
@@ -321,8 +321,8 @@ def get_girder_entries(input_dict):
     for i in range(1, n + 1):
         entries.append(
             (
-                input_dict.get(f"{KEY_MP_SELECT_GIRDER}.G{i}", ""),
-                input_dict.get(f"{KEY_MP_MEMBER_ID}.G{i}.M1", ""),
+                input_dict.get(f"{KEY_MP_GD_SELECT_GIRDER}.G{i}", ""),
+                input_dict.get(f"{KEY_MP_GD_MEMBER_ID}.G{i}.M1", ""),
             )
         )
 
@@ -583,8 +583,8 @@ def executive_summary(input_dict, output_dict, fig_paths) -> str:
     ur = _tex(ur_val) if ur_val not in (None, '', 'None') else ''
 
     # --- Dynamic Table 1: fetch backend-populated labels via exact suffix pattern ---
-    # defaults.py populates: KEY_MP_SELECT_GIRDER + '.G{i}' = 'G{i}'
-    #                        KEY_MP_MEMBER_ID     + '.G{i}.M1' = 'G{i}M1'
+    # defaults.py populates: KEY_MP_GD_SELECT_GIRDER + '.G{i}' = 'G{i}'
+    #                        KEY_MP_GD_MEMBER_ID     + '.G{i}.M1' = 'G{i}M1'
     labels = get_girder_entries(input_dict)
     if not labels:
         labels = [("", "")]
@@ -891,8 +891,8 @@ Where the user has modified additional inputs, those values are reported here. W
 
 def _girder_tables(input_dict, n_girders):
     # Fetch backend-populated labels via exact suffix pattern (defaults.py)
-    # KEY_MP_SELECT_GIRDER.G{i}    = 'G{i}'
-    # KEY_MP_MEMBER_ID.G{i}.M1     = 'G{i}M1'
+    # KEY_MP_GD_SELECT_GIRDER.G{i}    = 'G{i}'
+    # KEY_MP_GD_MEMBER_ID.G{i}.M1     = 'G{i}M1'
     # All other girder/stiffener keys: {BASE_KEY}.G{i}.M1
     n = n_girders if n_girders >= 1 else 1
     girder_entries = get_girder_entries(input_dict)
@@ -1568,11 +1568,11 @@ def ch5_design_checks(checks_data, bridge: "ReportDataBridge"):
 
                 # Fetch properties from output_dict
                 if member == "diagonal":
-                    pfx = f"transverse_member_design.section_properties.bracing.{pair_id}"
+                    pfx = f"transverse_member_design.cb.section_properties.bracing.{pair_id}"
                 else:
-                    pfx = f"transverse_member_design.section_properties.bottom_chord.{pair_id}"
+                    pfx = f"transverse_member_design.cb.section_properties.bottom_chord.{pair_id}"
                     if bridge.output_dict.get(f"{pfx}.A") is None:
-                        pfx = f"transverse_member_design.section_properties.top_chord.{pair_id}"
+                        pfx = f"transverse_member_design.cb.section_properties.top_chord.{pair_id}"
 
                 area_cm2 = bridge.output_dict.get(f"{pfx}.A")
                 rv_cm = bridge.output_dict.get(f"{pfx}.rv")
@@ -1725,13 +1725,13 @@ This section presents all structural design checks performed by OsdagBridge. For
 \hline
 \textbf{Web Thickness, tw} & """ + _render_value(bridge.output_dict, KEY_SD_WEB_THICKNESS, " mm") + r""" \\[6pt]
 \hline
-\textbf{Gross Area of Steel Section, A (cm²)} & """ + _render_value(bridge.output_dict, KEY_SD_SECTION_PROP_AREA) + r""" \\[6pt]
+\textbf{Gross Area of Steel Section, A (cm²)} & """ + _render_value(bridge.output_dict, KEY_MP_GIRDER_SECTIONAL_AREA) + r""" \\[6pt]
 \hline
-\textbf{Moment of Inertia, Iz (cm$^4$)} & """ + _render_value(bridge.output_dict, KEY_SD_SECTION_PROP_IZ) + r""" \\[6pt]
+\textbf{Moment of Inertia, Iz (cm$^4$)} & """ + _render_value(bridge.output_dict, KEY_MP_GIRDER_SECTIONAL_IZ) + r""" \\[6pt]
 \hline
-\textbf{Elastic Section Modulus, Zez (cm$^3$)} & """ + _render_value(bridge.output_dict, KEY_SD_SECTION_PROP_ZZ) + r""" \\[6pt]
+\textbf{Elastic Section Modulus, Zez (cm$^3$)} & """ + _render_value(bridge.output_dict, KEY_MP_GIRDER_ELASTIC_MODULUS_ZZ) + r""" \\[6pt]
 \hline
-\textbf{Plastic Section Modulus, Zpz (cm$^3$)} & """ + _render_value(bridge.output_dict, KEY_SD_SECTION_PROP_ZUZ) + r""" \\[6pt]
+\textbf{Plastic Section Modulus, Zpz (cm$^3$)} & """ + _render_value(bridge.output_dict, KEY_MP_GIRDER_PLASTIC_MODULUS_ZUZ) + r""" \\[6pt]
 \hline
 \textbf{Effective Width of Slab, b\_eff (mm)} & """ + _render_value(bridge.output_dict, KEY_SD_EFFECTIVE_SLAB_WIDTH) + r""" \\[6pt]
 \hline

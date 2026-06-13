@@ -2105,9 +2105,9 @@ class PlateGirderBridge:
         # Key mapping function
         def make_pair_key(key: str, pair_id: str) -> str:
             for pfx in (
-                "transverse_member_design.section_properties.bracing",
-                "transverse_member_design.section_properties.top_chord",
-                "transverse_member_design.section_properties.bottom_chord",
+                "transverse_member_design.cb.section_properties.bracing",
+                "transverse_member_design.cb.section_properties.top_chord",
+                "transverse_member_design.cb.section_properties.bottom_chord",
             ):
                 if key.startswith(pfx):
                     suffix = key[len(pfx):].lstrip(".")
