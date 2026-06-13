@@ -176,6 +176,11 @@ from osdagbridge.core.utils.common import (
     KEY_SD_SHEAR_LAMBDA_W,
     KEY_SD_SHEAR_TAU_B,
     KEY_SD_SHEAR_VCR,
+    KEY_SD_HIGH_SHEAR,
+    KEY_SD_MDV,
+    KEY_SD_MN_AXIAL,
+    KEY_SD_MN_MOMENT,
+    KEY_SD_MN_RATIO,
     # Stiffener table
     KEY_SD_STIFFENER_ROW_INTERMEDIATE,
     KEY_SD_STIFFENER_ROW_LONGITUDINAL,
@@ -3835,6 +3840,14 @@ class PlateGirderBridge:
         out[KEY_SD_SHEAR_LAMBDA_W]     = dr["lambda_w"]
         out[KEY_SD_SHEAR_TAU_B]        = round(dr["tau_b_buck_MPa"], 2)                           # MPa
         out[KEY_SD_SHEAR_VCR]          = round(dr["Vcr_kN"], 2)                                   # kN
+
+        # ── 4e. Interaction checks (Table 5.5): high shear, Mdv, M-N terms ──────
+        out[KEY_SD_HIGH_SHEAR]         = "Yes" if dr["beta_interaction"] > 0 else "No"
+        out[KEY_SD_MDV]                = round(dr["Mdv_kNm"], 2)                                  # kN·m
+        _mn_ax, _mn_mo, _mn_r = dr["mn_axial_term"], dr["mn_moment_term"], dr["mn_ratio"]
+        out[KEY_SD_MN_AXIAL]           = round(_mn_ax, 2) if _mn_ax is not None else None
+        out[KEY_SD_MN_MOMENT]          = round(_mn_mo, 2) if _mn_mo is not None else None
+        out[KEY_SD_MN_RATIO]           = round(_mn_r, 3) if _mn_r is not None else None
 
         # In store_design_results(), replace the stiffener section (── 5. Stiffener table ──) with:
 

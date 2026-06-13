@@ -467,6 +467,11 @@ KEY_SD_SHEAR_KV         = "steeldesign.details.shear_check.kv"              # on
 KEY_SD_SHEAR_LAMBDA_W   = "steeldesign.details.shear_check.lambda_w"        # only for report
 KEY_SD_SHEAR_TAU_B      = "steeldesign.details.shear_check.tau_b"           # only for report
 KEY_SD_SHEAR_VCR        = "steeldesign.details.shear_check.vcr"             # only for report
+KEY_SD_HIGH_SHEAR       = "steeldesign.details.interaction.high_shear"      # only for report
+KEY_SD_MDV              = "steeldesign.details.interaction.mdv"             # only for report
+KEY_SD_MN_AXIAL         = "steeldesign.details.interaction.mn_axial"        # only for report
+KEY_SD_MN_MOMENT        = "steeldesign.details.interaction.mn_moment"       # only for report
+KEY_SD_MN_RATIO         = "steeldesign.details.interaction.mn_ratio"        # only for report
 KEY_SD_CLASS_FLANGE       = "steeldesign.details.classification.flange_class"        # only for report
 KEY_SD_CLASS_WEB          = "steeldesign.details.classification.web_class"           # only for report
 

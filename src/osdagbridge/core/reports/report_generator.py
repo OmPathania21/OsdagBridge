@@ -246,6 +246,11 @@ from osdagbridge.core.utils.common import (
     KEY_SD_SHEAR_LAMBDA_W,
     KEY_SD_SHEAR_TAU_B,
     KEY_SD_SHEAR_VCR,
+    KEY_SD_HIGH_SHEAR,
+    KEY_SD_MDV,
+    KEY_SD_MN_AXIAL,
+    KEY_SD_MN_MOMENT,
+    KEY_SD_MN_RATIO,
     # Utilizations
     KEY_UTIL_FLEXURE,
     KEY_UTIL_SHEAR,
@@ -1500,14 +1505,41 @@ def ch5_design_checks(checks_data, bridge: "ReportDataBridge"):
     t54_content = "\n".join(t54_rows)
 
     # Generate Table 5.5 rows
+    # Interaction DCRs use the engine bands: PASS <0.90, WARN <1.00, FAIL ≥1.00.
+    def _interaction_status(ratio):
+        if ratio < 0.90:
+            return "PASS"
+        elif ratio < 1.00:
+            return "WARN"
+        return r"\textcolor{red}{FAIL}"
+    # M-V interaction UR stored as percent → show ratio (2 dp).
+    try:
+        _mv_ur = float(bridge.output_dict.get(KEY_UTIL_INTERACTION)) / 100.0
+        _mv_ur_str = f"{_mv_ur:.2f}"
+        _mv_status = _interaction_status(_mv_ur)
+    except (TypeError, ValueError):
+        _mv_ur_str = ""
+        _mv_status = "---"
+    # M-N interaction: None → no axial load → N/A.
+    _mn_r  = bridge.output_dict.get(KEY_SD_MN_RATIO)
+    _mn_ax = bridge.output_dict.get(KEY_SD_MN_AXIAL)
+    _mn_mo = bridge.output_dict.get(KEY_SD_MN_MOMENT)
+    if _mn_r is None or _mn_ax is None or _mn_mo is None:
+        _mn_cond = _mn_val = _mn_status = "N/A"
+    else:
+        _mn_cond   = f"{_mn_ax:.2f} + {_mn_mo:.2f} = {_mn_r:.3f}"
+        _mn_val    = f"{_mn_r:.3f}"
+        _mn_status = _interaction_status(_mn_r)
     t55_rows = []
     for lbl, _ in girder_entries:
         t55_rows.append(
-            r"\multirow{3}{*}{\makecell{" + lbl + r"""}} & High Shear Condition? &  &  & --- \\[6pt]
+            r"\multirow{4}{*}{\makecell{" + lbl + r"""}} & High Shear Condition? & $V_u > 0.6\,V_d$ & """ + _render_value(bridge.output_dict, KEY_SD_HIGH_SHEAR) + r""" & --- \\[6pt]
 \cline{2-5}
- & Reduced Moment Capacity, $M_{dv}$ &  &  & --- \\[6pt]
+ & Reduced Moment Capacity, $M_{dv}$ & IRC 22 Cl. 603.3.3.3 & """ + _render_value(bridge.output_dict, KEY_SD_MDV, " kN-m") + r""" & --- \\[6pt]
 \cline{2-5}
- & Interaction Check: $M_u \leq M_{dv}$ & --- & """ + _render_value(bridge.output_dict, KEY_UTIL_INTERACTION) + r""" & --- \\[6pt]
+ & Interaction Check: $M_u \leq M_{dv}$ & --- & """ + _mv_ur_str + r""" & """ + _mv_status + r""" \\[6pt]
+\cline{2-5}
+ & Interaction Check: $N_u/N_{Rd} + M_u/M_{dv} \leq 1.0$ & """ + _mn_cond + r""" & """ + _mn_val + r""" & """ + _mn_status + r""" \\[6pt]
 \hline"""
         )
     t55_content = "\n".join(t55_rows)
@@ -1825,7 +1857,7 @@ This section presents all structural design checks performed by OsdagBridge. For
 \noindent\textit{Note: IS 800 Cl. 8.4, IRC 22 Cl. 603.3.3.2}
 
 \vspace{1em}
-\noindent\textbf{Table 5.5  Bending-Shear Interaction Check}
+\noindent\textbf{Table 5.5  Interaction Checks (M-V and M-N)}
 
 \begin{longtable}{|C{2.5cm}|C{3.5cm}|C{3.5cm}|>{\centering\arraybackslash}p{4.2cm}|C{1.8cm}|}
 \hline
@@ -1833,7 +1865,7 @@ This section presents all structural design checks performed by OsdagBridge. For
 \hline
 """ + t55_content + r"""
 \end{longtable}
-\noindent\textit{Note: IS 800 Cl. 9.2.2}
+\noindent\textit{Note: IRC 22 Cl. 603.3.3.3}
 
 \vspace{1em}
 \noindent\textbf{Table 5.6  Lateral Torsional Buckling Check -- Construction Stage}

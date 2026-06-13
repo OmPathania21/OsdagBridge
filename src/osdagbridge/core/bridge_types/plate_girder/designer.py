@@ -573,6 +573,9 @@ class CapacityResults:
     phi_tf_deg: float = 0.0                             # tension field angle (deg)
     Mdv_kNm: float = 0.0                                # Cl.603.3.3.3
     beta_interaction: float = 0.0
+    mn_axial_term: float = 0.0                          # Cl.603.3.3.3 M-N: Nu/NRd
+    mn_moment_term: float = 0.0                         # Cl.603.3.3.3 M-N: Mu/Mdv
+    mn_ratio: float = 0.0                               # Cl.603.3.3.3 M-N: Nu/NRd + Mu/Mdv
     defl_limit_live_mm: float = 0.0                     # Cl.604.3.2
     defl_limit_total_mm: float = 0.0
     sigma_c_limit_MPa: float = 0.0                      # Cl.604.3.1 — concrete limit (0.48 fck)
@@ -2152,7 +2155,10 @@ class DCREngine:
         # NRd is pre-computed by compute_all() as Ag × fyw / γm0.
         if d.Nu_kN > 0.0:
             if c.NRd_kN > 0.0 and effective_Md > 0.0:
-                interaction_ratio = d.Nu_kN / c.NRd_kN + d.Mu_kNm / effective_Md
+                c.mn_axial_term  = d.Nu_kN / c.NRd_kN
+                c.mn_moment_term = d.Mu_kNm / effective_Md
+                interaction_ratio = c.mn_axial_term + c.mn_moment_term
+                c.mn_ratio = interaction_ratio
                 self._add_check(4, "M-N Interaction", "Cl.603.3.3.3",
                                  interaction_ratio, 1.0, "–",
                                  note=(f"Nu/NRd + Mu/Mdv = {interaction_ratio:.3f}"
@@ -2871,9 +2877,10 @@ def _extract_demands_from_analysis_results(
             except Exception:
                 return 0.0
 
-        # (1) ULS Mu / Vu — from analyser's Envelope_ULS case.
+        # (1) ULS Mu / Vu / Nu — from analyser's Envelope_ULS case.
         Mu_kNm = _fmax_lc(_uls_env_lc, "Mz_i", "Mz_j") / 1e3   # N·m → kN·m
         Vu_kN  = _fmax_lc(_uls_env_lc, "Vy_i", "Vy_j") / 1e3   # N → kN
+        Nu_kN  = _fmax_lc(_uls_env_lc, "Vx_i", "Vx_j") / 1e3   # N → kN (axial Fx)
 
         # (2) Construction moments — from analyser's SW case (stage 1) and DL+LL case (service).
         M_girder_sw_kNm = _fmax_lc(_sw_lc,    "Mz_i", "Mz_j") / 1e3
@@ -2949,7 +2956,7 @@ def _extract_demands_from_analysis_results(
                 Vr_kN = 0.0
             
         per_girder_demands[g_name] = DemandEnvelope(
-            Mu_kNm=round(Mu_kNm, 2), Vu_kN=round(Vu_kN, 2), Nu_kN=0.0,
+            Mu_kNm=round(Mu_kNm, 2), Vu_kN=round(Vu_kN, 2), Nu_kN=round(Nu_kN, 2),
             M_construction_kNm=round(M_const_kNm, 2), M_girder_sw_kNm=round(M_girder_sw_kNm, 2),
             delta_live_mm=round(delta_live_mm, 3), delta_total_mm=round(delta_total_mm, 3),
             stress_range_MPa=round(stress_range_MPa, 3), shear_range_MPa=round(shear_range_MPa, 3),
@@ -3355,6 +3362,10 @@ def run_design_check(
         # -- capacities: M-V interaction --
         "Mdv_kNm"                   : capacity.Mdv_kNm,
         "beta_interaction"          : capacity.beta_interaction,
+        # -- capacities: M-N interaction (None when no axial load → N/A) --
+        "mn_axial_term"             : capacity.mn_axial_term  if demand.Nu_kN > 0.0 else None,
+        "mn_moment_term"            : capacity.mn_moment_term if demand.Nu_kN > 0.0 else None,
+        "mn_ratio"                  : capacity.mn_ratio       if demand.Nu_kN > 0.0 else None,
         # -- SLS limits --
         "defl_limit_live_mm"        : capacity.defl_limit_live_mm,
         "defl_limit_total_mm"       : capacity.defl_limit_total_mm,
