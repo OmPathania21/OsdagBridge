@@ -216,12 +216,20 @@ from osdagbridge.core.utils.common import (
     KEY_SD_TOTAL_DEPTH,
     KEY_SD_TOP_FLANGE_WIDTH,
     KEY_SD_TOP_FLANGE_THICKNESS,
+    KEY_SD_BOTTOM_FLANGE_WIDTH,
+    KEY_SD_BOTTOM_FLANGE_THICKNESS,
     KEY_SD_WEB_THICKNESS,
     KEY_MP_GIRDER_SECTIONAL_AREA,
     KEY_MP_GIRDER_SECTIONAL_IZ,
     KEY_MP_GIRDER_ELASTIC_MODULUS_ZZ,
     KEY_MP_GIRDER_PLASTIC_MODULUS_ZUZ,
+    KEY_SD_SECTION_PROP_AREA,
+    KEY_SD_SECTION_PROP_IZ,
+    KEY_SD_SECTION_PROP_ZZ,
+    KEY_SD_SECTION_PROP_ZUZ,
     KEY_SD_EFFECTIVE_SLAB_WIDTH,
+    KEY_SD_COMPOSITE_IZ,
+    KEY_SD_PNA_DEPTH,
     # Utilizations
     KEY_UTIL_FLEXURE,
     KEY_UTIL_SHEAR,
@@ -1375,6 +1383,39 @@ def ch5_design_checks(checks_data, bridge: "ReportDataBridge"):
     # dict when deck design has not been run. Look up with deck_rpt.get(KEY_...).
     deck_rpt = bridge.output_dict.get("deck_report_values", {}) or {}
 
+    # Generate Table 5.1 rows (per-girder section properties)
+    t51_rows = []
+    for lbl, _ in girder_entries:
+        t51_rows.append(
+            r"\multirow{13}{*}{\makecell{" + lbl + r"""}} & \textbf{Depth, D (mm)} & """ + _render_value(bridge.output_dict, KEY_SD_TOTAL_DEPTH) + r""" \\[6pt]
+\cline{2-3}
+ & \textbf{Top Flange Width, $b_f$ (mm)} & """ + _render_value(bridge.output_dict, KEY_SD_TOP_FLANGE_WIDTH) + r""" \\[6pt]
+\cline{2-3}
+ & \textbf{Bottom Flange Width, $b_f$ (mm)} & """ + _render_value(bridge.output_dict, KEY_SD_BOTTOM_FLANGE_WIDTH) + r""" \\[6pt]
+\cline{2-3}
+ & \textbf{Top Flange Thickness, $t_f$ (mm)} & """ + _render_value(bridge.output_dict, KEY_SD_TOP_FLANGE_THICKNESS) + r""" \\[6pt]
+\cline{2-3}
+ & \textbf{Bottom Flange Thickness, $t_f$ (mm)} & """ + _render_value(bridge.output_dict, KEY_SD_BOTTOM_FLANGE_THICKNESS) + r""" \\[6pt]
+\cline{2-3}
+ & \textbf{Web Thickness, $t_w$ (mm)} & """ + _render_value(bridge.output_dict, KEY_SD_WEB_THICKNESS) + r""" \\[6pt]
+\cline{2-3}
+ & \textbf{Gross Area, A (cm$^2$)} & """ + _render_value(bridge.output_dict, KEY_SD_SECTION_PROP_AREA) + r""" \\[6pt]
+\cline{2-3}
+ & \textbf{Moment of Inertia, $I_z$ (cm$^4$)} & """ + _render_value(bridge.output_dict, KEY_SD_SECTION_PROP_IZ) + r""" \\[6pt]
+\cline{2-3}
+ & \textbf{Elastic Section Modulus, $Z_{ez}$ (cm$^3$)} & """ + _render_value(bridge.output_dict, KEY_SD_SECTION_PROP_ZZ) + r""" \\[6pt]
+\cline{2-3}
+ & \textbf{Plastic Section Modulus, $Z_{pz}$ (cm$^3$)} & """ + _render_value(bridge.output_dict, KEY_SD_SECTION_PROP_ZUZ) + r""" \\[6pt]
+\cline{2-3}
+ & \textbf{Effective Slab Width, $b_{eff}$ (mm)} & """ + _render_value(bridge.output_dict, KEY_SD_EFFECTIVE_SLAB_WIDTH) + r""" \\[6pt]
+\cline{2-3}
+ & \textbf{Transformed Composite $I_z$ (cm$^4$)} & """ + _render_value(bridge.output_dict, KEY_SD_COMPOSITE_IZ) + r""" \\[6pt]
+\cline{2-3}
+ & \textbf{Depth to Plastic Neutral Axis (mm)} & """ + _render_value(bridge.output_dict, KEY_SD_PNA_DEPTH) + r""" \\[6pt]
+\hline"""
+        )
+    t51_content = "\n".join(t51_rows)
+
     # Generate Table 5.2 rows
     t52_rows = []
     for lbl, _ in girder_entries:
@@ -1715,30 +1756,11 @@ This section presents all structural design checks performed by OsdagBridge. For
 \vspace{1em}
 \noindent\textbf{Table 5.1  Girder Section Properties (Final Optimized / User-selected)}
 
-\begin{longtable}{|L{7.5cm}|p{8.0cm}|}
+\begin{longtable}{|C{2.5cm}|L{8.0cm}|>{\centering\arraybackslash}p{5.0cm}|}
 \hline
-\textbf{Depth, D} & """ + _render_value(bridge.output_dict, KEY_SD_TOTAL_DEPTH, " mm") + r""" \\[6pt]
+\textbf{Girder} & \textbf{Property} & \textbf{Value} \\[6pt]
 \hline
-\textbf{Flange Width, bf} & """ + _render_value(bridge.output_dict, KEY_SD_TOP_FLANGE_WIDTH, " mm") + r""" \\[6pt]
-\hline
-\textbf{Flange Thickness, tf} & """ + _render_value(bridge.output_dict, KEY_SD_TOP_FLANGE_THICKNESS, " mm") + r""" \\[6pt]
-\hline
-\textbf{Web Thickness, tw} & """ + _render_value(bridge.output_dict, KEY_SD_WEB_THICKNESS, " mm") + r""" \\[6pt]
-\hline
-\textbf{Gross Area of Steel Section, A (cm²)} & """ + _render_value(bridge.output_dict, KEY_MP_GIRDER_SECTIONAL_AREA) + r""" \\[6pt]
-\hline
-\textbf{Moment of Inertia, Iz (cm$^4$)} & """ + _render_value(bridge.output_dict, KEY_MP_GIRDER_SECTIONAL_IZ) + r""" \\[6pt]
-\hline
-\textbf{Elastic Section Modulus, Zez (cm$^3$)} & """ + _render_value(bridge.output_dict, KEY_MP_GIRDER_ELASTIC_MODULUS_ZZ) + r""" \\[6pt]
-\hline
-\textbf{Plastic Section Modulus, Zpz (cm$^3$)} & """ + _render_value(bridge.output_dict, KEY_MP_GIRDER_PLASTIC_MODULUS_ZUZ) + r""" \\[6pt]
-\hline
-\textbf{Effective Width of Slab, b\_eff (mm)} & """ + _render_value(bridge.output_dict, KEY_SD_EFFECTIVE_SLAB_WIDTH) + r""" \\[6pt]
-\hline
-\textbf{Transformed Composite Iz (cm$^4$)} &  \\[6pt]
-\hline
-\textbf{Depth to Plastic Neutral Axis (mm)} &  \\[6pt]
-\hline
+""" + t51_content + r"""
 \end{longtable}
 
 \vspace{1em}

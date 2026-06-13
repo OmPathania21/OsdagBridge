@@ -147,6 +147,20 @@ from osdagbridge.core.utils.common import (
     KEY_MP_GIRDER_PLASTIC_MODULUS_ZUY,
     KEY_MP_GIRDER_TORSION_CONSTANT_IT,
     KEY_MP_GIRDER_WARPING_CONSTANT_IW,
+    KEY_SD_SECTION_PROP_MASS,
+    KEY_SD_SECTION_PROP_AREA,
+    KEY_SD_SECTION_PROP_IZ,
+    KEY_SD_SECTION_PROP_IV,
+    KEY_SD_SECTION_PROP_RZ,
+    KEY_SD_SECTION_PROP_RV,
+    KEY_SD_SECTION_PROP_ZZ,
+    KEY_SD_SECTION_PROP_ZV,
+    KEY_SD_SECTION_PROP_ZUZ,
+    KEY_SD_SECTION_PROP_ZUV,
+    KEY_SD_SECTION_PROP_IT,
+    KEY_SD_SECTION_PROP_IW,
+    KEY_SD_COMPOSITE_IZ,
+    KEY_SD_PNA_DEPTH,
     # Stiffener table
     KEY_SD_STIFFENER_ROW_INTERMEDIATE,
     KEY_SD_STIFFENER_ROW_LONGITUDINAL,
@@ -3766,6 +3780,23 @@ class PlateGirderBridge:
         out[KEY_MP_GIRDER_PLASTIC_MODULUS_ZUY]   = inp.get(KEY_MP_GIRDER_PLASTIC_MODULUS_ZUY,0.0)   # m³ (Zp about zy)
         out[KEY_MP_GIRDER_TORSION_CONSTANT_IT]    = inp.get(KEY_MP_GIRDER_TORSION_CONSTANT_IT,0.0)   # m³ (torsion J)
         out[KEY_MP_GIRDER_WARPING_CONSTANT_IW]    = inp.get(KEY_MP_GIRDER_WARPING_CONSTANT_IW,0.0)   # m⁶ (warping Iw)
+
+        # Steel section properties come from design_results (mm-based units).
+        # Report table expects engineering units: cm², cm⁴, cm³.
+        out[KEY_SD_SECTION_PROP_MASS]  = inp.get(KEY_MP_GIRDER_MASS,               0.0)          # kg/m (unchanged)
+        out[KEY_SD_SECTION_PROP_AREA]  = round(dr["A_steel_mm2"]   / 1e2,  2)                    # mm²  → cm²
+        out[KEY_SD_SECTION_PROP_IZ]    = round(dr["Iz_steel_mm4"]  / 1e4,  2)                    # mm⁴  → cm⁴
+        out[KEY_SD_SECTION_PROP_IV]    = inp.get(KEY_MP_GIRDER_SECTIONAL_IY,       0.0)          # m⁴  (unused in report)
+        out[KEY_SD_SECTION_PROP_RZ]    = inp.get(KEY_MP_GIRDER_RADIUS_GYRATION_Z,  0.0)          # m   (unused in report)
+        out[KEY_SD_SECTION_PROP_RV]    = inp.get(KEY_MP_GIRDER_RADIUS_GYRATION_Y,  0.0)          # m   (unused in report)
+        out[KEY_SD_SECTION_PROP_ZZ]    = round(dr["Ze_steel_mm3"]  / 1e3,  2)                    # mm³  → cm³
+        out[KEY_SD_SECTION_PROP_ZV]    = inp.get(KEY_MP_GIRDER_ELASTIC_MODULUS_ZY, 0.0)          # m³  (unused in report)
+        out[KEY_SD_SECTION_PROP_ZUZ]   = round(dr["Zp_steel_mm3"]  / 1e3,  2)                    # mm³  → cm³
+        out[KEY_SD_SECTION_PROP_ZUV]   = inp.get(KEY_MP_GIRDER_PLASTIC_MODULUS_ZUY,0.0)          # m³  (unused in report)
+        out[KEY_SD_SECTION_PROP_IT]    = inp.get(KEY_MP_GIRDER_TORSION_CONSTANT_IT,0.0)          # m³  (unused in report)
+        out[KEY_SD_SECTION_PROP_IW]    = inp.get(KEY_MP_GIRDER_WARPING_CONSTANT_IW,0.0)          # m⁶  (unused in report)
+        out[KEY_SD_COMPOSITE_IZ]       = round(dr["I_comp_short_mm4"] / 1e4, 2)                  # mm⁴  → cm⁴
+        out[KEY_SD_PNA_DEPTH]          = round(dr["xu_mm"], 1)                                    # mm
 
         # In store_design_results(), replace the stiffener section (── 5. Stiffener table ──) with:
 
