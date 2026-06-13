@@ -3349,6 +3349,9 @@ def run_design_check(
         "lambda_w"                  : capacity.lambda_w,
         "tau_b_buck_MPa"            : capacity.tau_b_buck_MPa,
         "Vcr_kN"                    : capacity.Vcr_kN,
+        "panel_c_mm"                : capacity.details["shear_buckling"]["c_mm"],
+        "panel_cd_ratio"            : (round(capacity.details["shear_buckling"]["c_mm"] / _sec.dw, 3)
+                                       if capacity.details["shear_buckling"]["c_mm"] > 0 else None),
         # -- capacities: M-V interaction --
         "Mdv_kNm"                   : capacity.Mdv_kNm,
         "beta_interaction"          : capacity.beta_interaction,

@@ -239,6 +239,13 @@ from osdagbridge.core.utils.common import (
     KEY_SD_CLASS_FLANGE,
     KEY_SD_CLASS_WEB,
     KEY_SD_SECTION_CLASS,
+    KEY_SD_SHEAR_VU,
+    KEY_SD_SHEAR_AV,
+    KEY_SD_PANEL_CD,
+    KEY_SD_SHEAR_KV,
+    KEY_SD_SHEAR_LAMBDA_W,
+    KEY_SD_SHEAR_TAU_B,
+    KEY_SD_SHEAR_VCR,
     # Utilizations
     KEY_UTIL_FLEXURE,
     KEY_UTIL_SHEAR,
@@ -1439,11 +1446,14 @@ def ch5_design_checks(checks_data, bridge: "ReportDataBridge"):
     t52_content = "\n".join(t52_rows)
 
     # Generate Table 5.3 rows
-    # Flexure UR is stored as a percent (cat_urs × 100); PASS when ≤ 100%.
+    # Flexure UR is stored as a percent (cat_urs × 100); show as a ratio (÷100,
+    # 2 dp) and PASS when ≤ 1.0.
     try:
-        _flex_ur = float(bridge.output_dict.get(KEY_UTIL_FLEXURE))
-        _flex_status = "PASS" if _flex_ur <= 100.0 else r"\textcolor{red}{FAIL}"
+        _flex_ur = float(bridge.output_dict.get(KEY_UTIL_FLEXURE)) / 100.0
+        _flex_ur_str = f"{_flex_ur:.2f}"
+        _flex_status = "PASS" if _flex_ur <= 1.0 else r"\textcolor{red}{FAIL}"
     except (TypeError, ValueError):
+        _flex_ur_str = ""
         _flex_status = "---"
     t53_rows = []
     for lbl, _ in girder_entries:
@@ -1452,30 +1462,39 @@ def ch5_design_checks(checks_data, bridge: "ReportDataBridge"):
 \cline{2-5}
  & Design Moment Capacity, Md & IRC 22 Cl. 603.3.1 & """ + _render_value(bridge.output_dict, KEY_SD_MD_CAPACITY, " kN-m") + r""" & --- \\[6pt]
 \cline{2-5}
- & Utilization Ratio, $M_u / M_d$ & $M_u / M_d$ & """ + _render_value(bridge.output_dict, KEY_UTIL_FLEXURE) + r""" & """ + _flex_status + r""" \\[6pt]
+ & Utilization Ratio, $M_u / M_d$ & $M_u / M_d$ & """ + _flex_ur_str + r""" & """ + _flex_status + r""" \\[6pt]
 \hline"""
         )
     t53_content = "\n".join(t53_rows)
 
     # Generate Table 5.4 rows
+    # Shear UR is stored as a percent (cat_urs × 100); show as a ratio (÷100,
+    # 2 dp) and PASS when ≤ 1.0.
+    try:
+        _shear_ur = float(bridge.output_dict.get(KEY_UTIL_SHEAR)) / 100.0
+        _shear_ur_str = f"{_shear_ur:.2f}"
+        _shear_status = "PASS" if _shear_ur <= 1.0 else r"\textcolor{red}{FAIL}"
+    except (TypeError, ValueError):
+        _shear_ur_str = ""
+        _shear_status = "---"
     t54_rows = []
     for lbl, _ in girder_entries:
         t54_rows.append(
-            r"\multirow{8}{*}{\makecell{" + lbl + r"""}} & Applied Shear, $V_u$ &  &  & --- \\[6pt]
+            r"\multirow{8}{*}{\makecell{" + lbl + r"""}} & Applied Shear, $V_u$ & Governing LC (ULS) & """ + _render_value(bridge.output_dict, KEY_SD_SHEAR_VU, " kN") + r""" & --- \\[6pt]
 \cline{2-5}
- & Shear Area, Av &  &  & --- \\[6pt]
+ & Shear Area, Av & $d_w \times t_w$ & """ + _render_value(bridge.output_dict, KEY_SD_SHEAR_AV, " mm$^2$") + r""" & --- \\[6pt]
 \cline{2-5}
- & Panel Aspect Ratio, c/d & --- &  & --- \\[6pt]
+ & Panel Aspect Ratio, c/d & --- & """ + _render_value(bridge.output_dict, KEY_SD_PANEL_CD) + r""" & --- \\[6pt]
 \cline{2-5}
- & Shear Buckling Coefficient, kv &  &  & --- \\[6pt]
+ & Shear Buckling Coefficient, kv & IS 800 Cl. 8.4.2.2 & """ + _render_value(bridge.output_dict, KEY_SD_SHEAR_KV) + r""" & --- \\[6pt]
 \cline{2-5}
- & Web Slenderness, $\lambda_w$ &  &  & --- \\[6pt]
+ & Web Slenderness, $\lambda_w$ & $\sqrt{f_{yw}/(\sqrt{3}\,\tau_{cr})}$ & """ + _render_value(bridge.output_dict, KEY_SD_SHEAR_LAMBDA_W) + r""" & --- \\[6pt]
 \cline{2-5}
- & Design Shear Stress, tau\_b &  &  & --- \\[6pt]
+ & Design Shear Stress, tau\_b & IRC 22 Cl. 603.3.3.2 & """ + _render_value(bridge.output_dict, KEY_SD_SHEAR_TAU_B, " MPa") + r""" & --- \\[6pt]
 \cline{2-5}
- & Shear Buckling Resistance, Vcr &  &  & --- \\[6pt]
+ & Shear Buckling Resistance, Vcr & $A_v \times \tau_b$ & """ + _render_value(bridge.output_dict, KEY_SD_SHEAR_VCR, " kN") + r""" & --- \\[6pt]
 \cline{2-5}
- & Utilization Ratio, $V_u / V_d$ & --- & """ + _render_value(bridge.output_dict, KEY_UTIL_SHEAR) + r""" &  \\[6pt]
+ & Utilization Ratio, $V_u / V_d$ & $V_u / V_d$ & """ + _shear_ur_str + r""" & """ + _shear_status + r""" \\[6pt]
 \hline"""
         )
     t54_content = "\n".join(t54_rows)

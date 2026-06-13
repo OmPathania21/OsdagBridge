@@ -460,6 +460,13 @@ KEY_SD_FLANGE_SLENDERNESS = "steeldesign.details.classification.flange_slenderne
 KEY_SD_WEB_SLENDERNESS    = "steeldesign.details.classification.web_slenderness"     # only for report
 KEY_SD_WEB_CLASS_LIMIT    = "steeldesign.details.classification.web_class_limit"     # only for report
 KEY_SD_FLANGE_CLASS_LIMIT = "steeldesign.details.classification.flange_class_limit"  # only for report
+KEY_SD_SHEAR_VU         = "steeldesign.details.shear_check.vu_applied"      # only for report
+KEY_SD_SHEAR_AV         = "steeldesign.details.shear_check.av_area"         # only for report
+KEY_SD_PANEL_CD         = "steeldesign.details.shear_check.panel_cd"        # only for report
+KEY_SD_SHEAR_KV         = "steeldesign.details.shear_check.kv"              # only for report
+KEY_SD_SHEAR_LAMBDA_W   = "steeldesign.details.shear_check.lambda_w"        # only for report
+KEY_SD_SHEAR_TAU_B      = "steeldesign.details.shear_check.tau_b"           # only for report
+KEY_SD_SHEAR_VCR        = "steeldesign.details.shear_check.vcr"             # only for report
 KEY_SD_CLASS_FLANGE       = "steeldesign.details.classification.flange_class"        # only for report
 KEY_SD_CLASS_WEB          = "steeldesign.details.classification.web_class"           # only for report
 

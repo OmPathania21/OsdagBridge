@@ -169,6 +169,13 @@ from osdagbridge.core.utils.common import (
     KEY_SD_FLANGE_CLASS_LIMIT,
     KEY_SD_CLASS_FLANGE,
     KEY_SD_CLASS_WEB,
+    KEY_SD_SHEAR_VU,
+    KEY_SD_SHEAR_AV,
+    KEY_SD_PANEL_CD,
+    KEY_SD_SHEAR_KV,
+    KEY_SD_SHEAR_LAMBDA_W,
+    KEY_SD_SHEAR_TAU_B,
+    KEY_SD_SHEAR_VCR,
     # Stiffener table
     KEY_SD_STIFFENER_ROW_INTERMEDIATE,
     KEY_SD_STIFFENER_ROW_LONGITUDINAL,
@@ -3819,6 +3826,15 @@ class PlateGirderBridge:
         out[KEY_SD_FLANGE_CLASS_LIMIT] = dr["flange_class_limit"]                                 # limit (×ε)
         out[KEY_SD_CLASS_FLANGE]       = dr["section_class_flange"]
         out[KEY_SD_CLASS_WEB]          = dr["section_class_web"]
+
+        # ── 4d. Shear check (Table 5.4): applied shear, area, buckling breakdown ─
+        out[KEY_SD_SHEAR_VU]           = round(dr["Vu_kN"], 2)                                    # kN
+        out[KEY_SD_SHEAR_AV]           = round(dr["Av_mm2"], 1)                                   # mm²
+        out[KEY_SD_PANEL_CD]           = dr["panel_cd_ratio"]                                     # c/d (None if unstiffened)
+        out[KEY_SD_SHEAR_KV]           = dr["Kv"]
+        out[KEY_SD_SHEAR_LAMBDA_W]     = dr["lambda_w"]
+        out[KEY_SD_SHEAR_TAU_B]        = round(dr["tau_b_buck_MPa"], 2)                           # MPa
+        out[KEY_SD_SHEAR_VCR]          = round(dr["Vcr_kN"], 2)                                   # kN
 
         # In store_design_results(), replace the stiffener section (── 5. Stiffener table ──) with:
 
