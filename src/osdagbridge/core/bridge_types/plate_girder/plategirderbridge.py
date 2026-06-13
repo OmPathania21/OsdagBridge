@@ -181,6 +181,16 @@ from osdagbridge.core.utils.common import (
     KEY_SD_MN_AXIAL,
     KEY_SD_MN_MOMENT,
     KEY_SD_MN_RATIO,
+    KEY_SD_LTB_MCR,
+    KEY_SD_LTB_LAMBDA,
+    KEY_SD_LTB_CHI,
+    KEY_SD_LTB_MB,
+    KEY_SD_STIFF_METHOD,
+    KEY_SD_STIFF_INT_THICK,
+    KEY_SD_STIFF_INT_SPACING,
+    KEY_SD_STIFF_END_THICK,
+    KEY_SD_STIFF_END_COUNT,
+    KEY_SD_STIFF_LONG,
     # Stiffener table
     KEY_SD_STIFFENER_ROW_INTERMEDIATE,
     KEY_SD_STIFFENER_ROW_LONGITUDINAL,
@@ -3848,6 +3858,29 @@ class PlateGirderBridge:
         out[KEY_SD_MN_AXIAL]           = round(_mn_ax, 2) if _mn_ax is not None else None
         out[KEY_SD_MN_MOMENT]          = round(_mn_mo, 2) if _mn_mo is not None else None
         out[KEY_SD_MN_RATIO]           = round(_mn_r, 3) if _mn_r is not None else None
+
+        # ── 4f. LTB check (Table 5.6, construction stage): Mcr, λ_LT, χ_LT, Mb ──
+        out[KEY_SD_LTB_MCR]            = round(dr["Mcr_kNm"], 2)                                  # kN·m
+        out[KEY_SD_LTB_LAMBDA]         = round(dr["lambda_LT"], 3)
+        out[KEY_SD_LTB_CHI]            = round(dr["chi_LT"], 3)
+        out[KEY_SD_LTB_MB]             = round(dr["Mb_kNm"], 2)                                   # kN·m
+
+        # ── 4g. Stiffener design summary (Table 5.7) ────────────────────────────
+        # Custom design → user-provided values; Optimized → designer-computed.
+        _is_custom_stiff = str(inp.get(KEY_DESIGN_MODE, "Optimized")).strip().lower() in {"custom", "customized"}
+        def _rnum(v, nd=1):
+            return round(v, nd) if isinstance(v, (int, float)) else v
+        out[KEY_SD_STIFF_METHOD]       = dr["stiff_method"]
+        out[KEY_SD_STIFF_INT_THICK]    = _rnum(dr["is_tq_mm"] if _is_custom_stiff else dr["stiff_int_thick_req"])
+        out[KEY_SD_STIFF_INT_SPACING]  = _rnum(dr["is_c_mm"]  if _is_custom_stiff else dr["stiff_int_space_req"])
+        out[KEY_SD_STIFF_END_THICK]    = _rnum(dr["bs_tq_mm"] if _is_custom_stiff else dr["stiff_end_thick_req"])
+        out[KEY_SD_STIFF_END_COUNT]    = dr["bs_n_plates"]
+        # Longitudinal: only the user can specify them; optimizer adds none.
+        _stiff_data  = inp.get("stiffener_by_member") or {}
+        _first_stiff = next(iter(_stiff_data.values()), {}) if _stiff_data else {}
+        _long_val    = str((_first_stiff or {}).get("longitudinal_stiffener", "No")).strip()
+        out[KEY_SD_STIFF_LONG]         = ((_long_val if _long_val and _long_val not in ("None", "NA", "") else "No")
+                                          if _is_custom_stiff else "None")
 
         # In store_design_results(), replace the stiffener section (── 5. Stiffener table ──) with:
 

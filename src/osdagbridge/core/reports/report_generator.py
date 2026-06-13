@@ -251,6 +251,16 @@ from osdagbridge.core.utils.common import (
     KEY_SD_MN_AXIAL,
     KEY_SD_MN_MOMENT,
     KEY_SD_MN_RATIO,
+    KEY_SD_LTB_MCR,
+    KEY_SD_LTB_LAMBDA,
+    KEY_SD_LTB_CHI,
+    KEY_SD_LTB_MB,
+    KEY_SD_STIFF_METHOD,
+    KEY_SD_STIFF_INT_THICK,
+    KEY_SD_STIFF_INT_SPACING,
+    KEY_SD_STIFF_END_THICK,
+    KEY_SD_STIFF_END_COUNT,
+    KEY_SD_STIFF_LONG,
     # Utilizations
     KEY_UTIL_FLEXURE,
     KEY_UTIL_SHEAR,
@@ -1545,18 +1555,26 @@ def ch5_design_checks(checks_data, bridge: "ReportDataBridge"):
     t55_content = "\n".join(t55_rows)
 
     # Generate Table 5.6 rows
+    # LTB UR stored as percent → show ratio (2 dp); engine bands via _interaction_status.
+    try:
+        _ltb_ur = float(bridge.output_dict.get(KEY_UTIL_LTB)) / 100.0
+        _ltb_ur_str = f"{_ltb_ur:.2f}"
+        _ltb_status = _interaction_status(_ltb_ur)
+    except (TypeError, ValueError):
+        _ltb_ur_str = ""
+        _ltb_status = "---"
     t56_rows = []
     for lbl, _ in girder_entries:
         t56_rows.append(
-            r"\multirow{5}{*}{\makecell{" + lbl + r"""}} & Elastic Critical Moment, Mcr &  &  & --- \\[6pt]
+            r"\multirow{5}{*}{\makecell{" + lbl + r"""}} & Elastic Critical Moment, Mcr & IRC 22 Cl. 603.3.3.1 & """ + _render_value(bridge.output_dict, KEY_SD_LTB_MCR, " kN-m") + r""" & --- \\[6pt]
 \cline{2-5}
- & Non-dim. Slenderness, $\bar{\lambda}_{LT}$ &  &  & --- \\[6pt]
+ & Non-dim. Slenderness, $\bar{\lambda}_{LT}$ & $\sqrt{M_p / M_{cr}}$ & """ + _render_value(bridge.output_dict, KEY_SD_LTB_LAMBDA) + r""" & --- \\[6pt]
 \cline{2-5}
- & LTB Reduction Factor, chi\_LT &  &  & --- \\[6pt]
+ & LTB Reduction Factor, chi\_LT & IS 800 Cl. 8.2.2 & """ + _render_value(bridge.output_dict, KEY_SD_LTB_CHI) + r""" & --- \\[6pt]
 \cline{2-5}
- & LTB Resistance, Mb &  &  & --- \\[6pt]
+ & LTB Resistance, Mb & $\chi_{LT}\,M_p / \gamma_{m0}$ & """ + _render_value(bridge.output_dict, KEY_SD_LTB_MB, " kN-m") + r""" & --- \\[6pt]
 \cline{2-5}
- & $M_u \leq M_b$ & --- & """ + _render_value(bridge.output_dict, KEY_UTIL_LTB) + r""" & --- \\[6pt]
+ & $M_u \leq M_b$ & $M_u / M_b$ & """ + _ltb_ur_str + r""" & """ + _ltb_status + r""" \\[6pt]
 \hline"""
         )
     t56_content = "\n".join(t56_rows)
@@ -1565,17 +1583,17 @@ def ch5_design_checks(checks_data, bridge: "ReportDataBridge"):
     t57_rows = []
     for lbl, _ in girder_entries:
         t57_rows.append(
-            r"\multirow{6}{*}{\makecell{" + lbl + r"""}} & \textbf{Shear Buckling Design Method} &  \\[6pt]
+            r"\multirow{6}{*}{\makecell{" + lbl + r"""}} & \textbf{Shear Buckling Design Method} & """ + _render_value(bridge.output_dict, KEY_SD_STIFF_METHOD) + r""" \\[6pt]
 \cline{2-3}
- & \textbf{Intermediate Stiffener Thickness (mm)} &  \\[6pt]
+ & \textbf{Intermediate Stiffener Thickness (mm)} & """ + _render_value(bridge.output_dict, KEY_SD_STIFF_INT_THICK) + r""" \\[6pt]
 \cline{2-3}
- & \textbf{Intermediate Stiffener Spacing (mm)} &  \\[6pt]
+ & \textbf{Intermediate Stiffener Spacing (mm)} & """ + _render_value(bridge.output_dict, KEY_SD_STIFF_INT_SPACING) + r""" \\[6pt]
 \cline{2-3}
- & \textbf{End Panel Stiffener Thickness (mm)} &  \\[6pt]
+ & \textbf{End Panel Stiffener Thickness (mm)} & """ + _render_value(bridge.output_dict, KEY_SD_STIFF_END_THICK) + r""" \\[6pt]
 \cline{2-3}
- & \textbf{No. of End Panel Stiffeners} &  \\[6pt]
+ & \textbf{No. of End Panel Stiffeners} & """ + _render_value(bridge.output_dict, KEY_SD_STIFF_END_COUNT) + r""" \\[6pt]
 \cline{2-3}
- & \textbf{Longitudinal Stiffeners} &  \\[6pt]
+ & \textbf{Longitudinal Stiffeners} & """ + _render_value(bridge.output_dict, KEY_SD_STIFF_LONG) + r""" \\[6pt]
 \hline"""
         )
     t57_content = "\n".join(t57_rows)

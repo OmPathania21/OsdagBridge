@@ -472,6 +472,16 @@ KEY_SD_MDV              = "steeldesign.details.interaction.mdv"             # on
 KEY_SD_MN_AXIAL         = "steeldesign.details.interaction.mn_axial"        # only for report
 KEY_SD_MN_MOMENT        = "steeldesign.details.interaction.mn_moment"       # only for report
 KEY_SD_MN_RATIO         = "steeldesign.details.interaction.mn_ratio"        # only for report
+KEY_SD_LTB_MCR          = "steeldesign.details.ltb.mcr"                     # only for report
+KEY_SD_LTB_LAMBDA       = "steeldesign.details.ltb.lambda_lt"              # only for report
+KEY_SD_LTB_CHI          = "steeldesign.details.ltb.chi_lt"                 # only for report
+KEY_SD_LTB_MB           = "steeldesign.details.ltb.mb"                      # only for report
+KEY_SD_STIFF_METHOD     = "steeldesign.details.stiffener_summary.method"        # only for report
+KEY_SD_STIFF_INT_THICK  = "steeldesign.details.stiffener_summary.int_thickness"  # only for report
+KEY_SD_STIFF_INT_SPACING= "steeldesign.details.stiffener_summary.int_spacing"    # only for report
+KEY_SD_STIFF_END_THICK  = "steeldesign.details.stiffener_summary.end_thickness"  # only for report
+KEY_SD_STIFF_END_COUNT  = "steeldesign.details.stiffener_summary.end_count"      # only for report
+KEY_SD_STIFF_LONG       = "steeldesign.details.stiffener_summary.longitudinal"   # only for report
 KEY_SD_CLASS_FLANGE       = "steeldesign.details.classification.flange_class"        # only for report
 KEY_SD_CLASS_WEB          = "steeldesign.details.classification.web_class"           # only for report
 
