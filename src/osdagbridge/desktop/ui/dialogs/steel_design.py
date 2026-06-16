@@ -795,6 +795,7 @@ class SteelDesign(QDialog):
 
           ── Dead Loads ──
           ── Vehicle Loads ──
+          ── Total Load (DL+LL) ──
           ── ULS Combinations ──
           ── SLS Combinations ──
           ── Envelope ──
@@ -811,6 +812,7 @@ class SteelDesign(QDialog):
 
         dead_lcs     = _strip_moving(classified.get("dead", []))
         static_lcs   = _strip_moving(classified.get("vehicle_static", []))
+        dl_ll_lcs    = _strip_moving(classified.get("dl_ll", []))
         uls_lcs      = _strip_moving(classified.get("uls_basic", [])
                         + classified.get("uls_accidental", [])
                         + classified.get("uls_seismic", []))
@@ -841,11 +843,12 @@ class SteelDesign(QDialog):
                 if first_selectable_idx is None:
                     first_selectable_idx = combo.count() - 1
 
-        _add_group("Dead Loads",         dead_lcs)
-        _add_group("Vehicle Loads",      static_lcs)
-        _add_group("ULS Combinations",   uls_lcs)
-        _add_group("SLS Combinations",   sls_lcs)
-        _add_group("Envelope",           envelope_lcs)
+        _add_group("Dead Loads",          dead_lcs)
+        _add_group("Vehicle Loads",       static_lcs)
+        _add_group("Total Load (DL+LL)",  dl_ll_lcs)
+        _add_group("ULS Combinations",    uls_lcs)
+        _add_group("SLS Combinations",    sls_lcs)
+        _add_group("Envelope",            envelope_lcs)
 
         # Select the first real item so nothing tries to look up a header
         if first_selectable_idx is not None:

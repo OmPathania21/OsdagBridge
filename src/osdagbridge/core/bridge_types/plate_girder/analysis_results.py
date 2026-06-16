@@ -215,6 +215,7 @@ class PlateGirderAnalysisResults:
         sls_quasi         = []
         envelope_uls      = []
         envelope_sls      = []
+        dl_ll_cases       = []
 
         for lc in all_lc:
             name       = str(lc)
@@ -250,6 +251,13 @@ class PlateGirderAnalysisResults:
                 sls_quasi.append(lc)
                 continue
 
+            # Total-service combination from create_dl_ll_combination(), e.g. "1.0 DL + 1.0 LL".
+            # Must be checked before the live-load rule below — it also ends in "LL" and
+            # would otherwise be swallowed into vehicle_static (live-load-only) by mistake.
+            if " DL + " in name and name_lower.endswith("ll"):
+                dl_ll_cases.append(lc)
+                continue
+
             # Live load: Class A, 70R, and LL envelope cases
             if name_lower.startswith("case") or "classa" in name_lower or "70r" in name_lower or name_lower.endswith("ll"):
                 vehicle_static.append(lc)
@@ -278,6 +286,7 @@ class PlateGirderAnalysisResults:
             "sls_quasi_permanent":  sls_quasi,
             "envelope_uls":         envelope_uls,
             "envelope_sls":         envelope_sls,
+            "dl_ll":                dl_ll_cases,
         }
 
     # ========================================================

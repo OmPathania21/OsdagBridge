@@ -3499,22 +3499,29 @@ class PlateGirderBridge:
         else:
             girder_names = list(per_girder)
 
-        try:
-            config = BridgeConfig.from_plate_girder_bridge(self)
-        except Exception:
-            return None
+        # per_girder's key order is already edge-beam-free and in physical girder
+        # order (built from build_girders() minus EB1/EB2) — its position is the
+        # 0-based girder_index that resolve_girder_value()'s ".G{i+1}.M1" keys expect.
+        _girder_order = list(per_girder)
 
-        # Mirror the bearing reaction resolved during run_design_check so
-        # bearing stiffener checks fire here too (from_plate_girder_bridge
-        # always leaves bs_R_kN=0.0).
-        if config.stiffener is not None:
-            stored_r = dr.get("bs_R_kN", 0.0)
-            if stored_r and stored_r > 0.0:
-                config.stiffener.bs_R_kN = float(stored_r)
-                
+        stored_r = dr.get("bs_R_kN", 0.0)
+
         best_engine = None
 
         for g_name in girder_names:
+            try:
+                config = BridgeConfig.from_plate_girder_bridge(
+                    self, girder_index=_girder_order.index(g_name)
+                )
+            except Exception:
+                continue
+
+            # Mirror the bearing reaction resolved during run_design_check so
+            # bearing stiffener checks fire here too (from_plate_girder_bridge
+            # always leaves bs_R_kN=0.0).
+            if config.stiffener is not None and stored_r and stored_r > 0.0:
+                config.stiffener.bs_R_kN = float(stored_r)
+
             g_data = per_girder.get(g_name, {})
             per_lc = g_data.get("per_lc", {})
             lc_demand = per_lc.get(load_case)

@@ -341,7 +341,7 @@ class BridgeConfig:
     stiffener: Optional[StiffenerConfig] = None            # None = stiffener checks skipped
 
     @classmethod
-    def from_plate_girder_bridge(cls, bridge: Any) -> "BridgeConfig":
+    def from_plate_girder_bridge(cls, bridge: Any, girder_index: int | None = None) -> "BridgeConfig":
         # Build a BridgeConfig from a solved PlateGirderBridge: materials from the project DB
         # (which mirrors IS 2062 / IRC 22 Annex III), concrete/rebar resolved via IRC 22 Annex III.
         from osdagbridge.core.utils.common import (
@@ -378,21 +378,20 @@ class BridgeConfig:
         )
 
         inp = bridge.input_dict
-        # NOTE: the DCR capacity check evaluates the representative (first) girder.
-        # The grillage analysis model supports distinct per-girder geometry (see
-        # analyser._assign_girder_members), but this check is not yet run per
-        # girder. Girder geometry is read through resolve_girder_value so it works
-        # whether the dict carries per-girder dynamic keys or legacy scalar keys.
+        # Girder geometry is read through resolve_girder_value so it works whether
+        # the dict carries per-girder dynamic keys or legacy scalar keys. Pass
+        # girder_index to build a config for that specific girder; None (default)
+        # falls back to the representative (first) girder — see resolve_girder_value().
         from osdagbridge.core.bridge_types.plate_girder.plategirderbridge import (
             resolve_girder_value as _gv,
         )
         section = SteelSection(
-            D=_gv(inp, KEY_MP_GIRDER_DEPTH)                   * 1000,
-            bf_top=_gv(inp, KEY_MP_GIRDER_TOP_FLANGE_WIDTH)        * 1000,
-            tf_top=_gv(inp, KEY_MP_GIRDER_TOP_FLANGE_THICKNESS)    * 1000,
-            bf_bot=_gv(inp, KEY_MP_GIRDER_BOTTOM_FLANGE_WIDTH)     * 1000,
-            tf_bot=_gv(inp, KEY_MP_GIRDER_BOTTOM_FLANGE_THICKNESS) * 1000,
-            tw=_gv(inp, KEY_MP_GIRDER_WEB_THICKNESS)               * 1000,
+            D=_gv(inp, KEY_MP_GIRDER_DEPTH, girder_index)                   * 1000,
+            bf_top=_gv(inp, KEY_MP_GIRDER_TOP_FLANGE_WIDTH, girder_index)        * 1000,
+            tf_top=_gv(inp, KEY_MP_GIRDER_TOP_FLANGE_THICKNESS, girder_index)    * 1000,
+            bf_bot=_gv(inp, KEY_MP_GIRDER_BOTTOM_FLANGE_WIDTH, girder_index)     * 1000,
+            tf_bot=_gv(inp, KEY_MP_GIRDER_BOTTOM_FLANGE_THICKNESS, girder_index) * 1000,
+            tw=_gv(inp, KEY_MP_GIRDER_WEB_THICKNESS, girder_index)               * 1000,
         )
 
         geom = bridge.grillage_geometry
@@ -454,10 +453,17 @@ class BridgeConfig:
         # returning required sizing instead of verification. bs_R_kN=0 means: resolve from
         # max(Vu) in run_design_check().
         def _optfloat(key, default=0.0):
-            v = ai.get(key)
             # Stiffener fields (bearing + intermediate) are stored per-member as
-            # "<key>.G{n}.M{m}", not under the bare base key — fall back to the
-            # first available girder/member value.
+            # "<key>.G{n}.M{m}", not under the bare base key. Prefer this girder's
+            # own value (when girder_index is given), then the legacy scalar key,
+            # then G1's value, then any available girder/member value as a last resort.
+            v = None
+            if girder_index is not None:
+                v = ai.get(f"{key}.G{girder_index + 1}.M1")
+            if v is None:
+                v = ai.get(key)
+            if v is None:
+                v = ai.get(f"{key}.G1.M1")
             if v is None:
                 for k in ai:
                     if k.startswith(key + ".G"):
@@ -531,8 +537,8 @@ class DemandEnvelope:
     #   V_sls_kN          — Vy from Envelope_SLS
     #   delta_live_mm     — Dy (vertical displacement) from individual live-only LCs
     #   delta_total_mm    — Dy from analyser's DL+LL case (DL = SW+DC+DD+SIDL, not DW)
-    #   stress_range_MPa  — computed from applied forces (Mz range over moving LCs / Ze)
-    #   shear_range_MPa   — computed from applied forces (Vy range over moving LCs / Aw)
+    #   stress_range_MPa  — Mz range (max−min) across all SLS_FREQUENT_* combinations / Ze
+    #   shear_range_MPa   — Vy range (max−min) across all SLS_FREQUENT_* combinations / Aw
     #
     # Raw 9-component fields (populated per-LC; all 9 DOF components from grillage output):
     #   Mx_kNm — torsion about the longitudinal axis
@@ -2055,8 +2061,6 @@ class DCREngine:
 
     # lc_type sets used to gate check categories.
     # An empty lc_type ("") means aggregate envelope — all checks are applicable.
-    _ULS_TYPES          = frozenset({"ULS"})
-    _SLS_TYPES          = frozenset({"SLS", "SLS_frequent", "SLS_rare", "SLS_quasi"})
     _SLS_FREQUENT_TYPES = frozenset({"SLS_frequent"})
     _LIVE_ONLY_TYPES    = frozenset({"live_only"})
     _DL_LL_TYPES        = frozenset({"DL_LL"})
@@ -2162,11 +2166,17 @@ class DCREngine:
 
         # Predicates for check gating based on lc_type.
         # An empty lc_type ("") = aggregate envelope → all checks applicable.
+        # _is_sls is "service-level by elimination": every non-ULS, non-Envelope-ULS
+        # combination — SLS/SLS_frequent, SW, DL, DD, DL_LL, live_only, individual, etc.
         t = d.lc_type
-        _not_uls   = (not t) or (t not in self._ULS_TYPES)
+        _is_sls    = (not t) or (t != "ULS")
         _sls_freq  = (not t) or (t in self._SLS_FREQUENT_TYPES)
         _live_only = (not t) or (t in self._LIVE_ONLY_TYPES)
         _dl_ll     = (not t) or (t in self._DL_LL_TYPES)
+
+        # ── CATEGORIES 1-3: Flexure / Shear / Interaction ─────────────────────
+        # Intentionally ungated — run for every load case & combination, so the
+        # per-LC table shows each LC's demand against the governing ULS capacity.
 
         # ── CATEGORY 1: Strength Limit State (Flexure) ───────────────────────
         self._add_check(1, "ULS Flexure", "Cl.603.3.1",
@@ -2244,18 +2254,20 @@ class DCREngine:
                                    f"λ_LT={lLT_s1:.4f}, χ_LT={chi_s1:.4f}"))
 
         # 4b. Construction Stage 2 — steel + wet concrete, cross-bracings in place, LLT = cb spacing.
-        ltb_s2 = c.details.get("buckling_resistance")
-        if not ltb_s2:
-            raise KeyError(
-                "'buckling_resistance' not found in capacity.details. "
-                "Ensure compute_all() has been run before calling run_all_checks()."
-            )
-        LLT_s2 = ltb_s2["LLT_mm"]
-        self._add_check(5, "LTB (Construction Stage)", "Cl.603.3.3.1",
-                         d.M_construction_kNm if d.M_construction_kNm > 0 else d.Mu_kNm,
-                         c.Mb_kNm, "kNm",
-                         note=(f"Stage 2: steel self-weight + wet concrete, LLT=cb_spacing={LLT_s2/1000:.1f}m; "
-                               f"λ_LT={c.lambda_LT:.4f}, χ_LT={c.chi_LT:.4f}"))
+        # Demand is the DL+LL combination only (mirrors Stage 1's SW-only gate above) — no ULS fallback.
+        if d.M_construction_kNm > 0:
+            ltb_s2 = c.details.get("buckling_resistance")
+            if not ltb_s2:
+                raise KeyError(
+                    "'buckling_resistance' not found in capacity.details. "
+                    "Ensure compute_all() has been run before calling run_all_checks()."
+                )
+            LLT_s2 = ltb_s2["LLT_mm"]
+            self._add_check(5, "LTB (Construction Stage)", "Cl.603.3.3.1",
+                             d.M_construction_kNm,
+                             c.Mb_kNm, "kNm",
+                             note=(f"Stage 2: steel self-weight + wet concrete, LLT=cb_spacing={LLT_s2/1000:.1f}m; "
+                                   f"λ_LT={c.lambda_LT:.4f}, χ_LT={c.chi_LT:.4f}"))
 
         # ── CATEGORY 5: Resistance to Longitudinal & Transverse Shear ─────────
         s_prov = c.stud_spacing_provided_mm
@@ -2321,7 +2333,8 @@ class DCREngine:
                              note=f"Nsc={d.Nsc:,}")
 
         # ── CATEGORY 7: Stress Limitation (SLS) ──────────────────────────────
-        # SLS stress checks do not apply to ULS load combinations.
+        # SLS stress checks apply to every service-level case (SLS / SLS_frequent / SW /
+        # DL / DD / DL_LL / live_only / individual, etc.) — only ULS combinations are excluded.
         sls_act = c.details.get("sls_actual_stresses")
         if sls_act is None:
             raise KeyError(
@@ -2329,19 +2342,19 @@ class DCREngine:
                 "Ensure compute_all() has been run."
             )
         # 7a. Concrete compressive stress (Cl.604.3.1)
-        if _not_uls and not sls_act.get("skipped") and c.sigma_c_actual_MPa > 0.0:
+        if _is_sls and not sls_act.get("skipped") and c.sigma_c_actual_MPa > 0.0:
             self._add_check(10, "SLS Concrete Stress", "Cl.604.3.1",
                              c.sigma_c_actual_MPa, c.sigma_c_limit_MPa, "MPa",
                              note=f"Limit = 0.48 fck = {c.sigma_c_limit_MPa:.1f} MPa")
 
         # 7b. Structural steel equivalent stress (Cl.604.3.1)
-        if _not_uls and not sls_act.get("skipped") and c.sigma_steel_equiv_MPa > 0.0:
+        if _is_sls and not sls_act.get("skipped") and c.sigma_steel_equiv_MPa > 0.0:
             self._add_check(11, "SLS Steel Equiv. Stress", "Cl.604.3.1",
                              c.sigma_steel_equiv_MPa, c.sigma_s_limit_MPa, "MPa",
                              note=f"fe = √(fbc²+fp²+fbc·fp+3τ²) ≤ 0.9fy = {c.sigma_s_limit_MPa:.1f} MPa")
 
         # 7c. Rebar tensile stress (Cl.604.3.1 / IRC 112 Cl.12.2.2)
-        if _not_uls and not sls_act.get("skipped") and c.sigma_rebar_actual_MPa > 0.0 and c.sigma_rebar_limit_MPa > 0.0:
+        if _is_sls and not sls_act.get("skipped") and c.sigma_rebar_actual_MPa > 0.0 and c.sigma_rebar_limit_MPa > 0.0:
             self._add_check(12, "SLS Rebar Stress", "Cl.604.3.1",
                              c.sigma_rebar_actual_MPa, c.sigma_rebar_limit_MPa, "MPa",
                              note=f"Limit = 0.80 fyk = {c.sigma_rebar_limit_MPa:.1f} MPa")
@@ -2359,8 +2372,8 @@ class DCREngine:
                              d.delta_total_mm, c.defl_limit_total_mm, "mm",
                              note="Limit = L/600")
 
-        # Crack control — applies for SLS combinations and individual LCs, not ULS.
-        if _not_uls and c.As_min_crack_mm2 > 0.0 and c.As_provided_crack_mm2 > 0.0:
+        # Crack control — geometry-only check (Cl.604.4), independent of load combination.
+        if c.As_min_crack_mm2 > 0.0 and c.As_provided_crack_mm2 > 0.0:
             self._add_check(15, "Crack Control (As_min)", "Cl.604.4",
                              c.As_min_crack_mm2, c.As_provided_crack_mm2, "mm²",
                              note=(f"As_min={c.As_min_crack_mm2:.0f} mm², "
@@ -2828,10 +2841,8 @@ def _extract_demands_from_analysis_results(
     _uls_seismic_lcs  = list(lc_groups.get("uls_seismic",       lc_groups.get("ULS_seismic",       [])))
     _uls_acc_lcs      = list(lc_groups.get("uls_accidental",    lc_groups.get("ULS_accidental",    [])))
     _uls_all_lcs      = _uls_basic_lcs + _uls_seismic_lcs + _uls_acc_lcs
-    # DL+LL combination case from analyser (DL = SW+DC+DD+SIDL, not DW).
-    _dl_ll_lcs = list(lc_groups.get("dl_ll_envelope",
-                 lc_groups.get("DL_LL_envelope",
-                 lc_groups.get("service_total", []))))
+    # DL+LL combination case from analyser's create_dl_ll_combination(), e.g. "1.0 DL + 1.0 LL".
+    _dl_ll_lcs = list(lc_groups.get("dl_ll", []))
     # Analyser-provided pre-combined envelopes (single load case each).
     _uls_env_lcs = list(lc_groups.get("envelope_uls", lc_groups.get("Envelope_ULS", [])))
     _sls_env_lcs = list(lc_groups.get("envelope_sls", lc_groups.get("Envelope_SLS", [])))
@@ -2847,7 +2858,6 @@ def _extract_demands_from_analysis_results(
     # Single-LC handles used directly for demand extraction (None = case not available → skip).
     _uls_env_lc  = str(_uls_env_lcs[0])    if _uls_env_lcs    else None
     _sls_env_lc  = str(_sls_env_lcs[0])    if _sls_env_lcs    else None
-    _fatigue_lc  = str(_sls_frequent_lcs[0]) if _sls_frequent_lcs else None
     _dl_ll_lc    = str(_dl_ll_lcs[0])      if _dl_ll_lcs      else None
     _sw_lc       = str(_sw_lcs[0])         if _sw_lcs         else None
 
@@ -2958,27 +2968,30 @@ def _extract_demands_from_analysis_results(
             except Exception:
                 pass
 
-        # (4) Fatigue stress/shear ranges — from first frequent SLS case only (IRC 22 Cl.604.5).
+        # (4) Fatigue stress/shear ranges — true range (max − min) across ALL SLS_FREQUENT_*
+        # combinations (IRC 22 Cl.604.5), matching the Vr_kN range pattern below.
         stress_range_MPa = shear_range_MPa = 0.0
-        if _fatigue_lc:
+        if _sls_frequent_lcs:
             try:
                 ds = analysis_results.ds
                 mz_all = np.concatenate([
-                    np.asarray(ds.forces.sel(Loadcase=_fatigue_lc, Element=elements,
+                    np.asarray(ds.forces.sel(Loadcase=_sls_frequent_lcs, Element=elements,
                                Component=c).values, dtype=float).flatten()
                     for c in ("Mz_i", "Mz_j")
                 ])
                 mz_all = mz_all[~np.isnan(mz_all)]
                 if mz_all.size and Ze_steel_mm3 > 0:
-                    stress_range_MPa = float(np.abs(mz_all).max()) * 1000.0 / Ze_steel_mm3
+                    mz_range_Nm = max(float(mz_all.max()), 0.0) - min(float(mz_all.min()), 0.0)
+                    stress_range_MPa = mz_range_Nm * 1000.0 / Ze_steel_mm3
                 vy_all = np.concatenate([
-                    np.asarray(ds.forces.sel(Loadcase=_fatigue_lc, Element=elements,
+                    np.asarray(ds.forces.sel(Loadcase=_sls_frequent_lcs, Element=elements,
                                Component=c).values, dtype=float).flatten()
                     for c in ("Vy_i", "Vy_j")
                 ])
                 vy_all = vy_all[~np.isnan(vy_all)]
                 if vy_all.size and Aw_mm2 > 0:
-                    shear_range_MPa = float(np.abs(vy_all).max()) / Aw_mm2
+                    vy_range_N = max(float(vy_all.max()), 0.0) - min(float(vy_all.min()), 0.0)
+                    shear_range_MPa = vy_range_N / Aw_mm2
             except Exception:
                 pass
 
@@ -3051,7 +3064,9 @@ def _extract_demands_from_analysis_results(
             # (Vr_kN) and constants (Nsc) stay at girder/config level.
             _d_live  = round(Dy / stiffness_ratio, 3) if lc_t == "live_only" else 0.0
             _d_total = round(Dy / stiffness_ratio, 3) if lc_t == "DL_LL" else 0.0
-            _is_sls = lc_t in {"SLS", "SLS_frequent", "individual"}
+            # Service-level by elimination — every non-ULS LC (SW, DL, DD, DL_LL, live_only,
+            # SLS, SLS_frequent, individual, etc.) is eligible for the SLS stress checks.
+            _is_sls = lc_t != "ULS"
             _m_sls  = round(Mz, 2) if _is_sls else 0.0
             _v_sls  = round(Vy, 2) if _is_sls else 0.0
             # Construction moment: this LC's Mz when it IS the DL+LL case
@@ -3252,8 +3267,29 @@ def run_design_check(
         config.stiffener.bs_R_kN = max_Vu
         print(f"  [INFO] bs_R_kN not set — using max Vu = {max_Vu:.1f} kN as bearing reaction default")
 
-    for g_name, g_demand in per_girder_demands.items():
-        g_cap = IRC22CapacityCalculator(config).compute_all(
+    # Per-girder configs — when a bridge is available, each girder gets its own
+    # BridgeConfig (its own section dimensions) instead of sharing one representative
+    # config, so capacity (stud spacing, transverse shear, flexure/shear, …) reflects
+    # that girder's actual geometry. Without a bridge (config supplied directly by the
+    # caller) there is no per-girder data to draw from, so every girder shares `config`.
+    per_girder_configs: Dict[str, "BridgeConfig"] = {}
+
+    for idx, (g_name, g_demand) in enumerate(per_girder_demands.items()):
+        if plate_girder_bridge is not None:
+            try:
+                g_config = BridgeConfig.from_plate_girder_bridge(
+                    plate_girder_bridge, girder_index=idx
+                )
+                if g_config.stiffener is None:
+                    g_config.stiffener = StiffenerConfig()
+                g_config.stiffener.bs_R_kN = config.stiffener.bs_R_kN
+            except Exception:
+                g_config = config
+        else:
+            g_config = config
+        per_girder_configs[g_name] = g_config
+
+        g_cap = IRC22CapacityCalculator(g_config).compute_all(
             Vu_kN=g_demand.Vu_kN,
             stress_range_MPa=g_demand.stress_range_MPa,
             M_sls_kNm=g_demand.M_sls_kNm,
@@ -3314,7 +3350,7 @@ def run_design_check(
                 for chk in g_engine.checks
             ],
             "category_urs": g_cat_urs,
-            "per_lc": _compute_per_lc_dcr(config, g_lc),
+            "per_lc": _compute_per_lc_dcr(g_config, g_lc),
             "sls_fibre_stresses": g_cap.details.get("sls_actual_stresses") or {},
             "_engine"  : g_engine,
             "_capacity": g_cap,
@@ -3328,6 +3364,7 @@ def run_design_check(
     demand    = per_girder_demands[ctrl_name]
     capacity  = ctrl.pop("_capacity")
     engine    = ctrl.pop("_engine")
+    config    = per_girder_configs[ctrl_name]   # that girder's own section/material config
     for g in per_girder_results.values():
         g.pop("_engine", None)
         g.pop("_capacity", None)
