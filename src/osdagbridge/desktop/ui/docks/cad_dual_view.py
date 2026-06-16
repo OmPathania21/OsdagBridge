@@ -172,6 +172,8 @@ class BridgeDualCADWidget(QWidget):
         if KEY_SKEW_ANGLE in input_dict:
             if input_dict[KEY_SKEW_ANGLE] is not None:
                 params['skew_angle'] = float(input_dict[KEY_SKEW_ANGLE])
+            else:
+                params['skew_angle'] = 0
         
         # Map number of girders
         if KEY_TS_NO_OF_GIRDERS in input_dict:
