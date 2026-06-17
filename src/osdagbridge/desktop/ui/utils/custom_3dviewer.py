@@ -340,20 +340,21 @@ class CustomViewer3d(qtViewer3d):
         self._resize_navcube()
         self._position_navcube()
         self._position_axis_triad()
-        # Re-show the navcube when the tab is restored or the window is un-minimized.
-        # Only show it if OCC has already been initialised (_navcube_sync set).
         if (
             hasattr(self, "navcube") and self.navcube
             and getattr(self, "_navcube_sync", None) is not None
         ):
-            self.navcube.show()
-            self.navcube.raise_()
-        # Re-show axis triad if it was already started (timer was running before hide)
+            QTimer.singleShot(0, self._deferred_show_navcube)
         if hasattr(self, "_axis_triad") and self._axis_triad:
             at = self._axis_triad
             if getattr(at, "_started", False):
-                at.show()
-                at.raise_()
+                QTimer.singleShot(0, lambda: (at.show(), at.raise_()))
+
+    def _deferred_show_navcube(self):
+        self._resize_navcube()
+        self._position_navcube()
+        self.navcube.show()
+        self.navcube.raise_()
 
     def hideEvent(self, event):
         if hasattr(self, "navcube") and self.navcube:
@@ -851,10 +852,8 @@ class CustomViewer3d(qtViewer3d):
 
         if self._navcube_sync is None:
             self._navcube_sync = OCCNavCubeSync(self.view, self.navcube)
-        self._position_navcube()
-        self.navcube.show()
-        self.navcube.raise_()
-        QTimer.singleShot(150, self._show_navcube_when_ready)
+
+        QTimer.singleShot(0, self._show_navcube_when_ready)
 
         # Show axis triad (pure Qt — no OCC init needed)
         if hasattr(self, "_axis_triad") and self._axis_triad:
@@ -865,9 +864,12 @@ class CustomViewer3d(qtViewer3d):
     def _show_navcube_when_ready(self):
         self._resize_navcube()
         self._position_navcube()
+        self._position_axis_triad()
         if hasattr(self.navcube, "mark_ready"):
             self.navcube.mark_ready()
         self.navcube.update()
+        QTimer.singleShot(100, self._deferred_show_navcube)
+        QTimer.singleShot(50, self._position_navcube)
 
     # ------------------------------------------------------------------
     # Mouse Press
