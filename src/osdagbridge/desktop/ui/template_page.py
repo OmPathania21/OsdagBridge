@@ -189,23 +189,6 @@ class CustomWindow(QWidget):
 
         self.init_ui()
 
-        # Temporary test defaults
-        self.findChild(QLineEdit, "geometry.span").setText("28")
-        self.findChild(QLineEdit, "geometry.carriageway_width").setText("9")
-        self.input_dict["project.location"] = {
-            "data": {"latitude": "21.945075", "longitude": "78.633310"},
-            "method": "map",
-            "weather_data": {
-                "max_temp": 47.6,
-                "min_temp": 1.1,
-                "wind_speed": 39,
-                "z_value": 0.16,
-                "zone": "3",
-            },
-        }
-        # self.common_design_func(trigger="Additional Inputs")
-
-
     def on_export_finished(self, success, msg):
         """Main-thread handler for export results."""
         from PySide6.QtWidgets import QMessageBox

@@ -220,8 +220,8 @@ class BridgeInputValidator:
         elif key == KEY_WC_THICKNESS:
             v = self._to_float(inputs.get(key))
             if v is None: return 0.0, "Wearing course thickness must be a numeric value."
-            if v < 0.0:   return 0.0, "Wearing course thickness is outside the practical range allowed in the software."
-            if v > 10.0:  return 10.0, "Wearing course thickness is outside the practical range allowed in the software."
+            if v < 0.0:   return 0.0, "Wearing course thickness must be greater than 0.0 mm."
+            if v > 150.0:  return 150.0, "Wearing course thickness must be less than 150.0 mm."
 
         # ── Lane Details ───────────────────────────────────────────────────────
         elif key == KEY_WC_LD_LANE_TABLE_COUNT:

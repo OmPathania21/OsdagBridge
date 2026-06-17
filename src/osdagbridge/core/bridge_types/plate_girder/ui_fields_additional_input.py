@@ -224,7 +224,7 @@ _RAILING_TAB_SCHEMA = {
             "fields": [
                 {
                     "id": KEY_RL_WIDTH,
-                    "label": "Width (mm):",
+                    "label": "Width (m):",
                     "type": TYPE_TEXTBOX,
                     "on_text_changed": "on_layout_width_changed",
                 }
@@ -302,6 +302,7 @@ _WEARING_COURSE_TAB_SCHEMA = {
 _LANE_DETAILS_TAB_SCHEMA = {
     "id": KEY_WC_LD_TAB,
     "label": "Lane Details",
+    "disable": True,
     "top_margin": 20,
     "rows": [
         {
@@ -383,6 +384,7 @@ TYPICAL_SECTION_SCHEMA = {
                         "id": KEY_TS_DECK_OVERHANG,
                         "label": "Deck Overhang Width (m):",
                         "type": TYPE_TEXTBOX,
+                        "read_only": True,
                         "on_editing_finished": "on_deck_overhang_changed",
                     },
                     {
@@ -412,8 +414,7 @@ TYPICAL_SECTION_SCHEMA = {
         _MEDIAN_TAB_SCHEMA,
         _RAILING_TAB_SCHEMA,
         _WEARING_COURSE_TAB_SCHEMA,
-        _LANE_DETAILS_TAB_SCHEMA, 
-        # Commented out lane details. Stop from rendering in UI.
+        _LANE_DETAILS_TAB_SCHEMA,
     ],
 }
 

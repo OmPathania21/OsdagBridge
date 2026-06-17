@@ -156,19 +156,19 @@ class AdditionalInputs(QDialog):
         # Normalize existing numeric text to 2 decimal places for consistent display
         self._normalize_numeric_texts(2)
 
-        # Print Additional Inputs Widget Tree--------------------------------------------
-        # def _print_widget_tree(root, indent=0):
-        #     """Print the full widget tree with objectNames for debugging findChild issues."""
-        #     from PySide6.QtWidgets import QWidget
-        #     node = root
-        #     name = node.objectName() or "<no name>"
-        #     cls  = type(node).__name__
-        #     print("  " * indent + f"{cls}  [{name}]")
-        #     for child in node.children():
-        #         if isinstance(child, QWidget):
-        #             _print_widget_tree(child, indent + 1)
-        
-        # _print_widget_tree(self)
+        # self._print_widget_tree()
+
+    # Print Additional Inputs Widget Tree--------------------------------------------
+    def _print_widget_tree(self, root, indent=0):
+        """Print the full widget tree with objectNames for debugging findChild issues."""
+        from PySide6.QtWidgets import QWidget
+        node = root
+        name = node.objectName() or "<no name>"
+        cls  = type(node).__name__
+        print("  " * indent + f"{cls}  [{name}]")
+        for child in node.children():
+            if isinstance(child, QWidget):
+                self._print_widget_tree(child, indent + 1)
 
     # ── Dialog Lifecycle ─────────────────────────────────────────────────────────
 
@@ -986,7 +986,7 @@ class AdditionalInputs(QDialog):
             width  = geom.get("railing_width")
             height = geom.get("railing_height")
             result = {KEY_RL_LOAD_VALUE: f"{load:.3f}"}
-            if width  is not None: result[KEY_RL_WIDTH]  = str(width)
+            if width  is not None: result[KEY_RL_WIDTH]  = f"{width / 1000:.3f}"
             if height is not None: result[KEY_RL_HEIGHT] = f"{height / 1000:.3f}"
             return result
 
@@ -1007,7 +1007,7 @@ class AdditionalInputs(QDialog):
             width  = geom.get("railing_width")
             height = geom.get("railing_height")
             result = {KEY_RL_LOAD_VALUE: f"{load:.3f}"}
-            if width  is not None: result[KEY_RL_WIDTH]  = str(width)
+            if width  is not None: result[KEY_RL_WIDTH]  = f"{width / 1000:.3f}"
             if height is not None: result[KEY_RL_HEIGHT] = f"{height / 1000:.3f}"
             return result
 

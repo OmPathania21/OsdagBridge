@@ -242,10 +242,10 @@ def _update_typical_section_defaults(input_dict: dict) -> None:
     _rl_height_m  = 1100 / 1e3                 # m    — IRC 5:2015 Cl.109.7.2.3 minimum
 
     _update(KEY_RL_TYPE,       "IRC 5 - RCC Railing")
-    _update(KEY_RL_WIDTH,      DEFAULT_RAILING_WIDTH)  # m
-    _update(KEY_RL_HEIGHT,     _rl_height_m)           # m
+    _update(KEY_RL_WIDTH,      DEFAULT_RAILING_WIDTH)        # m
+    _update(KEY_RL_HEIGHT,     _rl_height_m)                 # m
     _update(KEY_RL_LOAD_MODE,  "As per IRC 6")
-    _update(KEY_RL_LOAD_VALUE, _rl_load)               # kN/m
+    _update(KEY_RL_LOAD_VALUE, _rl_load)                     # kN/m
 
     # --- Wearing Course sub-tab ---
     # Density and thickness match on_wearing_material_changed() in typical_section_details.py

@@ -219,7 +219,7 @@ class BridgeDualCADWidget(QWidget):
 
         if KEY_CB_TYPE in input_dict:
             if input_dict[KEY_CB_TYPE] is not None:
-                params['crash_barrier_type'] = input_dict[KEY_CB_TYPE]
+                params[KEY_CB_TYPE] = input_dict[KEY_CB_TYPE]
 
         if KEY_CB_HEIGHT in input_dict:
             if input_dict[KEY_CB_HEIGHT] is not None:

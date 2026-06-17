@@ -215,6 +215,8 @@ class UIBuilder(QWidget):
                     filler_column_index=2,
                 )
                 tabs.addTab(tab_widget, tab_def.get("label", ""))
+                if tab_def.get("disable", False):
+                    tabs.setTabEnabled(tabs.count() - 1, False)
 
             def _resize_to_tab(idx, _tabs=tabs):
                 for i in range(_tabs.count()):
