@@ -759,6 +759,18 @@ class OutputDock(QWidget):
             except Exception as exc:
                 logger.warning("Could not capture cross bracing / end diaphragm figures: %s", exc)
 
+            # Analysis envelope plot: live plot widget → temp PNG → bytes → deleted.
+            # Switch the central area to the plots view first (like the CAD does) so
+            # the widget is visible and renders the right condition before capture.
+            try:
+                plots_widget = getattr(main_window, 'plots_widget', None)
+                if plots_widget is not None and hasattr(plots_widget, 'capture_for_report'):
+                    if hasattr(main_window, '_set_central_view'):
+                        main_window._set_central_view('plots')
+                    figure_data.update(plots_widget.capture_for_report())
+            except Exception as exc:
+                logger.warning("Could not capture envelope plot: %s", exc)
+
             cad_generator = {
                 'generator':   getattr(cad_3d_widget, 'generator', None),
                 'figure_data': figure_data,

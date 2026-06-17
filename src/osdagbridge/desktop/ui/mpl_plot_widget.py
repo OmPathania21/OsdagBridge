@@ -1286,3 +1286,116 @@ class MplPlotWidget(QWidget):
             if rb.isChecked() and rb.text() in _RICH_LABEL_TO_FORCE:
                 return _RICH_LABEL_TO_FORCE[rb.text()]
         return "Fy"
+
+    def capture_for_report(self) -> dict:
+        """Capture the Envelope ULS analysis plots for the report.
+
+        Mirrors CAD3DWindow.capture_for_report(): drives the live plot to each
+        required condition, forces an isometric view, saves the figure to a
+        NamedTemporaryFile, reads the PNG bytes, then deletes the temp file
+        immediately. Captures:
+          • bm_envelope — Mz (bending moment), display value Max, nodes ON
+          • sf_envelope — Vy (shear),          display value Max + Min, nodes ON
+        The user's previous selection/display state is restored afterwards.
+        Returns {attr: bytes} — PNG data in RAM only, nothing left on disk.
+        """
+        import os, tempfile, logging
+        from PySide6.QtWidgets import QComboBox
+        from osdagbridge.desktop.ui.utils.custom_widgets import CustomRadioButton
+        _log = logging.getLogger(__name__)
+
+        if self._ds_all is None or self._output_dock is None:
+            _log.warning("capture_for_report: plots not ready — skipped")
+            return {}
+
+        lc_combo = self._output_dock.output_widget.findChild(QComboBox, "analysis.load_combination")
+        radios   = {rb.text(): rb for rb in self._output_dock.output_widget.findChildren(CustomRadioButton)}
+
+        # Remember current selection + display state to restore afterwards
+        prev_lc    = lc_combo.currentText() if lc_combo else None
+        prev_rb    = next((t for t, rb in radios.items() if rb.isChecked()), None)
+        prev_nodes = self._show_nodes
+        prev_max   = self._show_max
+        prev_min   = self._show_min
+        prev_all   = self._show_all_vals
+
+        def _snap(force_label, show_max, show_min, loadcase="Envelope ULS"):
+            """Drive to loadcase + force, render isometric, return PNG bytes."""
+            tmp_path = None
+            try:
+                rb = radios.get(force_label)
+                if lc_combo is None or rb is None:
+                    _log.warning("capture_for_report: %s radio not found", force_label)
+                    return None
+                lc_combo.setCurrentText(loadcase)          # load case combination
+                rb.setChecked(True)                        # force component
+                self._show_nodes    = True                 # nodes turned on
+                self._show_max      = show_max             # display value: Max
+                self._show_min      = show_min             # display value: Min
+                self._show_all_vals = False
+                self.update_plot()                         # rebuild + apply states
+
+                # Force an isometric view for the captured picture
+                if self._fig.axes:
+                    ax = self._fig.axes[0]
+                    if hasattr(ax, 'view_init'):
+                        ax.view_init(elev=30, azim=-60)    # isometric
+                        self._fig.canvas.draw_idle()
+
+                tmp = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+                tmp_path = tmp.name
+                tmp.close()
+                self._fig.savefig(tmp_path, format='png', dpi=200,
+                                  bbox_inches='tight', pad_inches=0, facecolor='white')
+                # Crop residual white border that bbox_inches='tight' leaves on 3-D axes
+                try:
+                    from PIL import Image, ImageChops
+                    import io
+                    img = Image.open(tmp_path).convert('RGB')
+                    bg  = Image.new('RGB', img.size, (255, 255, 255))
+                    diff = ImageChops.difference(img, bg)
+                    bbox = diff.getbbox()
+                    if bbox:
+                        pad = 4   # leave a tiny 4-px breathing room
+                        w, h = img.size
+                        bbox = (max(0, bbox[0] - pad), max(0, bbox[1] - pad),
+                                min(w, bbox[2] + pad), min(h, bbox[3] + pad))
+                        img = img.crop(bbox)
+                    buf = io.BytesIO()
+                    img.save(buf, format='PNG')
+                    return buf.getvalue()
+                except Exception:
+                    pass
+                with open(tmp_path, 'rb') as fh:
+                    return fh.read()
+            except Exception as exc:
+                _log.warning("capture_for_report: %s failed: %s", force_label, exc)
+            finally:
+                if tmp_path and os.path.exists(tmp_path):
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError:
+                        pass
+            return None
+
+        data = {}
+        b = _snap("M<sub>z</sub>", show_max=True,  show_min=False)                         # bending moment: Max
+        if b: data['bm_envelope'] = b
+        b = _snap("V<sub>y</sub>", show_max=True,  show_min=True)                          # shear: Max + Min
+        if b: data['sf_envelope'] = b
+        b = _snap("D<sub>y</sub>", show_max=True,  show_min=False, loadcase="1.0 LL")      # deflection Dy (1.0 LL): Max
+        if b: data['defl_ll'] = b
+
+        # Restore the user's previous selection + display state
+        self._show_nodes    = prev_nodes
+        self._show_max      = prev_max
+        self._show_min      = prev_min
+        self._show_all_vals = prev_all
+        if prev_lc is not None and lc_combo is not None:
+            lc_combo.setCurrentText(prev_lc)
+        if prev_rb is not None and radios.get(prev_rb) is not None:
+            radios[prev_rb].setChecked(True)
+        self.update_plot()
+
+        _log.info("capture_for_report: %d plot(s) in RAM", len(data))
+        return data
