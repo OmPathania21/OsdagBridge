@@ -74,29 +74,37 @@ _STYLE_DEFAULT = """
         border: none;
         background: transparent;
         border-radius: 4px;
+        outline: none;
     }
     QPushButton:hover {
         background-color: rgba(150, 150, 150, 60);
     }
+    QPushButton:focus {
+        outline: none;
+    }
 """
 
-# Active style applied to toggle buttons — green background when :checked
+# Active style applied to toggle buttons — grey background when :checked
 _STYLE_CHECKABLE = """
     QPushButton {
         border: none;
         background: transparent;
         border-radius: 4px;
+        outline: none;
     }
     QPushButton:hover {
         background-color: rgba(150, 150, 150, 60);
     }
+    QPushButton:focus {
+        outline: none;
+    }
     QPushButton:checked {
-        background-color: rgba(46, 125, 50, 140);
-        border: 1px solid rgba(46, 125, 50, 200);
+        background-color: rgba(130, 130, 130, 80);
+        border: none;
         border-radius: 4px;
     }
     QPushButton:checked:hover {
-        background-color: rgba(46, 125, 50, 180);
+        background-color: rgba(130, 130, 130, 110);
     }
 """
 
