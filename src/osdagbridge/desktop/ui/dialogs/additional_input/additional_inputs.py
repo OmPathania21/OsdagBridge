@@ -1,4 +1,4 @@
-"""
+﻿"""
 Additional Inputs Widget for Highway Bridge Design
 Provides detailed input fields for manual bridge parameter definition
 """
@@ -17,15 +17,9 @@ from osdagbridge.core.utils.common import *
 from osdagbridge.desktop.ui.utils.custom_titlebar import CustomTitleBar
 from osdagbridge.desktop.ui.dialogs.tabs.common import apply_field_style, create_action_button_bar
 from osdagbridge.desktop.ui.dialogs.custom_messagebox import CustomMessageBox, MessageBoxType
-from osdagbridge.desktop.ui.dialogs.additional_input.tabs.typical_section.typical_section_details import TypicalSectionDetailsTab
 from osdagbridge.desktop.ui.utils.custom_widgets import SmartCursorComboBoxView
 from osdagbridge.desktop.ui.dialogs.additional_input.ui_builder.common_ui_builder import UIBuilder
-from osdagbridge.core.bridge_types.plate_girder.ui_fields_additional_input import (
-    DESIGN_OPTIONS_SCHEMA,
-    DESIGN_OPTIONS_CONT_SCHEMA,
-    SUPPORT_CONDITIONS_SCHEMA,
-    MEMBER_PROPERTIES_SCHEMA,
-)
+from osdagbridge.core.bridge_types.plate_girder.ui_fields_additional_input import ADDITIONAL_INPUTS_SCHEMA
 from osdagbridge.desktop.ui.dialogs.additional_input.ui_builder._load_combination_widget import LoadCombinationWidget
 from osdagbridge.desktop.ui.dialogs.additional_input.ui_builder.common_ui_builder import AdaptiveWidget
 
@@ -42,8 +36,6 @@ class AdditionalInputs(QDialog):
 
     def __init__(
         self,
-        footpath_value="None",
-        carriageway_width=7.5,
         parent=None,
     ):
         super().__init__(parent)
@@ -65,11 +57,6 @@ class AdditionalInputs(QDialog):
         self.resize(1024, 850)
         self.setMinimumSize(900, 520)
         self.setSizeGripEnabled(True)
-        self.footpath_value = footpath_value
-        self.carriageway_width = carriageway_width
-        self._member_properties_editable = True
-        self._last_saved_data = {}
-        self.saved_values = {}  # Store all input values here
         self.init_ui()
         self.setStyleSheet("""
             QDialog {
@@ -140,68 +127,17 @@ class AdditionalInputs(QDialog):
 
         self._last_top_tab_index = 0
 
-        # Sub-Tab 1: Typical Section Details
-        self.typical_section_tab = TypicalSectionDetailsTab(
-            self.carriageway_width,
-            additional_input_instance=self)
-        self.typical_section_tab.update_footpath_value(self.footpath_value)
-        self.tabs.addTab(self.typical_section_tab, "Typical Section Details")
-
-        # Sub-Tab 2: Member Properties
-        self.section_properties_tab = UIBuilder(
-            owner=self,
-            schema=MEMBER_PROPERTIES_SCHEMA,
-            card_title="",
-            with_scroll=False,
-            main_widget_object_name="member_properties.main",
-            additional_input_instance=self,
-        )
-        self.tabs.addTab(self.section_properties_tab, "Member Properties")
-
-        # Sub-Tab 3: Loading
-        from osdagbridge.core.bridge_types.plate_girder.ui_fields_additional_input import LOADING_TAB_SCHEMA
-        self.loading_tab = UIBuilder(
-            owner=self,
-            schema=LOADING_TAB_SCHEMA,
-            card_title="",
-            with_scroll=False,
-            main_widget_object_name="loading.main",
-            additional_input_instance=self,
-        )
-        self.tabs.addTab(self.loading_tab, "Loading")
-
-        # self.support_tab = UIBuilder(
-        #     owner=self,
-        #     schema=SUPPORT_CONDITIONS_SCHEMA,
-        #     card_title="",
-        #     with_scroll=True,
-        #     main_widget_object_name="support_conditions.main",
-        #     additional_input_instance=self,
-        # )
-        self.support_tab = None
-        # self.tabs.addTab(self.support_tab, "Support Conditions")
-
-        # Sub-Tab 5: Analysis/Design Options
-        self.design_options_tab = UIBuilder(
-            owner=self,
-            schema=DESIGN_OPTIONS_SCHEMA,
-            card_title="",
-            with_scroll=True,
-            main_widget_object_name="design_options.main",
-            additional_input_instance=self,
-        )
-        self.tabs.addTab(self.design_options_tab, "Analysis/Design Options")
-
-        # Sub-Tab 6: Design Options (Cont.)
-        self.design_options_cont_tab = UIBuilder(
-            owner=self,
-            schema=DESIGN_OPTIONS_CONT_SCHEMA,
-            card_title="",
-            with_scroll=True,
-            main_widget_object_name="design_options_cont.main",
-            additional_input_instance=self,
-        )
-        self.tabs.addTab(self.design_options_cont_tab, "Design Options (Cont.)")
+        for tab_def in ADDITIONAL_INPUTS_SCHEMA:
+            tab = UIBuilder(
+                owner=self,
+                schema=tab_def["schema"],
+                card_title="",
+                main_widget_object_name=tab_def["main_id"],
+                additional_input_instance=self,
+                with_scroll=tab_def.get("with_scroll", False),
+                filler_column_index=tab_def.get("filler_column_index", 2),
+            )
+            self.tabs.addTab(tab, tab_def["label"])
 
         main_layout.addWidget(self.tabs)
 
@@ -220,13 +156,26 @@ class AdditionalInputs(QDialog):
         # Normalize existing numeric text to 2 decimal places for consistent display
         self._normalize_numeric_texts(2)
 
+        # Print Additional Inputs Widget Tree--------------------------------------------
+        # def _print_widget_tree(root, indent=0):
+        #     """Print the full widget tree with objectNames for debugging findChild issues."""
+        #     from PySide6.QtWidgets import QWidget
+        #     node = root
+        #     name = node.objectName() or "<no name>"
+        #     cls  = type(node).__name__
+        #     print("  " * indent + f"{cls}  [{name}]")
+        #     for child in node.children():
+        #         if isinstance(child, QWidget):
+        #             _print_widget_tree(child, indent + 1)
+        
+        # _print_widget_tree(self)
+
     # ── Dialog Lifecycle ─────────────────────────────────────────────────────────
 
     def set_input_dictionary(self, input_dict: dict):  # lifecycle: sets default/working dicts and wires END_CONNECTORS on first open
         self.default_input_dict = input_dict
         self.working_input_dict = deepcopy(input_dict)
 
-        self.typical_section_tab._sync_tab_active_states()
         self.set_defaults()
 
         self.default_input_dict.update(self.working_input_dict)
@@ -305,19 +254,19 @@ class AdditionalInputs(QDialog):
         self.working_input_dict[KEY_DESIGN_MODE] = normalized
         is_optimized = normalized == "Optimized"
 
-        # Sync AdaptiveWidgets (depth, flange widths, thickness fields)
+        # Sync AdaptiveWidgets (depth, flange widths, thickness fields) ---------------------------------
         from osdagbridge.desktop.ui.dialogs.additional_input.ui_builder.common_ui_builder import AdaptiveWidget
         for adaptive in self.findChildren(AdaptiveWidget):
             if getattr(adaptive, "_controller_id", "") == KEY_DESIGN_MODE:
                 adaptive.switch_mode(normalized)
 
-        # Type & Symmetry — disabled when Optimized
+        # Type & Symmetry — disabled when Optimized -------------------------------
         for key in [KEY_MP_GIRDER_TYPE, KEY_MP_GIRDER_SYMMETRY]:
             w = self.findChild(QWidget, key)
             if w:
                 w.setEnabled(not is_optimized)
 
-        # Web Type — read-only and forced to "Thin Web with ITS" when Optimized
+        # Web Type — read-only and forced to "Thin Web with ITS" when Optimized ----------------
         web_type_w = self.findChild(QComboBox, KEY_MP_GIRDER_WEB_TYPE)
         if web_type_w:
             web_type_w.setEnabled(not is_optimized)
@@ -326,7 +275,7 @@ class AdditionalInputs(QDialog):
                 web_type_w.setCurrentText("Thin Web with ITS")
                 web_type_w.blockSignals(False)
 
-        # Section Properties card — hide entirely when Optimized
+        # Section Properties card — hide entirely when Optimized -----------------------
         wrapper = self.findChild(QWidget, KEY_MP_GD_SP)
         if wrapper:
             wrapper.setVisible(not is_optimized)
@@ -336,7 +285,7 @@ class AdditionalInputs(QDialog):
         if wrapper:
             wrapper.setVisible(not is_optimized)
 
-        # Stiffener fields — all greyed out when Optimized
+        # Stiffener fields — all greyed out when Optimized----------------------------
         stiffener_keys = [
             KEY_MP_STIFFENER_NO_BEARING_STIFFENERS, KEY_MP_STIFFENER_SPACING,
             KEY_MP_STIFFENER_BEARING_THICKNESS, KEY_MP_STIFFENER_BEARING_OUTSTAND,
@@ -350,7 +299,7 @@ class AdditionalInputs(QDialog):
             if w:
                 w.setEnabled(not is_optimized)
 
-        # In Custom mode re-apply conditional sub-field states.
+        # In Custom mode re-apply conditional sub-field states------------------------
         if not is_optimized:
             w = self.findChild(QComboBox, KEY_MP_STIFFENER_INTERMEDIATE)
             if w:
@@ -359,12 +308,12 @@ class AdditionalInputs(QDialog):
             if w:
                 self._on_longitudinal_stiffener_changed(w.currentText())
 
-        # TODO: Must move it to refresh functionality after section_properties.py is removed
+        # TODO: Must move it to refresh functionality after section_properties.py is removed-----------------
         widget = self.findChild(QLineEdit, KEY_MP_GD_TOTAL_SPAN)
         if widget:
             widget.setText(str(self.working_input_dict.get(KEY_SPAN)))
 
-        # Sync segment table total span from KEY_SPAN so reopening with a changed span
+        # Sync segment table total span from KEY_SPAN so reopening with a changed span----------------
         # updates the last segment's end to match the new bridge span.
         from osdagbridge.desktop.ui.dialogs.additional_input.ui_builder._segment_table_widget import SegmentTableWidget
         seg_table = self.findChild(SegmentTableWidget, KEY_MP_GD_SEGMENT_TABLE)
@@ -372,7 +321,7 @@ class AdditionalInputs(QDialog):
             total_span = float(self.working_input_dict.get(KEY_SPAN))
             seg_table.set_total_span(total_span)
 
-        # End Diaphragm fields — disabled when Optimized
+        # End Diaphragm fields — disabled when Optimized----------------------
         from osdagbridge.core.utils.common import (
             KEY_MP_ED_BRACING_SECTION, KEY_MP_ED_BRACING_SECTION_DESIGNATION,
             KEY_MP_ED_TOP_CHORD_SECTION_TYPE, KEY_MP_ED_TOP_CHORD_SECTION_DESIG,
@@ -421,6 +370,9 @@ class AdditionalInputs(QDialog):
         # Recompute CB spacing from current span and no. of cross bracings
         spacing_w = self.findChild(QLineEdit, KEY_MP_CB_SPACING)
         self._on_cb_spacing_computed("", spacing_w)
+
+        # Apply Tab Active/Deactive States-------------------------------------
+        self.refresh_typical_section()
 
     def reset_active_tab_defaults(self) -> None:  # lifecycle: resets current tab's fields to default_input_dict values
         """
@@ -488,7 +440,10 @@ class AdditionalInputs(QDialog):
     def _save_inputs(self):  # on_change: validates all tabs then commits working_input_dict and emits CAD update signal
         
         self.default_input_dict.update(self.working_input_dict)
-        self.update_template_page_2d_cad.emit(self.typical_section_tab.cad_preview.params)
+        from osdagbridge.desktop.ui.docks.cad_cross_section import CrossSectionCADWidget
+        cad = self.findChild(CrossSectionCADWidget, KEY_TS_CAD_PREVIEW)
+        if cad:
+            self.update_template_page_2d_cad.emit(cad.params)
         
         CustomMessageBox(
             title="Saved",
@@ -505,24 +460,6 @@ class AdditionalInputs(QDialog):
             buttons=["OK"],
             dialogType=MessageBoxType.Warning,
         ).exec()
-
-    def _collect_all_values(self):  # utility: harvests current widget values into saved_values dict across all tabs
-        for widget in self.findChildren(QWidget):
-            widget_name = widget.objectName()
-            if not widget_name:
-                continue
-            if isinstance(widget, QLineEdit):
-                self.saved_values[widget_name] = widget.text()
-            elif isinstance(widget, QComboBox):
-                self.saved_values[widget_name] = widget.currentText()
-            elif isinstance(widget, QCheckBox):
-                self.saved_values[widget_name] = widget.isChecked()
-            elif isinstance(widget, LoadCombinationWidget):
-                self.saved_values[widget_name] = widget._data
-
-    def get_saved_data(self) -> dict:  # public API: returns the last saved properties snapshot
-        """Get the last saved properties data."""
-        return self._last_saved_data.copy()
 
     # ── Field Change Handling ────────────────────────────────────────────────────
 
@@ -595,12 +532,557 @@ class AdditionalInputs(QDialog):
                 except (ValueError, TypeError):
                     self.working_input_dict[key] = value
 
-    def _update_additional_input_cad(self):  # compute: pushes current working_input_dict to the Typical Section CAD preview
-        if hasattr(self, "typical_section_tab"):
-            if hasattr(self.typical_section_tab, "cad_preview"):
-                self.typical_section_tab.cad_preview.update_from_bridge_inputs(self.working_input_dict)
+    # ── Tab Active State Utility ─────────────────────────────────────────────────
 
-    # ── Member Properties > Girder Details ───────────────────────────────────────
+    def _apply_tab_active_conditions(self, conditions: list):
+        """General utility: enable/disable tabs from working_input_dict conditions.
+
+        For each condition, finds the content widget by objectName (tab_id + '.main'),
+        walks up to its parent QTabWidget, and calls setTabEnabled.
+        conditions: [{"tab_id": str, "key": str, "values": list}, ...]
+        """
+        d = self.working_input_dict
+        for cond in conditions:
+            content = self.findChild(QWidget, cond["tab_id"] + ".main")
+            if content is None:
+                continue
+            enabled = d.get(cond["key"]) in cond["values"]
+            # content.parentWidget() is the UIBuilder passed to addTab.
+            # Qt reparents it to an internal QStackedWidget, so the chain is:
+            #   main_widget → UIBuilder → QStackedWidget → QTabWidget
+            tab_widget = content.parentWidget()
+            if tab_widget is None:
+                continue
+            p = tab_widget.parentWidget()
+            while p is not None:
+                if isinstance(p, QTabWidget):
+                    idx = p.indexOf(tab_widget)
+                    if idx != -1:
+                        p.setTabEnabled(idx, enabled)
+                    break
+                p = p.parentWidget()
+
+    # ── Widget Active State Utility ──────────────────────────────────────────────
+
+    def _apply_widget_active_conditions(self, conditions: list):
+        """Show/hide individual widgets based on working_input_dict conditions.
+
+        Also toggles the paired label (widget_id + '_label') so both hide together.
+        conditions: [{"widget_id": str, "key": str, "values": list}, ...]
+        """
+        d = self.working_input_dict
+        for cond in conditions:
+            enabled = d.get(cond["key"]) in cond["values"]
+            widget = self.findChild(QWidget, cond["widget_id"])
+            if widget:
+                widget.setEnabled(enabled)
+            label = self.findChild(QLabel, cond["widget_id"] + "_label")
+            if label:
+                label.setEnabled(enabled)
+
+    # ── Typical Section Tab ──────────────────────────────────────────────────────────
+
+    _TYPICAL_SECTION_TAB_CONDITIONS = [
+        {"tab_id": KEY_MD_TAB, "key": KEY_INCLUDE_MEDIAN, "values": [VALUES_NO_YES[1]]},
+        {"tab_id": KEY_RL_TAB, "key": KEY_FOOTPATH,       "values": [VALUES_FOOTPATH[1], VALUES_FOOTPATH[2]]},
+    ]
+
+    _TYPICAL_SECTION_WIDGET_CONDITIONS = [
+        {"widget_id": KEY_TS_FOOTPATH_WIDTH,     "key": KEY_FOOTPATH, "values": [VALUES_FOOTPATH[1], VALUES_FOOTPATH[2]]},
+        {"widget_id": KEY_TS_FOOTPATH_THICKNESS, "key": KEY_FOOTPATH, "values": [VALUES_FOOTPATH[1], VALUES_FOOTPATH[2]]},
+    ]
+
+    def _update_additional_input_cad(self):  # compute: pushes current working_input_dict to the Typical Section CAD preview
+        from osdagbridge.desktop.ui.docks.cad_cross_section import CrossSectionCADWidget
+        cad = self.findChild(CrossSectionCADWidget, KEY_TS_CAD_PREVIEW)
+        if cad:
+            cad.update_from_bridge_inputs(self.working_input_dict)
+
+
+    def refresh_typical_section(self):  # refresh: enables/disables Typical Section subtabs and widgets per conditions
+        self._apply_tab_active_conditions(self._TYPICAL_SECTION_TAB_CONDITIONS)
+        self._apply_widget_active_conditions(self._TYPICAL_SECTION_WIDGET_CONDITIONS)
+
+        # Refresh crash barrier for correct compute value
+        cb_type = self.findChild(QComboBox, KEY_CB_TYPE)
+        if cb_type:
+            # To fix some issue of not updating first time
+            cur = cb_type.currentText()
+            cb_type.setCurrentText("IRC 5 - High Containment RCC Crash Barrier")
+            cb_type.setCurrentText(cur)
+
+        # Refresh median for correct compute value
+        md_type = self.findChild(QComboBox, KEY_MD_TYPE)
+        if md_type:
+            cur = md_type.currentText()
+            md_type.setCurrentText("IRC 5 - Raised Kerb")
+            md_type.setCurrentText(cur)
+
+        # Refresh railing for correct compute value
+        rl_type = self.findChild(QComboBox, KEY_RL_TYPE)
+        if rl_type:
+            cur = rl_type.currentText()
+            other = "IRC 5 - Steel Railing" if cur != "IRC 5 - Steel Railing" else "IRC 5 - RCC Railing"
+            rl_type.setCurrentText(other)
+            rl_type.setCurrentText(cur)
+
+        # Refresh wearing course for correct compute value
+        wc_mat = self.findChild(QComboBox, KEY_WC_MATERIAL)
+        if wc_mat:
+            cur = wc_mat.currentText()
+            other = "Bituminous" if cur != "Bituminous" else "Concrete"
+            wc_mat.setCurrentText(other)
+            wc_mat.setCurrentText(cur)
+
+    # ── Typical Section - Primary Fields ───────────────────────────────────────────────────────
+
+    def recalculate_girders(self, changed_field=None):  # on_text_changed: recalculates linked girder layout fields from current Typical Section widths
+        primary_edit = changed_field in {"spacing", "overhang", "girders"}
+        if not primary_edit:
+            changed_field = "girders"
+
+        for name in ("layout_notice.adjust", "layout_notice.warning"):
+            lbl = self.findChild(QLabel, name)
+            if lbl:
+                lbl.hide()
+                lbl.setText("")
+
+        d = self.working_input_dict
+
+        def _num(key, default=0.0):
+            v = d.get(key)
+            try:
+                return float(v) if v not in (None, "") else default
+            except (ValueError, TypeError):
+                return default
+
+        required_keys = (KEY_TS_GIRDER_SPACING, KEY_TS_DECK_OVERHANG, KEY_TS_NO_OF_GIRDERS)
+        if primary_edit and any(not str(d.get(k, "")).strip() for k in required_keys):
+            for k in required_keys:
+                d[k] = ""
+                w = self.findChild(QLineEdit, k)
+                if w:
+                    w.blockSignals(True)
+                    w.clear()
+                    w.blockSignals(False)
+            CustomMessageBox(
+                title="Layout",
+                text="Girder spacing, deck overhang, and number of girders are linked. Please enter all three.",
+                buttons=["OK"],
+                dialogType=MessageBoxType.Warning,
+            ).exec()
+            return False
+
+        if not d.get(KEY_CARRIAGEWAY_WIDTH):
+            return False
+
+        rl_raw = _num(KEY_RL_WIDTH, DEFAULT_RAILING_WIDTH)
+        footpath_str = str(d.get(KEY_FOOTPATH, "None")).strip()
+        n_footpaths = 2 if "Both" in footpath_str else (0 if footpath_str in ("None", "") else 1)
+
+        from osdagbridge.core.bridge_types.plate_girder.initial_sizing import BridgeConfigurationSolver
+        solver = BridgeConfigurationSolver(
+            carriageway_width=_num(KEY_CARRIAGEWAY_WIDTH),
+            crash_barrier_width=_num(KEY_CB_WIDTH, DEFAULT_CRASH_BARRIER_WIDTH),
+            footpath_width=_num(KEY_TS_FOOTPATH_WIDTH, 0.0),
+            railing_width=rl_raw / 1000.0 if rl_raw > 10 else rl_raw,
+            median_width=_num(KEY_MD_WIDTH, 0.0),
+            n_footpaths=n_footpaths,
+        )
+
+        spacing_old  = _num(KEY_TS_GIRDER_SPACING, DEFAULT_GIRDER_SPACING)
+        overhang_old = _num(KEY_TS_DECK_OVERHANG, 0.0)
+        girders_old  = int(_num(KEY_TS_NO_OF_GIRDERS, 2))
+
+        try:
+            result = solver._solve_layout(
+                no_of_girders=girders_old,
+                girder_spacing=spacing_old,
+                deck_overhang=overhang_old,
+                changed_field=changed_field,
+            )
+        except ValueError as exc:
+            CustomMessageBox(title="Layout", text=str(exc), buttons=["OK"], dialogType=MessageBoxType.Warning).exec()
+            return False
+
+        updates = {
+            KEY_TS_GIRDER_SPACING: (result.girder_spacing, f"{result.girder_spacing:.2f}"),
+            KEY_TS_DECK_OVERHANG:  (result.deck_overhang,  f"{result.deck_overhang:.2f}"),
+            KEY_TS_NO_OF_GIRDERS:  (result.no_of_girders,  str(int(result.no_of_girders))),
+            KEY_TS_OVERALL_WIDTH:  (result.overall_width,  f"{result.overall_width:.2f}"),
+        }
+        for key, (val, text) in updates.items():
+            d[key] = val
+            w = self.findChild(QLineEdit, key)
+            if w:
+                w.blockSignals(True)
+                w.setText(text)
+                w.blockSignals(False)
+        d[KEY_TS_NO_OF_FOOTPATHS] = n_footpaths
+
+        reason_parts = []
+        if abs(result.girder_spacing - spacing_old) > 0.01:
+            reason_parts.append(f"spacing {spacing_old:.2f} -> {result.girder_spacing:.2f}")
+        if abs(result.deck_overhang - overhang_old) > 1e-6:
+            reason_parts.append(f"overhang {overhang_old:.2f} -> {result.deck_overhang:.2f}")
+        if result.no_of_girders != girders_old:
+            reason_parts.append(f"girders {girders_old} -> {result.no_of_girders}")
+
+        if result.deck_overhang > result.girder_spacing + 1e-6:
+            lbl = self.findChild(QLabel, "layout_notice.warning")
+            if lbl:
+                lbl.setText(f"Warning: overhang ({result.deck_overhang:.2f} m) exceeds spacing ({result.girder_spacing:.2f} m)")
+                lbl.show()
+        elif reason_parts:
+            lbl = self.findChild(QLabel, "layout_notice.adjust")
+            if lbl:
+                lbl.setText(f"Values adjusted: {', '.join(reason_parts)}")
+                lbl.show()
+
+        return True
+
+    def on_girder_spacing_changed(self):  # on_editing_finished: recalculates deck overhang after girder spacing changes
+        field = self.findChild(QLineEdit, KEY_TS_GIRDER_SPACING)
+        if field is None:
+            return
+        text = field.text().strip()
+        scan = text[1:] if text[:1] in "+-" else text
+        if text and not (scan.isdigit() or (scan.count(".") == 1 and scan.replace(".", "").isdigit())):
+            return
+        self.recalculate_girders("spacing")
+
+    def on_deck_overhang_changed(self):  # on_editing_finished: recalculates girder spacing after deck overhang changes
+        field = self.findChild(QLineEdit, KEY_TS_DECK_OVERHANG)
+        if field is None:
+            return
+        text = field.text().strip()
+        scan = text[1:] if text[:1] in "+-" else text
+        if text and not (scan.isdigit() or (scan.count(".") == 1 and scan.replace(".", "").isdigit())):
+            return
+        self.recalculate_girders("overhang")
+
+    def on_no_of_girders_changed(self):  # on_editing_finished: recalculates layout and dynamic girder keys after girder count changes
+        field = self.findChild(QLineEdit, KEY_TS_NO_OF_GIRDERS)
+        if field is None:
+            return
+        text = field.text().strip()
+        scan = text[1:] if text[:1] in "+-" else text
+        if text and not (scan.isdigit() or (scan.count(".") == 1 and scan.replace(".", "").isdigit())):
+            return
+        if self.recalculate_girders("girders"):
+            from osdagbridge.core.bridge_types.plate_girder.defaults import _on_no_of_girders_changed
+            _on_no_of_girders_changed(self.working_input_dict)
+
+    # ── Crash Barrier Sub-Tab ─────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _is_rcc_barrier(t: str) -> bool:
+        return t.startswith("IRC 5 - RCC Crash Barrier") or t.startswith("IRC 5 - High Containment RCC Crash Barrier")
+
+    @staticmethod
+    def _is_metallic_barrier(t: str) -> bool:
+        return t.startswith("IRC 5 - Metallic Crash Barrier")
+
+    def on_crash_barrier_type_changed(self, barrier_type: str):
+        is_rcc      = self._is_rcc_barrier(barrier_type)
+        is_metallic = self._is_metallic_barrier(barrier_type)
+        is_custom   = barrier_type == "Custom"
+
+        # Density & Area: only for RCC
+        for key in [KEY_CB_DENSITY, KEY_CB_AREA]:
+            w, lbl = self.findChild(QWidget, key), self.findChild(QLabel, key + "_label")
+            if w:   w.setVisible(is_rcc)
+            if lbl: lbl.setVisible(is_rcc)
+
+        # Post Spacing: only for Metallic
+        w, lbl = self.findChild(QWidget, KEY_CB_POST_SPACING), self.findChild(QLabel, KEY_CB_POST_SPACING + "_label")
+        if w:   w.setVisible(is_metallic)
+        if lbl: lbl.setVisible(is_metallic)
+
+        # All fixed fields disabled for non-custom; custom gets full edit access
+        for key in [KEY_CB_DENSITY, KEY_CB_WIDTH, KEY_CB_HEIGHT, KEY_CB_AREA, KEY_CB_LOAD]:
+            w = self.findChild(QLineEdit, key)
+            if w:
+                w.setEnabled(is_custom)
+
+        # Post Spacing editable for Metallic only (not shown for Custom)
+        spacing = self.findChild(QLineEdit, KEY_CB_POST_SPACING)
+        if spacing:
+            spacing.setEnabled(is_metallic)
+
+    def compute_crash_barrier_values(self, input_dict: dict) -> dict:
+        from osdagbridge.core.utils.codes.irc5_2015 import IRC5_2015
+        from osdagbridge.core.bridge_components.super_structure.crash_barrier.geometry import (
+            rigid_barrier_no_footpath_area, rigid_barrier_with_railing_area, high_containment_barrier_area,
+        )
+        from osdagbridge.core.bridge_components.super_structure.crash_barrier.properties import (
+            rigid_barrier_no_footpath_load, rcc_railing_load, steel_railing_load,
+            high_containment_barrier_load, metallic_edge_barrier_load,
+        )
+
+        from osdagbridge.core.utils.codes.keyfile import KEY_RAILING_TYPE as _RL_KEYS
+        barrier_type = input_dict.get(KEY_CB_TYPE, "IRC 5 - RCC Crash Barrier")
+        footpath     = input_dict.get(KEY_FOOTPATH, VALUES_FOOTPATH[0])
+        railing_type = input_dict.get(KEY_RL_TYPE, "")
+        has_footpath = footpath in (VALUES_FOOTPATH[1], VALUES_FOOTPATH[2])
+        railing_arg  = "steel" if "steel" in railing_type.lower() else "rcc"
+        railing_key  = _RL_KEYS[1] if railing_arg == "steel" else _RL_KEYS[0]
+
+        if barrier_type == "IRC 5 - RCC Crash Barrier":
+            if has_footpath:
+                geom = IRC5_2015.cl_109_6_3_shapes(
+                    KEY_CRASH_BARRIER_TYPE[2], footpath, railing_key, {}, KEY_RIGID_CRASH_BARRIER_TYPE[0]
+                )
+                area = rigid_barrier_with_railing_area(railing_arg)["barrier_area"]
+                load = (steel_railing_load if railing_arg == "steel" else rcc_railing_load)()["total_load_kN_per_m"]
+            else:
+                geom = IRC5_2015.cl_109_6_3_shapes(
+                    KEY_CRASH_BARRIER_TYPE[2], VALUES_FOOTPATH[0], None, {}, KEY_RIGID_CRASH_BARRIER_TYPE[0]
+                )
+                area = rigid_barrier_no_footpath_area()["barrier_area"]
+                load = rigid_barrier_no_footpath_load()["total_load_kN_per_m"]
+            return {
+                KEY_CB_DENSITY: f"{DEFAULT_CONCRETE_DENSITY:.1f}",
+                KEY_CB_WIDTH:   f"{geom[KEY_CB_WIDTH]  / 1000:.3f}",
+                KEY_CB_HEIGHT:  f"{geom[KEY_CB_HEIGHT] / 1000:.3f}",
+                KEY_CB_AREA:    f"{area / 1e6:.4f}",
+                KEY_CB_LOAD:    f"{load:.2f}",
+            }
+
+        elif barrier_type == "IRC 5 - High Containment RCC Crash Barrier":
+            geom = IRC5_2015.cl_109_6_3_shapes(
+                KEY_CRASH_BARRIER_TYPE[2], footpath, railing_type, {}, KEY_RIGID_CRASH_BARRIER_TYPE[1]
+            )
+            area = high_containment_barrier_area()["barrier_area"]
+            load = high_containment_barrier_load()["total_load_kN_per_m"]
+            return {
+                KEY_CB_DENSITY: f"{DEFAULT_CONCRETE_DENSITY:.1f}",
+                KEY_CB_WIDTH:   f"{geom[KEY_CB_WIDTH]  / 1000:.3f}",
+                KEY_CB_HEIGHT:  f"{geom[KEY_CB_HEIGHT] / 1000:.3f}",
+                KEY_CB_AREA:    f"{area / 1e6:.4f}",
+                KEY_CB_LOAD:    f"{load:.2f}",
+            }
+
+        elif self._is_metallic_barrier(barrier_type):
+            variant         = "Double" if "Double" in barrier_type else "Single"
+            crash_barrier_t = KEY_METALLIC_CRASH_BARRIER_TYPE[1 if variant == "Double" else 0]
+            geom = IRC5_2015.cl_109_6_3_shapes(
+                KEY_CRASH_BARRIER_TYPE[1], VALUES_FOOTPATH[0], None, {}, crash_barrier_t
+            )
+            load = metallic_edge_barrier_load(variant)["total_load_kN_per_m"]
+            return {
+                KEY_CB_WIDTH:  f"{geom[KEY_CB_WIDTH]  / 1000:.3f}",
+                KEY_CB_HEIGHT: f"{geom[KEY_CB_HEIGHT] / 1000:.3f}",
+                KEY_CB_LOAD:   f"{load:.2f}",
+            }
+
+        return {}
+
+    # ── Median Sub-Tab ────────────────────────────────────────────────────────────────────
+
+    def on_median_type_changed(self, median_type: str):
+        is_rcc      = median_type in ("IRC 5 - Raised Kerb", "IRC 5 - RCC Crash Barrier")
+        is_metallic = "Metallic" in median_type
+        is_custom   = median_type == "Custom"
+
+        # Density & Area: only for RCC types
+        for key in [KEY_MD_DENSITY, KEY_MD_AREA]:
+            w, lbl = self.findChild(QWidget, key), self.findChild(QLabel, key + "_label")
+            if w:   w.setVisible(is_rcc)
+            if lbl: lbl.setVisible(is_rcc)
+
+        # Post Spacing: only for Metallic
+        w, lbl = self.findChild(QWidget, KEY_MD_POST_SPACING), self.findChild(QLabel, KEY_MD_POST_SPACING + "_label")
+        if w:   w.setVisible(is_metallic)
+        if lbl: lbl.setVisible(is_metallic)
+
+        # All fixed fields disabled for non-custom
+        for key in [KEY_MD_DENSITY, KEY_MD_WIDTH, KEY_MD_HEIGHT, KEY_MD_AREA, KEY_MD_LOAD]:
+            w = self.findChild(QLineEdit, key)
+            if w:
+                w.setEnabled(is_custom)
+
+        # Post Spacing editable for Metallic only
+        spacing = self.findChild(QLineEdit, KEY_MD_POST_SPACING)
+        if spacing:
+            spacing.setEnabled(is_metallic)
+
+    def compute_median_values(self, input_dict: dict) -> dict:
+        from osdagbridge.core.utils.codes.irc5_2015 import IRC5_2015
+        from osdagbridge.core.bridge_components.super_structure.median.geometry import (
+            median_raised_kerb_area, median_rcc_crash_barrier_area,
+        )
+        from osdagbridge.core.bridge_components.super_structure.median.properties import (
+            median_raised_kerb_load, median_rcc_barrier_load, median_metallic_barrier_load,
+        )
+
+        median_type = input_dict.get(KEY_MD_TYPE, "IRC 5 - Raised Kerb")
+
+        if median_type == "IRC 5 - Raised Kerb":
+            geom = IRC5_2015.cl_109_6_3_shapes(KEY_MEDIAN_TYPE[0], None, None, {}, None)
+            area = median_raised_kerb_area()["kerb_area"]
+            load = median_raised_kerb_load()["total_load_kN_per_m"]
+            return {
+                KEY_MD_DENSITY: f"{DEFAULT_CONCRETE_DENSITY:.1f}",
+                KEY_MD_WIDTH:   f"{geom['kerb_bottom_width'] / 1000:.3f}",
+                KEY_MD_HEIGHT:  f"{geom['kerb_height'] / 1000:.3f}",
+                KEY_MD_AREA:    f"{area / 1e6:.4f}",
+                KEY_MD_LOAD:    f"{load:.2f}",
+            }
+
+        elif median_type == "IRC 5 - RCC Crash Barrier":
+            geom = IRC5_2015.cl_109_6_3_shapes(KEY_MEDIAN_TYPE[1], None, None, {}, None)
+            area = median_rcc_crash_barrier_area()["total_area"]
+            load = median_rcc_barrier_load()["total_load_kN_per_m"]
+            return {
+                KEY_MD_DENSITY: f"{DEFAULT_CONCRETE_DENSITY:.1f}",
+                KEY_MD_WIDTH:   f"{geom[KEY_MD_WIDTH] / 1000:.3f}",
+                KEY_MD_HEIGHT:  f"{geom['barrier_height'] / 1000:.3f}",
+                KEY_MD_AREA:    f"{area / 1e6:.4f}",
+                KEY_MD_LOAD:    f"{load:.2f}",
+            }
+
+        elif "Metallic" in median_type:
+            variant       = "Double" if "Double" in median_type else "Single"
+            metallic_type = KEY_METALLIC_CRASH_BARRIER_TYPE[1 if variant == "Double" else 0]
+            geom = IRC5_2015.cl_109_6_3_shapes(KEY_MEDIAN_TYPE[2], None, None, {}, metallic_type)
+            load = median_metallic_barrier_load(variant)["total_load_kN_per_m"]
+            return {
+                KEY_MD_WIDTH:  f"{geom['kerb_bottom_width'] / 1000:.3f}",
+                KEY_MD_HEIGHT: f"{(geom['post_height'] + geom['kerb_height']) / 1000:.3f}",
+                KEY_MD_LOAD:   f"{load:.2f}",
+            }
+
+        return {}
+
+    # ── Railing Sub-Tab ──────────────────────────────────────────────────────────────────────
+
+    def compute_railing_values(self, input_dict: dict) -> dict:
+        from osdagbridge.core.utils.codes.irc5_2015 import IRC5_2015
+        from osdagbridge.core.utils.codes.keyfile import KEY_CRASH_BARRIER_TYPE, KEY_FOOTPATH, KEY_RAILING_TYPE
+        from osdagbridge.core.bridge_components.super_structure.railing.properties import (
+            rcc_railing_load, steel_railing_load, load_from_area, RCC_DENSITY,
+        )
+        from osdagbridge.core.bridge_components.super_structure.railing.geometry import rigid_barrier_with_railing_area
+
+        railing_type = input_dict.get(KEY_RL_TYPE, VALUES_RAILING_TYPE[0])
+        mode_combo   = self.findChild(QComboBox, KEY_RL_LOAD_MODE)
+        load_edit    = self.findChild(QLineEdit, KEY_RL_LOAD_VALUE)
+
+        if railing_type == "IRC 5 - RCC Railing":
+            geom = IRC5_2015.cl_109_6_3_shapes(
+                KEY_CRASH_BARRIER_TYPE[2], KEY_FOOTPATH[1], KEY_RAILING_TYPE[0], {}, None
+            )
+            for key in [KEY_RL_WIDTH, KEY_RL_HEIGHT]:
+                w = self.findChild(QLineEdit, key)
+                if w: w.setEnabled(False)
+            if mode_combo:
+                mode_combo.blockSignals(True)
+                mode_combo.setCurrentText("As per IRC 6")
+                mode_combo.blockSignals(False)
+                mode_combo.setEnabled(False)
+            if load_edit: load_edit.setEnabled(False)
+            load   = rcc_railing_load()["total_load_kN_per_m"]
+            width  = geom.get("railing_width")
+            height = geom.get("railing_height")
+            result = {KEY_RL_LOAD_VALUE: f"{load:.3f}"}
+            if width  is not None: result[KEY_RL_WIDTH]  = str(width)
+            if height is not None: result[KEY_RL_HEIGHT] = f"{height / 1000:.3f}"
+            return result
+
+        elif railing_type == "IRC 5 - Steel Railing":
+            geom = IRC5_2015.cl_109_6_3_shapes(
+                KEY_CRASH_BARRIER_TYPE[2], KEY_FOOTPATH[1], KEY_RAILING_TYPE[1], {}, None
+            )
+            for key in [KEY_RL_WIDTH, KEY_RL_HEIGHT]:
+                w = self.findChild(QLineEdit, key)
+                if w: w.setEnabled(False)
+            if mode_combo:
+                mode_combo.blockSignals(True)
+                mode_combo.setCurrentText("As per IRC 6")
+                mode_combo.blockSignals(False)
+                mode_combo.setEnabled(False)
+            if load_edit: load_edit.setEnabled(False)
+            load   = steel_railing_load()["total_load_kN_per_m"]
+            width  = geom.get("railing_width")
+            height = geom.get("railing_height")
+            result = {KEY_RL_LOAD_VALUE: f"{load:.3f}"}
+            if width  is not None: result[KEY_RL_WIDTH]  = str(width)
+            if height is not None: result[KEY_RL_HEIGHT] = f"{height / 1000:.3f}"
+            return result
+
+        elif railing_type == "Custom":
+            for key in [KEY_RL_WIDTH, KEY_RL_HEIGHT]:
+                w = self.findChild(QLineEdit, key)
+                if w: w.setEnabled(True)
+            if mode_combo: mode_combo.setEnabled(True)
+            mode = mode_combo.currentText() if mode_combo else "As per IRC 6"
+            if mode == "As per IRC 6":
+                if load_edit: load_edit.setEnabled(False)
+                area = rigid_barrier_with_railing_area("rcc")["barrier_area"]
+                load = load_from_area(area, RCC_DENSITY)
+                return {KEY_RL_LOAD_VALUE: f"{load:.3f}"}
+            else:
+                if load_edit: load_edit.setEnabled(True)
+                return {}
+
+        return {}
+
+    def on_railing_load_mode_changed(self, mode: str):
+        load_edit    = self.findChild(QLineEdit, KEY_RL_LOAD_VALUE)
+        type_combo   = self.findChild(QComboBox, KEY_RL_TYPE)
+        railing_type = type_combo.currentText() if type_combo else ""
+
+        if railing_type != "Custom":
+            return
+
+        if mode == "As per IRC 6":
+            if load_edit: load_edit.setEnabled(False)
+            from osdagbridge.core.bridge_components.super_structure.railing.properties import load_from_area, RCC_DENSITY
+            from osdagbridge.core.bridge_components.super_structure.railing.geometry import rigid_barrier_with_railing_area
+            area = rigid_barrier_with_railing_area("rcc")["barrier_area"]
+            load = load_from_area(area, RCC_DENSITY)
+            if load_edit: load_edit.setText(f"{load:.3f}")
+        else:
+            if load_edit: load_edit.setEnabled(True)
+
+    # ── Wearing Course Sub-Tab ───────────────────────────────────────────────────────────────
+
+    def on_wearing_material_changed(self, material: str):
+        density_w = self.findChild(QLineEdit, KEY_WC_DENSITY)
+        if density_w:
+            density_w.setEnabled(material == "Custom")
+
+    def compute_wearing_course_values(self, input_dict: dict) -> dict:
+        from osdagbridge.core.bridge_components.super_structure.deck.geometry import (
+            WET_CONCRETE_DENSITY_kN_m3, BITUMINOUS_DENSITY_kN_m3,
+        )
+        material = input_dict.get(KEY_WC_MATERIAL, "Concrete")
+        if material == "Concrete":
+            return {KEY_WC_DENSITY: f"{WET_CONCRETE_DENSITY_kN_m3:.1f}"}
+        elif material == "Bituminous":
+            return {KEY_WC_DENSITY: f"{BITUMINOUS_DENSITY_kN_m3:.1f}"}
+        return {}
+
+    # ── Lane Details Sub-Tab ─────────────────────────────────────────────────────────────────
+
+    def on_lane_count_changed(self, text: str):
+        from PySide6.QtWidgets import QTableWidget, QTableWidgetItem
+        table = self.findChild(QTableWidget, KEY_WC_LD_LANE_TABLE)
+        if not table:
+            return
+        try:
+            n = int(text)
+        except (ValueError, TypeError):
+            return
+        table.setRowCount(n)
+        for r in range(n):
+            if table.item(r, 0) is None:
+                table.setItem(r, 0, QTableWidgetItem(str(r + 1)))
+
+    # ── Member Properties Tab ──────────────────────────────────────────────────────────────
+
+    # ── Girder Details Sub-Tab ─────────────────────────────────────────────────────────────
 
     # Keys stored per-member (G{i}.M{j}) for Girder Details tab save/load
     _MEMBER_FIELD_KEYS = [
@@ -1153,7 +1635,7 @@ class AdditionalInputs(QDialog):
             KEY_MP_GIRDER_WARPING_CONSTANT_IW: f"{result['I_w']:.2e}",
         }
 
-    # ── Member Properties > Stiffener Details ────────────────────────────────────
+    # ── Stiffener Details Sub-Tab ─────────────────────────────────────────────────────────────
 
     # Keys stored per-member (G{i}.M{j}) for Stiffener Details tab save/load
     _STIFFENER_FIELD_KEYS = [
@@ -1429,7 +1911,7 @@ class AdditionalInputs(QDialog):
 
         widget.update_stiffener(snapshot, active_member_id)
 
-    # ── Member Properties > EndDiaphragm SubTab ────────────────────────────────────
+    # ── EndDiaphragm Sub-Tab ─────────────────────────────────────────────────────────────
 
     def _on_ed_girder_count_refreshed(self, origin_key: str, current_object: QComboBox) -> None:
         """Repopulate End Diaphragm 'Select Girders' combo with girder pairs
@@ -1970,7 +2452,7 @@ class AdditionalInputs(QDialog):
         KEY_MP_CB_BOTTOM_CHORD_SECTION_TYPE, KEY_MP_CB_BOTTOM_CHORD_SECTION_DESIG,
     ]
 
-    # ── Member Properties > Cross Bracing SubTab ──────────────────────────────────
+    # ── Cross Bracing Sub-Tab ─────────────────────────────────────────────────────────────
 
     def _on_cb_spacing_computed(self, origin_key: str, target_widget: QLineEdit) -> None:
         if target_widget is None:
@@ -2449,333 +2931,6 @@ class AdditionalInputs(QDialog):
             value = 400.0
         widget.update_params({"bearing_length": value})
 
-    # ── Typical Section Tab ───────────────────────────────────────────────────────
-
-    def recalculate_girders(self, changed_field=None):  # on_text_changed: recalculates linked girder layout fields from current Typical Section widths
-        allowed_fields = {"spacing", "overhang", "girders"}
-        primary_edit = changed_field in allowed_fields
-        if not primary_edit:
-            changed_field = "girders"
-
-        for notice_name in ("layout_notice.adjust", "layout_notice.warning"):
-            label = self.findChild(QLabel, notice_name)
-            if label is not None:
-                label.hide()
-                label.setText("")
-        container = self.findChild(QWidget, "layout_notice")
-        if container is not None:
-            container.hide()
-
-        required_keys = (
-            KEY_TS_GIRDER_SPACING,
-            KEY_TS_DECK_OVERHANG,
-            KEY_TS_NO_OF_GIRDERS,
-        )
-        if primary_edit:
-            for key in required_keys:
-                field = self.findChild(QLineEdit, key)
-                if field is not None and not field.text().strip():
-                    for clear_key in required_keys:
-                        clear_field = self.findChild(QLineEdit, clear_key)
-                        if clear_field is not None:
-                            clear_field.blockSignals(True)
-                            clear_field.clear()
-                            clear_field.blockSignals(False)
-                        self.working_input_dict[clear_key] = ""
-                    CustomMessageBox(
-                        title="Layout",
-                        text="Girder spacing, deck overhang, and number of girders are linked. Please enter all three.",
-                        buttons=["OK"],
-                        dialogType=MessageBoxType.Warning,
-                    ).exec()
-                    return False
-
-        d = self.working_input_dict
-        if not d.get(KEY_CARRIAGEWAY_WIDTH):
-            return False
-
-        def number_value(key, default=0.0):
-            value = d.get(key)
-            if value is None or value == "":
-                return default
-            if isinstance(value, (int, float)):
-                return float(value)
-            text = str(value).strip()
-            scan = text[1:] if text[:1] in "+-" else text
-            left, dot, right = scan.partition(".")
-            if dot:
-                return float(text) if bool(left or right) and (not left or left.isdigit()) and (not right or right.isdigit()) else default
-            return float(text) if left.isdigit() else default
-
-        rl_raw = number_value(KEY_RL_WIDTH, DEFAULT_RAILING_WIDTH)
-        railing_width = rl_raw / 1000.0 if rl_raw > 10 else rl_raw
-
-        footpath_str = str(d.get(KEY_FOOTPATH, "None")).strip()
-        if footpath_str in ("None", ""):
-            n_footpaths = 0
-        elif "Both" in footpath_str:
-            n_footpaths = 2
-        else:
-            n_footpaths = 1
-
-        from osdagbridge.core.bridge_types.plate_girder.initial_sizing import BridgeConfigurationSolver
-        solver = BridgeConfigurationSolver(
-            carriageway_width=number_value(KEY_CARRIAGEWAY_WIDTH, float(self.carriageway_width or 0.0)),
-            crash_barrier_width=number_value(KEY_CB_WIDTH, DEFAULT_CRASH_BARRIER_WIDTH),
-            footpath_width=number_value(KEY_TS_FOOTPATH_WIDTH, 0.0),
-            railing_width=railing_width,
-            median_width=number_value(KEY_MD_WIDTH, 0.0),
-            n_footpaths=n_footpaths,
-        )
-
-        spacing_old = number_value(KEY_TS_GIRDER_SPACING, DEFAULT_GIRDER_SPACING)
-        overhang_old = number_value(KEY_TS_DECK_OVERHANG, 0.0)
-        girders_old = int(number_value(KEY_TS_NO_OF_GIRDERS, 2))
-
-        try:
-            result = solver._solve_layout(
-                no_of_girders=girders_old,
-                girder_spacing=spacing_old,
-                deck_overhang=overhang_old,
-                changed_field=changed_field,
-            )
-        except ValueError as exc:
-            CustomMessageBox(
-                title="Layout",
-                text=str(exc),
-                buttons=["OK"],
-                dialogType=MessageBoxType.Warning,
-            ).exec()
-            return False
-
-        field_values = (
-            (KEY_TS_GIRDER_SPACING, f"{result.girder_spacing:.2f}"),
-            (KEY_TS_DECK_OVERHANG, f"{result.deck_overhang:.2f}"),
-            (KEY_TS_NO_OF_GIRDERS, str(int(result.no_of_girders))),
-            (KEY_TS_OVERALL_WIDTH, f"{result.overall_width:.2f}"),
-        )
-        for key, value in field_values:
-            field = self.findChild(QLineEdit, key)
-            if field is not None:
-                field.blockSignals(True)
-                field.setText(value)
-                field.blockSignals(False)
-
-        d[KEY_TS_GIRDER_SPACING] = result.girder_spacing
-        d[KEY_TS_DECK_OVERHANG] = result.deck_overhang
-        d[KEY_TS_NO_OF_GIRDERS] = result.no_of_girders
-        d[KEY_TS_OVERALL_WIDTH] = result.overall_width
-        d[KEY_TS_NO_OF_FOOTPATHS] = n_footpaths
-
-        reason_parts = []
-        if abs(result.girder_spacing - spacing_old) > 0.01:
-            reason_parts.append(f"spacing {spacing_old:.2f}->{result.girder_spacing:.2f}")
-        if abs(result.deck_overhang - overhang_old) > 1e-6:
-            reason_parts.append(f"overhang {overhang_old:.2f}->{result.deck_overhang:.2f}")
-        if result.no_of_girders != girders_old:
-            reason_parts.append(f"girders {girders_old}->{result.no_of_girders}")
-
-        warning_msg = None
-        if result.deck_overhang > result.girder_spacing + 1e-6:
-            warning_msg = (
-                f"Overhang ({result.deck_overhang:.2f} m) exceeds girder spacing "
-                f"({result.girder_spacing:.2f} m)"
-            )
-
-        adjust_label = self.findChild(QLabel, "layout_notice.adjust")
-        warning_label = self.findChild(QLabel, "layout_notice.warning")
-        notice_container = self.findChild(QWidget, "layout_notice")
-        if reason_parts and not warning_msg and adjust_label is not None:
-            adjust_label.setText(f"Values adjusted: {', '.join(reason_parts)}")
-            adjust_label.show()
-            if notice_container is not None:
-                notice_container.show()
-        if warning_msg and warning_label is not None:
-            warning_label.setText(f"Warning: {warning_msg}")
-            warning_label.show()
-            if notice_container is not None:
-                notice_container.show()
-
-        return True
-
-    def on_girder_spacing_changed(self):  # on_editing_finished: recalculates deck overhang after girder spacing changes
-        field = self.findChild(QLineEdit, KEY_TS_GIRDER_SPACING)
-        if field is None:
-            return
-        text = field.text().strip()
-        scan = text[1:] if text[:1] in "+-" else text
-        if text and not (scan.isdigit() or (scan.count(".") == 1 and scan.replace(".", "").isdigit())):
-            return
-        self.recalculate_girders("spacing")
-
-    def on_deck_overhang_changed(self):  # on_editing_finished: recalculates girder spacing after deck overhang changes
-        field = self.findChild(QLineEdit, KEY_TS_DECK_OVERHANG)
-        if field is None:
-            return
-        text = field.text().strip()
-        scan = text[1:] if text[:1] in "+-" else text
-        if text and not (scan.isdigit() or (scan.count(".") == 1 and scan.replace(".", "").isdigit())):
-            return
-        self.recalculate_girders("overhang")
-
-    def on_no_of_girders_changed(self):  # on_editing_finished: recalculates layout and dynamic girder keys after girder count changes
-        field = self.findChild(QLineEdit, KEY_TS_NO_OF_GIRDERS)
-        if field is None:
-            return
-        text = field.text().strip()
-        scan = text[1:] if text[:1] in "+-" else text
-        if text and not (scan.isdigit() or (scan.count(".") == 1 and scan.replace(".", "").isdigit())):
-            return
-        if self.recalculate_girders("girders"):
-            from osdagbridge.core.bridge_types.plate_girder.defaults import _on_no_of_girders_changed
-            _on_no_of_girders_changed(self.working_input_dict)
-
-    # ── Public API ────────────────────────────────────────────────────────────────
-
-    def get_all_values(self):  # public API: collects all CAD-relevant numeric parameters from the Typical Section Details tab
-        """
-        @author: Faizan
-        Collect and return all CAD-relevant numeric parameters from the
-        Typical Section Details tab.
-
-        Includes values such as girder spacing, deck thickness, crash barrier,
-        railing, median, wearing course, and cross bracing spacing.
-
-        Used by InputDock to update and redraw the CAD cross-section.
-        """
-
-        from osdagbridge.core.utils.common import (
-            KEY_TS_NO_OF_GIRDERS,
-            KEY_TS_GIRDER_SPACING,
-            KEY_TS_DECK_OVERHANG,
-            KEY_TS_DECK_THICKNESS,
-            KEY_TS_FOOTPATH_WIDTH,
-            KEY_TS_FOOTPATH_THICKNESS,
-            KEY_MP_CB_SPACING,
-            KEY_WC_THICKNESS,
-            KEY_WC_DENSITY,
-            KEY_WC_MATERIAL,
-        )
-
-        values = {}
-
-        # ---- Typical Section tab ----
-        ts = self.typical_section_tab
-
-        no_of_girders = self.findChild(QLineEdit, KEY_TS_NO_OF_GIRDERS)
-        if no_of_girders is not None and no_of_girders.text():
-            values[KEY_TS_NO_OF_GIRDERS] = int(float(no_of_girders.text()))
-
-        girder_spacing = self.findChild(QLineEdit, KEY_TS_GIRDER_SPACING)
-        if girder_spacing is not None and girder_spacing.text():
-            values[KEY_TS_GIRDER_SPACING] = float(girder_spacing.text())
-
-        deck_overhang = self.findChild(QLineEdit, KEY_TS_DECK_OVERHANG)
-        if deck_overhang is not None and deck_overhang.text():
-            values[KEY_TS_DECK_OVERHANG] = float(deck_overhang.text())
-
-        if hasattr(ts, "deck_thickness") and ts.deck_thickness.text():
-            values[KEY_TS_DECK_THICKNESS] = float(ts.deck_thickness.text())
-
-        if hasattr(ts, "footpath_width") and ts.footpath_width.text():
-            values[KEY_TS_FOOTPATH_WIDTH] = float(ts.footpath_width.text())
-
-        if hasattr(ts, "footpath_thickness") and ts.footpath_thickness.text():
-            values[KEY_TS_FOOTPATH_THICKNESS] = float(ts.footpath_thickness.text())
-
-        wearing_material = ts._find_wearing_widget(KEY_WC_MATERIAL)
-        if wearing_material:
-            values[KEY_WC_MATERIAL] = wearing_material.currentText()
-
-        wearing_thickness = ts._find_wearing_widget(KEY_WC_THICKNESS)
-        if wearing_thickness and wearing_thickness.text():
-            values[KEY_WC_THICKNESS] = float(wearing_thickness.text())
-
-        wearing_density = ts._find_wearing_widget(KEY_WC_DENSITY)
-        if wearing_density and wearing_density.text():
-            values[KEY_WC_DENSITY] = float(wearing_density.text())
-
-         # ---- Crash Barrier ----
-        crash_barrier_type = ts._find_crash_barrier_widget(KEY_CB_TYPE)
-        if crash_barrier_type:
-            values["crash_barrier_type"] = crash_barrier_type.currentText()
-
-        crash_barrier_width = ts._find_crash_barrier_widget(KEY_CB_WIDTH)
-        if crash_barrier_width and crash_barrier_width.text():
-            values[KEY_CB_WIDTH] = float(crash_barrier_width.text())
-
-        crash_barrier_height = ts._find_crash_barrier_widget(KEY_CB_HEIGHT)
-        if crash_barrier_height and crash_barrier_height.text():
-            values["crash_barrier_height"] = float(crash_barrier_height.text())
-
-        # ---- Railing ----
-        railing_type = ts._find_railing_widget(KEY_RL_TYPE)
-        if railing_type:
-            values[KEY_RL_TYPE] = railing_type.currentText()
-
-        railing_width = ts._find_railing_widget(KEY_RL_WIDTH)
-        if railing_width and railing_width.text():
-            values[KEY_RL_WIDTH] = float(railing_width.text())
-
-        railing_height = ts._find_railing_widget(KEY_RL_HEIGHT)
-        if railing_height and railing_height.text():
-            values["railing_height"] = float(railing_height.text())
-
-        if hasattr(ts, "railing_post_spacing") and ts.railing_post_spacing.text():
-            values["railing_post_spacing"] = float(ts.railing_post_spacing.text())
-
-        if hasattr(ts, "railing_rail_count") and ts.railing_rail_count.text():
-            values["railing_rail_count"] = int(float(ts.railing_rail_count.text()))
-
-        if hasattr(ts, "railing_post_dia") and ts.railing_post_dia.text():
-            values["railing_post_dia"] = float(ts.railing_post_dia.text())
-
-        if hasattr(ts, "railing_top_width") and ts.railing_top_width.text():
-            values["railing_top_width"] = float(ts.railing_top_width.text())
-
-        if hasattr(ts, "railing_bottom_width") and ts.railing_bottom_width.text():
-            values["railing_bottom_width"] = float(ts.railing_bottom_width.text())
-
-        # ---- Median ----
-        median_type = ts._find_median_widget(KEY_MD_TYPE)
-        if median_type:
-            values[KEY_MD_TYPE] = median_type.currentText()
-
-        median_width = ts._find_median_widget(KEY_MD_WIDTH)
-        if median_width and median_width.text():
-            values[KEY_MD_WIDTH] = float(median_width.text())
-
-        if hasattr(ts, "median_kerb_height") and ts.median_kerb_height.text():
-            values["median_kerb_height"] = float(ts.median_kerb_height.text())
-
-        if hasattr(ts, "median_top_width") and ts.median_top_width.text():
-            values["median_top_width"] = float(ts.median_top_width.text())
-
-        if hasattr(ts, "median_bottom_width") and ts.median_bottom_width.text():
-            values["median_bottom_width"] = float(ts.median_bottom_width.text())
-
-        if hasattr(ts, "median_barrier_height") and ts.median_barrier_height.text():
-            values["median_barrier_height"] = float(ts.median_barrier_height.text())
-
-        if hasattr(ts, "median_post_height") and ts.median_post_height.text():
-            values["median_post_height"] = float(ts.median_post_height.text())
-
-        return values
-
-    def update_footpath_value(self, footpath_value):  # public API: propagates footpath configuration change to Typical Section tab and CAD preview
-        """
-        @author: Faizan
-        Update the footpath configuration across UI and CAD preview.
-        """
-        self.footpath_value = footpath_value
-        # Sync into the working dict so recalculate_girders sees the new n_footpaths.
-        # default_input_dict shares the reference with template_page.input_dict,
-        # which the input dock already updates — no need to touch it here.
-
-        if self.working_input_dict is not None:
-            self.working_input_dict[KEY_FOOTPATH] = footpath_value
-        self.typical_section_tab.update_footpath_value(footpath_value)
-
     # ── Utilities ─────────────────────────────────────────────────────────────────
 
     def style_input_field(self, field):  # utility: applies standard field stylesheet
@@ -2807,13 +2962,3 @@ class AdditionalInputs(QDialog):
                 line_edit.setText(fmt.format(val))
             except ValueError:
                 continue
-
-    def _find_inner_tab_index(self, tab_widget, tab_name: str) -> int:  # utility: returns the index of an inner tab by its label text, or -1 if not found
-        """
-        @author: Faizan
-        Return the index of an inner tab by its label, or -1 if not found.
-        """
-        for i in range(tab_widget.count()):
-            if tab_widget.tabText(i).strip().lower() == tab_name.strip().lower():
-                return i
-        return -1

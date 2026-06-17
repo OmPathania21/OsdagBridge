@@ -12,9 +12,6 @@ from .geometry import (
     high_containment_barrier_area
 )
 
-from osdagbridge.core.utils.codes.keyfile import (
-    KEY_RAILING_TYPE
-)
 # MATERIAL DENSITIES
 RCC_DENSITY = 25      # kN/m³
 STEEL_DENSITY = 78    # kN/m³
@@ -50,7 +47,7 @@ def metallic_edge_barrier_load(barrier_type):
 
 def rcc_railing_load():
     from .geometry import rigid_barrier_with_railing_area
-    geom = rigid_barrier_with_railing_area(KEY_RAILING_TYPE[0])
+    geom = rigid_barrier_with_railing_area("rcc")
 
     barrier_load = load_from_area(
         geom["barrier_area"],
@@ -67,7 +64,7 @@ def rcc_railing_load():
 
 def steel_railing_load():
     from .geometry import rigid_barrier_with_railing_area
-    geom = rigid_barrier_with_railing_area(KEY_RAILING_TYPE[1])
+    geom = rigid_barrier_with_railing_area("steel")
 
     barrier_load = load_from_area(
         geom["barrier_area"],

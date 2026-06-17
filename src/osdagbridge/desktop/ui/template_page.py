@@ -114,8 +114,11 @@ class CustomWindow(QWidget):
         # Initialised from BASIC_INPUT_DICT; updated live as the user edits fields.
         self.input_dict = dict(BASIC_INPUT_DICT)
 
-        # AdditionalInputs dialog — created once, shown/hidden thereafter.
+        # AdditionalInputs dialog 
         self._additional_inputs_dialog: AdditionalInputs | None = None
+      
+        # AdditionalInputs - Created once on first use, shown/hidden thereafter.
+        self._get_additional_inputs()
 
         self.setWindowTitle(title)
         self.setStyleSheet(
@@ -185,7 +188,24 @@ class CustomWindow(QWidget):
         self.output_dock = None
 
         self.init_ui()
-        
+
+        # Temporary test defaults
+        self.findChild(QLineEdit, "geometry.span").setText("28")
+        self.findChild(QLineEdit, "geometry.carriageway_width").setText("9")
+        self.input_dict["project.location"] = {
+            "data": {"latitude": "21.945075", "longitude": "78.633310"},
+            "method": "map",
+            "weather_data": {
+                "max_temp": 47.6,
+                "min_temp": 1.1,
+                "wind_speed": 39,
+                "z_value": 0.16,
+                "zone": "3",
+            },
+        }
+        # self.common_design_func(trigger="Additional Inputs")
+
+
     def on_export_finished(self, success, msg):
         """Main-thread handler for export results."""
         from PySide6.QtWidgets import QMessageBox
@@ -429,23 +449,10 @@ class CustomWindow(QWidget):
         """
         
         if self._additional_inputs_dialog is None:
-            footpath_value    = self.input_dict.get(KEY_FOOTPATH) or "None"
-            carriageway_width = (
-                self.input_dock._get_effective_carriageway_width()
-                if self.input_dock else 0.0
-            )
-            self._additional_inputs_dialog = AdditionalInputs(
-                footpath_value=footpath_value,
-                carriageway_width=carriageway_width
-            )
+            self._additional_inputs_dialog = AdditionalInputs()
             # This make the dialog modal to the main window,
             # so that user can not interact with the main window when the dialog is open
             self._additional_inputs_dialog.setWindowModality(Qt.ApplicationModal)
-            # Connect finished once; result is harvested inside the slot.
-            self._additional_inputs_dialog.finished.connect(
-                self._on_additional_inputs_closed
-            )
-
             self._additional_inputs_dialog.update_template_page_2d_cad.connect(self.update_2d_cad)
 
         return self._additional_inputs_dialog
@@ -483,53 +490,17 @@ class CustomWindow(QWidget):
 
         # Update Internal 2D CAD State
         # Single Source of Truth = _last_mapped_params dict in BridgeDualCADWidget
-        dlg.typical_section_tab.update_internal_cad_state(self.cad_comp_widget._last_mapped_params)
+        dlg._update_additional_input_cad()
 
         # Sync design mode to additional_inputs
         if self.input_dock:
             print(f"\n@@ Syncing design mode to Additional Inputs: {self.input_dock._current_design_mode}")
             dlg.design_mode_trigger(self.input_dock._current_design_mode)
 
-        # Sync carriageway width so Lane Details reflects the latest value
-        if self.input_dock:
-            try:
-                cw = self.input_dock._get_effective_carriageway_width()
-                dlg.typical_section_tab.update_carriageway_width(cw)
-            except Exception:
-                pass
 
         dlg.show()
         dlg.raise_()
         dlg.activateWindow()
-
-    def _on_additional_inputs_closed(self, result: int):
-        """
-        Harvest values when the user clicks OK/Accept.
-        The dialog itself is NOT destroyed — it stays in memory for reuse.
-        """
-
-        if result != AdditionalInputs.Accepted:
-            return
-        dlg = self._additional_inputs_dialog
-        if dlg is None:
-            return
-        try:
-            values = dlg.get_all_values()
-            if values:
-                self.input_dict.update(values)
-        except Exception:
-            pass
-
-    def notify_additional_inputs_footpath(self, value: str):
-        """
-        Called by input_dock whenever the footpath field changes.
-        Forwards to the dialog only if it already exists (avoids premature creation).
-        """
-        if self._additional_inputs_dialog is not None:
-            try:
-                self._additional_inputs_dialog.update_footpath_value(value)
-            except Exception:
-                pass
 
     def validate_required_inputs(self):
         """Check that all required fields have values before allowing design to proceed."""

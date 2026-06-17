@@ -5,9 +5,7 @@ Takes area values from geometry.py and converts them to load.
 @author: Sweta Pal
 """
 
-from osdagbridge.core.utils.codes.keyfile import (
-    KEY_RAILING_TYPE
-)
+
 # MATERIAL DENSITIES
 RCC_DENSITY = 25      # kN/m³
 STEEL_DENSITY = 78    # kN/m³
@@ -25,7 +23,7 @@ def load_from_area(area_mm2, density):
 
 def rcc_railing_load():
     from .geometry import rigid_barrier_with_railing_area
-    geom = rigid_barrier_with_railing_area(KEY_RAILING_TYPE[0])
+    geom = rigid_barrier_with_railing_area("rcc")
 
     barrier_load = load_from_area(
         geom["barrier_area"],
@@ -42,7 +40,7 @@ def rcc_railing_load():
 
 def steel_railing_load():
     from .geometry import rigid_barrier_with_railing_area
-    geom = rigid_barrier_with_railing_area(KEY_RAILING_TYPE[1])
+    geom = rigid_barrier_with_railing_area("steel")
 
     barrier_load = load_from_area(
         geom["barrier_area"],

@@ -1,14 +1,6 @@
-"""Consolidated UI schemas for plate girder Additional Inputs dialogs.
-
-This module groups all schema dictionaries used by the Additional Inputs
-flow, including Typical Section Details, Support/Design options, and
-Member Properties.
-"""
+# Main schema: ADDITIONAL_INPUTS_SCHEMA (bottom of file)
 
 from osdagbridge.core.utils.common import *
-
-# ── Value Refresh Schema ──────────────────────────────────────────────────────
-# These are mainly for populating the data in additional input that comes from Input Dictionary
 
 
 # ── Typical Section Details Tab ───────────────────────────────────────────────
@@ -24,7 +16,6 @@ _DECK_DETAILS_TAB_SCHEMA = {
                     "id": KEY_TS_DECK_THICKNESS,
                     "label": "Deck Thickness (mm):",
                     "type": TYPE_TEXTBOX,
-                    "bind": "deck_thickness",
                     "on_editing_finished": "validate_deck_thickness",
                 },
             ]
@@ -35,14 +26,12 @@ _DECK_DETAILS_TAB_SCHEMA = {
                     "id": KEY_TS_FOOTPATH_WIDTH,
                     "label": "Footpath Width (m):",
                     "type": TYPE_TEXTBOX,
-                    "bind": "footpath_width",
                     "on_text_changed": "on_layout_width_changed",
                 },
                 {
                     "id": KEY_TS_FOOTPATH_THICKNESS,
                     "label": "Footpath Thickness (mm):",
                     "type": TYPE_TEXTBOX,
-                    "bind": "footpath_thickness",
                     "on_editing_finished": "validate_footpath_thickness",
                 },
             ]
@@ -54,6 +43,7 @@ _CRASH_BARRIER_TAB_SCHEMA = {
     "id": KEY_MP_CB_TAB,
     "label": "Crash Barrier",
     "label_width": 210,
+    "top_margin": 20,
     "rows": [
         {
             "fields": [
@@ -69,6 +59,7 @@ _CRASH_BARRIER_TAB_SCHEMA = {
                         "Custom",
                     ],
                     "on_change": "on_crash_barrier_type_changed",
+                    "on_change_compute": {"function": "compute_crash_barrier_values"},
                 }
             ]
         },
@@ -78,7 +69,6 @@ _CRASH_BARRIER_TAB_SCHEMA = {
                     "id": KEY_CB_DENSITY,
                     "label": "Material Density (kN/m³):",
                     "type": TYPE_TEXTBOX,
-                    "on_editing_finished": "_auto_compute_crash_barrier_load",
                 }
             ]
         },
@@ -88,8 +78,6 @@ _CRASH_BARRIER_TAB_SCHEMA = {
                     "id": KEY_CB_WIDTH,
                     "label": "Width (m):",
                     "type": TYPE_TEXTBOX,
-                    "default": DEFAULT_CRASH_BARRIER_WIDTH,
-                    "on_text_changed": "on_layout_width_changed",
                 }
             ]
         },
@@ -108,7 +96,6 @@ _CRASH_BARRIER_TAB_SCHEMA = {
                     "id": KEY_CB_AREA,
                     "label": "Area (m²):",
                     "type": TYPE_TEXTBOX,
-                    "on_editing_finished": "_auto_compute_crash_barrier_load",
                 }
             ]
         },
@@ -118,6 +105,7 @@ _CRASH_BARRIER_TAB_SCHEMA = {
                     "id": KEY_CB_LOAD,
                     "label": "Load (kN/m):",
                     "type": TYPE_TEXTBOX,
+                    "placeholder": "Enter custom load",
                 }
             ]
         },
@@ -127,7 +115,6 @@ _CRASH_BARRIER_TAB_SCHEMA = {
                     "id": KEY_CB_POST_SPACING,
                     "label": "Spacing between Posts (m):",
                     "type": TYPE_TEXTBOX,
-                    "default": "1",
                 }
             ]
         },
@@ -138,14 +125,7 @@ _MEDIAN_TAB_SCHEMA = {
     "id": KEY_MD_TAB,
     "label": "Median",
     "label_width": 210,
-    "active": 
-        {
-            "id": KEY_INCLUDE_MEDIAN, # key to check in working_input_dict
-            "values":                 # tab enabled when current value is IN this list
-            [
-                VALUES_NO_YES[1]
-            ],
-        },
+    "top_margin": 20,
     "rows": [
         {
             "fields": [
@@ -161,6 +141,7 @@ _MEDIAN_TAB_SCHEMA = {
                         "Custom",
                     ],
                     "on_change": "on_median_type_changed",
+                    "on_change_compute": {"function": "compute_median_values"},
                 }
             ]
         },
@@ -216,7 +197,6 @@ _MEDIAN_TAB_SCHEMA = {
                     "id": KEY_MD_POST_SPACING,
                     "label": "Spacing between Posts (m):",
                     "type": TYPE_TEXTBOX,
-                    "default": "1",
                 }
             ]
         },
@@ -227,15 +207,7 @@ _RAILING_TAB_SCHEMA = {
     "id": KEY_RL_TAB,
     "label": "Railing",
     "label_width": 180,
-    "active": 
-        {
-            "id": KEY_FOOTPATH,
-            "values": 
-            [
-                VALUES_FOOTPATH[1],
-                VALUES_FOOTPATH[2],
-            ],
-        },
+    "top_margin": 20,
     "rows": [
         {
             "fields": [
@@ -244,7 +216,7 @@ _RAILING_TAB_SCHEMA = {
                     "label": "Type:",
                     "type": TYPE_COMBOBOX,
                     "choices": VALUES_RAILING_TYPE,
-                    "on_change": "on_railing_type_changed",
+                    "on_change_compute": {"function": "compute_railing_values"},
                 }
             ]
         },
@@ -254,7 +226,6 @@ _RAILING_TAB_SCHEMA = {
                     "id": KEY_RL_WIDTH,
                     "label": "Width (mm):",
                     "type": TYPE_TEXTBOX,
-                    "default": f"{DEFAULT_RAILING_WIDTH * 1000:.0f}",
                     "on_text_changed": "on_layout_width_changed",
                 }
             ]
@@ -273,16 +244,15 @@ _RAILING_TAB_SCHEMA = {
             "fields": [
                 {
                     "id": KEY_RL_LOAD_MODE,
-                    "label": "Load Mode:",
+                    "label": "Mode:",
                     "type": TYPE_COMBOBOX,
-                    "choices": ["As per IRC 6", "User-defined"],
+                    "choices": ["As per IRC 6", "Custom"],
                     "on_change": "on_railing_load_mode_changed",
                 },
                 {
                     "id": KEY_RL_LOAD_VALUE,
                     "label": "Load (kN/m):",
                     "type": TYPE_TEXTBOX,
-                    "placeholder": "Value",
                     "enabled": False,
                 },
             ]
@@ -303,6 +273,7 @@ _WEARING_COURSE_TAB_SCHEMA = {
                     "type": TYPE_COMBOBOX,
                     "choices": VALUES_WEARING_COAT_MATERIAL,
                     "on_change": "on_wearing_material_changed",
+                    "on_change_compute": {"function": "compute_wearing_course_values"},
                 }
             ]
         },
@@ -312,7 +283,7 @@ _WEARING_COURSE_TAB_SCHEMA = {
                     "id": KEY_WC_DENSITY,
                     "label": "Density (kN/m³):",
                     "type": TYPE_TEXTBOX,
-                    "default": "24.0",
+                    "enabled": False,
                 }
             ]
         },
@@ -322,7 +293,6 @@ _WEARING_COURSE_TAB_SCHEMA = {
                     "id": KEY_WC_THICKNESS,
                     "label": "Thickness (mm):",
                     "type": TYPE_TEXTBOX,
-                    "default": "50",
                 }
             ]
         },
@@ -332,6 +302,7 @@ _WEARING_COURSE_TAB_SCHEMA = {
 _LANE_DETAILS_TAB_SCHEMA = {
     "id": KEY_WC_LD_TAB,
     "label": "Lane Details",
+    "top_margin": 20,
     "rows": [
         {
             "fields": [
@@ -340,7 +311,7 @@ _LANE_DETAILS_TAB_SCHEMA = {
                     "label": "No. of Traffic Lanes:",
                     "type": TYPE_TABLE_WITH_COUNTER,
                     "count_id": KEY_WC_LD_LANE_TABLE_COUNT,
-                    "count_choices": [str(i) for i in range(1, 7)],
+                    "count_choices": [str(i) for i in range(1, 3)],
                     "on_count_change": "on_lane_count_changed",
                     "columns": [
                         {"header": "Traffic Lane Number",                                                "resize": "contents"},
@@ -355,8 +326,35 @@ _LANE_DETAILS_TAB_SCHEMA = {
     ],
 }
 
+from osdagbridge.desktop.ui.docks.cad_cross_section import CrossSectionCADWidget
+
 TYPICAL_SECTION_SCHEMA = {
     "id": KEY_TS_TAB,
+    "layout": {"type": "panel"},
+
+    # ── Header: rendered above the scrollable body, no card title ─────────────
+    "header": {
+        "rows": [
+            {
+                "fields": [
+                    {
+                        "id":           KEY_TS_CAD_PREVIEW,
+                        "type":         TYPE_DIRECT_WIDGET,
+                        "widget_class": CrossSectionCADWidget,
+                        "widget_props": {
+                            "scale_factor":         0.65,
+                            "minimum_height":       200,
+                            "wrap_in_scroll":       True,
+                            "container_min_height": 280,
+                            "container_max_height": 380,
+                            "container_margins":    [5, 5, 5, 5],
+                            "container_style":      "QWidget { background: transparent; border: 1px solid #b0b0b0; border-radius: 8px; }",
+                        },
+                    },
+                ]
+            }
+        ],
+    },
 
     # ── Rendered ABOVE the subtab bar ─────────────────────────────────────────
     # Two rows of two fields each, in a 2-column grid.
@@ -414,7 +412,7 @@ TYPICAL_SECTION_SCHEMA = {
         _MEDIAN_TAB_SCHEMA,
         _RAILING_TAB_SCHEMA,
         _WEARING_COURSE_TAB_SCHEMA,
-        # _LANE_DETAILS_TAB_SCHEMA, 
+        _LANE_DETAILS_TAB_SCHEMA, 
         # Commented out lane details. Stop from rendering in UI.
     ],
 }
@@ -1559,266 +1557,6 @@ DESIGN_OPTIONS_CONT_SCHEMA = {
 }
 
 
-STEEL_DESIGN_DETAILS_SCHEMA = {
-    "cad": {
-        "top": {
-            "id": KEY_SD_DETAILS_CAD_TOP,
-            "min_height": 160,
-        },
-        "bottom": {
-            "id": KEY_SD_DETAILS_CAD_BOTTOM,
-            "width": 400,
-            "height": 200,
-        },
-    },
-    "cards": [
-        {
-            "id": KEY_SD_DETAILS_DIMENSIONAL_CARD,
-            "title": "Dimensional Details:",
-            "fields": [
-                {
-                    "id": KEY_SD_GRADE_OF_MATERIAL,
-                    "label": "Grade of Material:",
-                    "data_key": "grade_of_material",
-                    "group": "member",
-                },
-                {
-                    "id": KEY_SD_SECTION_TYPE,
-                    "label": "Type:",
-                    "data_key": "section_type",
-                    "group": "member",
-                },
-                {
-                    "id": KEY_SD_SECTION_DESIGNATION,
-                    "label": "Section Designation",
-                    "data_key": "section_designation",
-                    "group": "dim",
-                },
-                {
-                    "id": KEY_SD_SECTION_CLASS,
-                    "label": "Section Class",
-                    "data_key": "section_class",
-                    "group": "dim",
-                },
-                {
-                    "id": KEY_SD_TOTAL_DEPTH,
-                    "label": "Total Depth (mm)",
-                    "data_key": "total_depth",
-                    "group": "dim",
-                },
-                {
-                    "id": KEY_SD_WEB_THICKNESS,
-                    "label": "Web Thickness (mm)",
-                    "data_key": "web_thickness",
-                    "group": "dim",
-                },
-                {
-                    "id": KEY_SD_TOP_FLANGE_WIDTH,
-                    "label": "Top Flange Width (mm)",
-                    "data_key": "top_flange_width",
-                    "group": "dim",
-                },
-                {
-                    "id": KEY_SD_TOP_FLANGE_THICKNESS,
-                    "label": "Top Flange Thickness (mm)",
-                    "data_key": "top_flange_thickness",
-                    "group": "dim",
-                },
-                {
-                    "id": KEY_SD_BOTTOM_FLANGE_WIDTH,
-                    "label": "Bottom Flange Width (mm)",
-                    "data_key": "bottom_flange_width",
-                    "group": "dim",
-                },
-                {
-                    "id": KEY_SD_BOTTOM_FLANGE_THICKNESS,
-                    "label": "Bottom Flange Thickness (mm)",
-                    "data_key": "bottom_flange_thickness",
-                    "group": "dim",
-                },
-                {
-                    "id": KEY_SD_TORSIONAL_RESTRAINT,
-                    "label": "Torsional Restraint",
-                    "data_key": "torsional_restraint",
-                    "group": "dim",
-                },
-                {
-                    "id": KEY_SD_WARPING_RESTRAINT,
-                    "label": "Warping Restraint",
-                    "data_key": "warping_restraint",
-                    "group": "dim",
-                },
-                {
-                    "id": KEY_SD_WEB_TYPE,
-                    "label": "Web Type",
-                    "data_key": "web_type",
-                    "group": "dim",
-                },
-                {
-                    "id": KEY_SD_EFFECTIVE_SLAB_WIDTH,
-                    "label": "Effective Width of Slab (mm)",
-                    "data_key": "effective_slab_width",
-                    "group": "dim",
-                },
-            ],
-        },
-        {
-            "id": KEY_SD_DETAILS_SHEAR_CARD,
-            "title": "Shear Connector Details:",
-            "fields": [
-                {
-                    "id": KEY_SD_SHEAR_YIELD_STRENGTH,
-                    "label": "Material Yield Strength (MPa)",
-                    "data_key": "shear_material_yield_strength",
-                    "group": "shear",
-                },
-                {
-                    "id": KEY_SD_SHEAR_ULTIMATE_STRENGTH,
-                    "label": "Material Ultimate Strength (MPa)",
-                    "data_key": "shear_material_ultimate_strength",
-                    "group": "shear",
-                },
-                {
-                    "id": KEY_SD_SHEAR_DIAMETER,
-                    "label": "Diameter (mm)",
-                    "data_key": "shear_diameter",
-                    "group": "shear",
-                },
-                {
-                    "id": KEY_SD_SHEAR_HEIGHT,
-                    "label": "Height (mm)",
-                    "data_key": "shear_height",
-                    "group": "shear",
-                },
-                {
-                    "id": KEY_SD_SHEAR_TRANSVERSE_SPACING,
-                    "label": "Transverse Spacing (mm)",
-                    "data_key": "shear_transverse_spacing",
-                    "group": "shear",
-                },
-                {
-                    "id": KEY_SD_SHEAR_STUDS_PER_SECTION,
-                    "label": "No. of Shear Studs per Section",
-                    "data_key": "shear_studs_per_section",
-                    "group": "shear",
-                },
-                {
-                    "id": KEY_SD_SHEAR_LONGITUDINAL_SPACING,
-                    "label": "Average Longitudinal Spacing (mm)",
-                    "data_key": "shear_longitudinal_spacing",
-                    "group": "shear",
-                },
-            ],
-        },
-        {
-            "id": KEY_SD_DETAILS_SECTION_PROPERTIES_CARD,
-            "title": "Section Properties:",
-            "fields": [
-                {
-                    "id": KEY_MP_GIRDER_MASS,
-                    "label": "Mass, M (Kg/m)",
-                    "data_key": "mass",
-                    "group": "section",
-                },
-                {
-                    "id": KEY_MP_GIRDER_SECTIONAL_AREA,
-                    "label": "Sectional Area, a (cm<sup>2</sup>)",
-                    "data_key": "area",
-                    "group": "section",
-                },
-                {
-                    "id": KEY_MP_GIRDER_SECTIONAL_IZ,
-                    "label": "2nd Moment of Area, I<sub>z</sub> (cm<sup>4</sup>)",
-                    "data_key": "iz",
-                    "group": "section",
-                },
-                {
-                    "id": KEY_MP_GIRDER_SECTIONAL_IY,
-                    "label": "2nd Moment of Area, I<sub>y</sub> (cm<sup>4</sup>)",
-                    "data_key": "iv",
-                    "group": "section",
-                },
-                {
-                    "id": KEY_MP_GIRDER_RADIUS_GYRATION_Z,
-                    "label": "Radius of Gyration, r<sub>z</sub> (cm)",
-                    "data_key": "rz",
-                    "group": "section",
-                },
-                {
-                    "id": KEY_MP_GIRDER_RADIUS_GYRATION_Y,
-                    "label": "Radius of Gyration, r<sub>y</sub> (cm)",
-                    "data_key": "rv",
-                    "group": "section",
-                },
-                {
-                    "id": KEY_MP_GIRDER_ELASTIC_MODULUS_ZZ,
-                    "label": "Elastic Modulus, Z<sub>z</sub> (cm<sup>3</sup>)",
-                    "data_key": "zz",
-                    "group": "section",
-                },
-                {
-                    "id": KEY_MP_GIRDER_ELASTIC_MODULUS_ZY,
-                    "label": "Elastic Modulus, Z<sub>y</sub> (cm<sup>3</sup>)",
-                    "data_key": "zv",
-                    "group": "section",
-                },
-                {
-                    "id": KEY_MP_GIRDER_PLASTIC_MODULUS_ZUZ,
-                    "label": "Plastic Modulus, Z<sub>pz</sub> (cm<sup>3</sup>)",
-                    "data_key": "zuz",
-                    "group": "section",
-                },
-                {
-                    "id": KEY_MP_GIRDER_PLASTIC_MODULUS_ZUY,
-                    "label": "Plastic Modulus, Z<sub>py</sub> (cm<sup>3</sup>)",
-                    "data_key": "zuv",
-                    "group": "section",
-                },
-                {
-                    "id": KEY_MP_GIRDER_TORSION_CONSTANT_IT,
-                    "label": "Torsion Constant, I<sub>t</sub> (cm<sup>4</sup>)",
-                    "data_key": "it",
-                    "group": "section",
-                },
-                {
-                    "id": KEY_MP_GIRDER_WARPING_CONSTANT_IW,
-                    "label": "Warping Constant, I<sub>w</sub> (cm<sup>6</sup>)",
-                    "data_key": "iw",
-                    "group": "section",
-                },
-            ],
-        },
-    ],
-    "stiffener": {
-        "id": KEY_SD_DETAILS_STIFFENER_TABLE,
-        "row_height": 40,
-        "columns": [
-            {"id": "stiffener_type", "label": "Type"},
-            {"id": KEY_SD_STIFFENER_COL_GRADE, "label": "Grade of Material", "suffix": "grade"},
-            {"id": KEY_SD_STIFFENER_COL_THICKNESS, "label": "Thickness (mm)", "suffix": "thickness"},
-            {"id": KEY_SD_STIFFENER_COL_WIDTH, "label": "Width (mm)", "suffix": "width"},
-            {"id": KEY_SD_STIFFENER_COL_SPACING, "label": "Spacing (mm)", "suffix": "spacing"},
-        ],
-        "rows": [
-            {
-                "id": KEY_SD_STIFFENER_ROW_INTERMEDIATE,
-                "label": "Intermediate",
-                "data_prefix": "stiff_intermediate",
-            },
-            {
-                "id": KEY_SD_STIFFENER_ROW_LONGITUDINAL,
-                "label": "Longitudinal",
-                "data_prefix": "stiff_longitudinal",
-            },
-            {
-                "id": KEY_SD_STIFFENER_ROW_BEARING,
-                "label": "Bearing",
-                "data_prefix": "stiff_bearing",
-            },
-        ],
-    },
-}
-
 from osdagbridge.desktop.ui.dialogs.additional_input.drawings.cad_preview_widget import CadPreviewWidget
 from osdagbridge.desktop.ui.dialogs.additional_input.ui_builder._segment_table_widget import SegmentTableWidget
 from osdagbridge.desktop.ui.dialogs.additional_input.drawings.rolled_section_preview import RolledSectionPreview
@@ -2572,14 +2310,6 @@ from osdagbridge.desktop.ui.dialogs.additional_input.drawings.end_diaphragm_cad 
     BottomChordSectionPreview,
 )
 
-_CB_SECTION_TYPE_CHOICES = [
-    "Angle",
-    "Double Angle (Long Leg)",
-    "Double Angle (Short Leg)",
-    "Channel",
-    "Double Channel",
-]
-
 CROSS_BRACING_DETAILS_SCHEMA = {
     "id": KEY_MP_CB_TAB,
     "layout": {
@@ -2639,7 +2369,13 @@ CROSS_BRACING_DETAILS_SCHEMA = {
                     "id":      KEY_MP_CB_BRACING_SECTION_TYPE,
                     "label":   "Bracing Section Type:",
                     "type":    TYPE_COMBOBOX,
-                    "choices": _CB_SECTION_TYPE_CHOICES,
+                    "choices": [
+                                "Angle",
+                                "Double Angle (Long Leg)",
+                                "Double Angle (Short Leg)",
+                                "Channel",
+                                "Double Channel",
+                            ],
                 }]},
                 {"fields": [{
                     "id":      KEY_MP_CB_BRACING_SECTION_DESIGNATION,
@@ -2659,7 +2395,13 @@ CROSS_BRACING_DETAILS_SCHEMA = {
                     "id":      KEY_MP_CB_TOP_CHORD_SECTION_TYPE,
                     "label":   "  Top Chord Section Type:",
                     "type":    TYPE_COMBOBOX,
-                    "choices": _CB_SECTION_TYPE_CHOICES,
+                    "choices": [
+                                    "Angle",
+                                    "Double Angle (Long Leg)",
+                                    "Double Angle (Short Leg)",
+                                    "Channel",
+                                    "Double Channel",
+                                ],
                 }]},
                 {"fields": [{
                     "id":      KEY_MP_CB_TOP_CHORD_SECTION_DESIG,
@@ -2679,7 +2421,13 @@ CROSS_BRACING_DETAILS_SCHEMA = {
                     "id":      KEY_MP_CB_BOTTOM_CHORD_SECTION_TYPE,
                     "label":   "  Bottom Chord Section Type:",
                     "type":    TYPE_COMBOBOX,
-                    "choices": _CB_SECTION_TYPE_CHOICES,
+                    "choices": [
+                                    "Angle",
+                                    "Double Angle (Long Leg)",
+                                    "Double Angle (Short Leg)",
+                                    "Channel",
+                                    "Double Channel",
+                                ],
                 }]},
                 {"fields": [{
                     "id":      KEY_MP_CB_BOTTOM_CHORD_SECTION_DESIG,
@@ -2753,7 +2501,6 @@ CROSS_BRACING_DETAILS_SCHEMA = {
         },
     ],
 }
-
 
 END_DIAPHRAGM_DETAILS_SCHEMA = {
     "id": KEY_MP_ED_TAB,
@@ -3074,40 +2821,307 @@ MEMBER_PROPERTIES_SCHEMA = {
     ],
 }
 
-# Versioned contract for schema-driven Member Properties migration.
-# This keeps existing schema constants intact while providing a single
-# top-level structure that builders can consume incrementally.
-MEMBER_PROPERTIES_SCHEMA_V1 = {
-    "version": 1,
-    "tabs": {
-        "girder_details": {
-            "id": "girder_details",
-            "title": "Girder Details",
-            "overview": GIRDER_DETAILS_SCHEMA.get("overview", []),
-            "section_inputs": GIRDER_DETAILS_SCHEMA.get("section_inputs", []),
+# ── Main Schema ───────────────────────────────────────────────────────────────
+
+ADDITIONAL_INPUTS_SCHEMA = [
+    {
+        "label":    "Typical Section Details",
+        "schema":   TYPICAL_SECTION_SCHEMA,
+        "main_id":  KEY_TS_TAB + ".main",
+        "filler_column_index": None,
+    },
+    {
+        "label":   "Member Properties",
+        "schema":  MEMBER_PROPERTIES_SCHEMA,
+        "main_id": "member_properties.main",
+        "with_scroll": False,
+    },
+    {
+        "label":   "Loading",
+        "schema":  LOADING_TAB_SCHEMA,
+        "main_id": "loading.main",
+        "with_scroll": False,
+    },
+    {
+        "label":   "Support Conditions",
+        "schema":  SUPPORT_CONDITIONS_SCHEMA,
+        "main_id": "support_conditions.main",
+        "with_scroll": True,
+    },
+    {
+        "label":   "Analysis/Design Options",
+        "schema":  DESIGN_OPTIONS_SCHEMA,
+        "main_id": "design_options.main",
+        "with_scroll": True,
+    },
+    {
+        "label":   "Design Options (Cont.)",
+        "schema":  DESIGN_OPTIONS_CONT_SCHEMA,
+        "main_id": "design_options_cont.main",
+        "with_scroll": True,
+    },
+]
+
+
+STEEL_DESIGN_DETAILS_SCHEMA = {
+    "cad": {
+        "top": {
+            "id": KEY_SD_DETAILS_CAD_TOP,
+            "min_height": 160,
         },
-        "stiffener_details": {
-            "id": "stiffener_details",
-            "title": "Stiffener Details",
-            "overview": STIFFENER_DETAILS_SCHEMA.get("overview", []),
-            "stiffener_inputs": STIFFENER_DETAILS_SCHEMA.get("stiffener_inputs", []),
-            "web_buckling_inputs": STIFFENER_DETAILS_SCHEMA.get("web_buckling_inputs", []),
-        },
-        "cross_bracing_details": {
-            "id": "cross_bracing_details",
-            "title": "Cross-Bracing Details",
-            "overview": CROSS_BRACING_DETAILS_SCHEMA.get("overview", []),
-            "section_inputs": CROSS_BRACING_DETAILS_SCHEMA.get("section_inputs", []),
-        },
-        "end_diaphragm_details": {
-            "id": "end_diaphragm_details",
-            "title": "End Diaphragm Details",
-            "views": END_DIAPHRAGM_DETAILS_SCHEMA.get("views", {}),
+        "bottom": {
+            "id": KEY_SD_DETAILS_CAD_BOTTOM,
+            "width": 400,
+            "height": 200,
         },
     },
+    "cards": [
+        {
+            "id": KEY_SD_DETAILS_DIMENSIONAL_CARD,
+            "title": "Dimensional Details:",
+            "fields": [
+                {
+                    "id": KEY_SD_GRADE_OF_MATERIAL,
+                    "label": "Grade of Material:",
+                    "data_key": "grade_of_material",
+                    "group": "member",
+                },
+                {
+                    "id": KEY_SD_SECTION_TYPE,
+                    "label": "Type:",
+                    "data_key": "section_type",
+                    "group": "member",
+                },
+                {
+                    "id": KEY_SD_SECTION_DESIGNATION,
+                    "label": "Section Designation",
+                    "data_key": "section_designation",
+                    "group": "dim",
+                },
+                {
+                    "id": KEY_SD_SECTION_CLASS,
+                    "label": "Section Class",
+                    "data_key": "section_class",
+                    "group": "dim",
+                },
+                {
+                    "id": KEY_SD_TOTAL_DEPTH,
+                    "label": "Total Depth (mm)",
+                    "data_key": "total_depth",
+                    "group": "dim",
+                },
+                {
+                    "id": KEY_SD_WEB_THICKNESS,
+                    "label": "Web Thickness (mm)",
+                    "data_key": "web_thickness",
+                    "group": "dim",
+                },
+                {
+                    "id": KEY_SD_TOP_FLANGE_WIDTH,
+                    "label": "Top Flange Width (mm)",
+                    "data_key": "top_flange_width",
+                    "group": "dim",
+                },
+                {
+                    "id": KEY_SD_TOP_FLANGE_THICKNESS,
+                    "label": "Top Flange Thickness (mm)",
+                    "data_key": "top_flange_thickness",
+                    "group": "dim",
+                },
+                {
+                    "id": KEY_SD_BOTTOM_FLANGE_WIDTH,
+                    "label": "Bottom Flange Width (mm)",
+                    "data_key": "bottom_flange_width",
+                    "group": "dim",
+                },
+                {
+                    "id": KEY_SD_BOTTOM_FLANGE_THICKNESS,
+                    "label": "Bottom Flange Thickness (mm)",
+                    "data_key": "bottom_flange_thickness",
+                    "group": "dim",
+                },
+                {
+                    "id": KEY_SD_TORSIONAL_RESTRAINT,
+                    "label": "Torsional Restraint",
+                    "data_key": "torsional_restraint",
+                    "group": "dim",
+                },
+                {
+                    "id": KEY_SD_WARPING_RESTRAINT,
+                    "label": "Warping Restraint",
+                    "data_key": "warping_restraint",
+                    "group": "dim",
+                },
+                {
+                    "id": KEY_SD_WEB_TYPE,
+                    "label": "Web Type",
+                    "data_key": "web_type",
+                    "group": "dim",
+                },
+                {
+                    "id": KEY_SD_EFFECTIVE_SLAB_WIDTH,
+                    "label": "Effective Width of Slab (mm)",
+                    "data_key": "effective_slab_width",
+                    "group": "dim",
+                },
+            ],
+        },
+        {
+            "id": KEY_SD_DETAILS_SHEAR_CARD,
+            "title": "Shear Connector Details:",
+            "fields": [
+                {
+                    "id": KEY_SD_SHEAR_YIELD_STRENGTH,
+                    "label": "Material Yield Strength (MPa)",
+                    "data_key": "shear_material_yield_strength",
+                    "group": "shear",
+                },
+                {
+                    "id": KEY_SD_SHEAR_ULTIMATE_STRENGTH,
+                    "label": "Material Ultimate Strength (MPa)",
+                    "data_key": "shear_material_ultimate_strength",
+                    "group": "shear",
+                },
+                {
+                    "id": KEY_SD_SHEAR_DIAMETER,
+                    "label": "Diameter (mm)",
+                    "data_key": "shear_diameter",
+                    "group": "shear",
+                },
+                {
+                    "id": KEY_SD_SHEAR_HEIGHT,
+                    "label": "Height (mm)",
+                    "data_key": "shear_height",
+                    "group": "shear",
+                },
+                {
+                    "id": KEY_SD_SHEAR_TRANSVERSE_SPACING,
+                    "label": "Transverse Spacing (mm)",
+                    "data_key": "shear_transverse_spacing",
+                    "group": "shear",
+                },
+                {
+                    "id": KEY_SD_SHEAR_STUDS_PER_SECTION,
+                    "label": "No. of Shear Studs per Section",
+                    "data_key": "shear_studs_per_section",
+                    "group": "shear",
+                },
+                {
+                    "id": KEY_SD_SHEAR_LONGITUDINAL_SPACING,
+                    "label": "Average Longitudinal Spacing (mm)",
+                    "data_key": "shear_longitudinal_spacing",
+                    "group": "shear",
+                },
+            ],
+        },
+        {
+            "id": KEY_SD_DETAILS_SECTION_PROPERTIES_CARD,
+            "title": "Section Properties:",
+            "fields": [
+                {
+                    "id": KEY_MP_GIRDER_MASS,
+                    "label": "Mass, M (Kg/m)",
+                    "data_key": "mass",
+                    "group": "section",
+                },
+                {
+                    "id": KEY_MP_GIRDER_SECTIONAL_AREA,
+                    "label": "Sectional Area, a (cm<sup>2</sup>)",
+                    "data_key": "area",
+                    "group": "section",
+                },
+                {
+                    "id": KEY_MP_GIRDER_SECTIONAL_IZ,
+                    "label": "2nd Moment of Area, I<sub>z</sub> (cm<sup>4</sup>)",
+                    "data_key": "iz",
+                    "group": "section",
+                },
+                {
+                    "id": KEY_MP_GIRDER_SECTIONAL_IY,
+                    "label": "2nd Moment of Area, I<sub>y</sub> (cm<sup>4</sup>)",
+                    "data_key": "iv",
+                    "group": "section",
+                },
+                {
+                    "id": KEY_MP_GIRDER_RADIUS_GYRATION_Z,
+                    "label": "Radius of Gyration, r<sub>z</sub> (cm)",
+                    "data_key": "rz",
+                    "group": "section",
+                },
+                {
+                    "id": KEY_MP_GIRDER_RADIUS_GYRATION_Y,
+                    "label": "Radius of Gyration, r<sub>y</sub> (cm)",
+                    "data_key": "rv",
+                    "group": "section",
+                },
+                {
+                    "id": KEY_MP_GIRDER_ELASTIC_MODULUS_ZZ,
+                    "label": "Elastic Modulus, Z<sub>z</sub> (cm<sup>3</sup>)",
+                    "data_key": "zz",
+                    "group": "section",
+                },
+                {
+                    "id": KEY_MP_GIRDER_ELASTIC_MODULUS_ZY,
+                    "label": "Elastic Modulus, Z<sub>y</sub> (cm<sup>3</sup>)",
+                    "data_key": "zv",
+                    "group": "section",
+                },
+                {
+                    "id": KEY_MP_GIRDER_PLASTIC_MODULUS_ZUZ,
+                    "label": "Plastic Modulus, Z<sub>pz</sub> (cm<sup>3</sup>)",
+                    "data_key": "zuz",
+                    "group": "section",
+                },
+                {
+                    "id": KEY_MP_GIRDER_PLASTIC_MODULUS_ZUY,
+                    "label": "Plastic Modulus, Z<sub>py</sub> (cm<sup>3</sup>)",
+                    "data_key": "zuv",
+                    "group": "section",
+                },
+                {
+                    "id": KEY_MP_GIRDER_TORSION_CONSTANT_IT,
+                    "label": "Torsion Constant, I<sub>t</sub> (cm<sup>4</sup>)",
+                    "data_key": "it",
+                    "group": "section",
+                },
+                {
+                    "id": KEY_MP_GIRDER_WARPING_CONSTANT_IW,
+                    "label": "Warping Constant, I<sub>w</sub> (cm<sup>6</sup>)",
+                    "data_key": "iw",
+                    "group": "section",
+                },
+            ],
+        },
+    ],
+    "stiffener": {
+        "id": KEY_SD_DETAILS_STIFFENER_TABLE,
+        "row_height": 40,
+        "columns": [
+            {"id": "stiffener_type", "label": "Type"},
+            {"id": KEY_SD_STIFFENER_COL_GRADE, "label": "Grade of Material", "suffix": "grade"},
+            {"id": KEY_SD_STIFFENER_COL_THICKNESS, "label": "Thickness (mm)", "suffix": "thickness"},
+            {"id": KEY_SD_STIFFENER_COL_WIDTH, "label": "Width (mm)", "suffix": "width"},
+            {"id": KEY_SD_STIFFENER_COL_SPACING, "label": "Spacing (mm)", "suffix": "spacing"},
+        ],
+        "rows": [
+            {
+                "id": KEY_SD_STIFFENER_ROW_INTERMEDIATE,
+                "label": "Intermediate",
+                "data_prefix": "stiff_intermediate",
+            },
+            {
+                "id": KEY_SD_STIFFENER_ROW_LONGITUDINAL,
+                "label": "Longitudinal",
+                "data_prefix": "stiff_longitudinal",
+            },
+            {
+                "id": KEY_SD_STIFFENER_ROW_BEARING,
+                "label": "Bearing",
+                "data_prefix": "stiff_bearing",
+            },
+        ],
+    },
 }
-
-# Transverse Member Design Dialog Schema
 
 TRANSVERSE_MEMBER_DESIGN_SCHEMA = {
     "id": KEY_TD_DIALOG,
@@ -3271,8 +3285,6 @@ DECK_DESIGN_SUMMARY_SCHEMA = {
         "data_key": "deck_design_check"
     }
 }
-
-
 
 """
 Default data schema for Generate Results Table dialog.
@@ -4028,3 +4040,4 @@ GENERATE_RESULTS_DEFAULTS = {
         },
     },
 }
+

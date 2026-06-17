@@ -451,6 +451,7 @@ KEY_TS_DECK_THICKNESS     = "typical_section.deck_thickness"
 KEY_TS_NO_OF_FOOTPATHS    = "typical_section.no_of_footpaths"
 KEY_TS_FOOTPATH_WIDTH     = "typical_section.footpath_width"
 KEY_TS_FOOTPATH_THICKNESS = "typical_section.footpath_thickness"
+KEY_TS_CAD_PREVIEW        = "typical_section.cad_preview"
 
 # Typical Section - Lane Deatils
 KEY_WC_LD_TAB = "typical_section.lane_details.tab"
@@ -1411,7 +1412,7 @@ VALUES_CROSS_BRACING_TYPE = [
     "X-bracing with top and bottom brackets",
 ]
 VALUES_END_DIAPHRAGM_TYPE = ["Cross Bracing", "Rolled Beam", "Welded Beam"]
-VALUES_WEARING_COAT_MATERIAL = ["Concrete", "Bituminous", "Other"]
+VALUES_WEARING_COAT_MATERIAL = ["Concrete", "Bituminous", "Custom"]
 VALUES_RAILING_TYPE = ["IRC 5 - RCC Railing", "IRC 5 - Steel Railing", "Custom"]
 VALUES_CUSTOM_AXLE_TYPE = ["Single", "Bogie"]
 VALUES_FOOTPATH_PRESSURE_MODE = ["Automatic", "User-defined"]

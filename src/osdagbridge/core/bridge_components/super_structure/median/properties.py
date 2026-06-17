@@ -46,20 +46,14 @@ def median_raised_kerb_load():
 def median_rcc_barrier_load():
     geom = median_rcc_crash_barrier_area()
 
-    barrier_load_single = load_from_area(geom["rcc_barrier_area_single"], RCC_DENSITY)
-    kerb_load_single = load_from_area(geom["kerb_area_single"], RCC_DENSITY)
-
+    barrier_load_single = load_from_area(geom["one_side_area"], RCC_DENSITY)
     total_barrier = 2 * barrier_load_single
-    total_kerb = 2 * kerb_load_single
-    total = total_barrier + total_kerb
 
     return {
         "type": geom["type"],
         "single_barrier_load_kN_per_m": round(barrier_load_single, 3),
-        "single_kerb_load_kN_per_m": round(kerb_load_single, 3),
         "total_barrier_load_kN_per_m": round(total_barrier, 3),
-        "total_kerb_load_kN_per_m": round(total_kerb, 3),
-        "total_load_kN_per_m": round(total, 3)
+        "total_load_kN_per_m": round(total_barrier, 3)
     }
 
 

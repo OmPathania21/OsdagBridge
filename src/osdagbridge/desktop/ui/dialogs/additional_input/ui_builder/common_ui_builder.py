@@ -4,16 +4,10 @@ from __future__ import annotations
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QGridLayout, QLabel, QComboBox, QLineEdit,
     QTableWidget, QHeaderView, QSizePolicy, QCheckBox, QGroupBox,
-    QHBoxLayout, QFrame, QPushButton, QScrollArea
+    QHBoxLayout, QFrame, QPushButton, QScrollArea, QTabWidget
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QDoubleValidator, QIntValidator
-
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QGridLayout, QLabel, QComboBox, QLineEdit,
-    QTableWidget, QHeaderView, QSizePolicy, QCheckBox,
-    QHBoxLayout, QFrame, QPushButton, QScrollArea
-)
 
 from osdagbridge.core.utils.common import *
 
@@ -93,7 +87,8 @@ class UIBuilder(QWidget):
 
     def _build_ui(self):
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(18, 6, 18, 12)
+        top_margin = self._schema.get("top_margin", 6)
+        outer.setContentsMargins(18, top_margin, 18, 12)
         outer.setSpacing(0)
 
         self.main_widget = QWidget(self)
@@ -105,7 +100,10 @@ class UIBuilder(QWidget):
         layout_def  = self._schema.get("layout", {})
         layout_type = layout_def.get("type", "rows")
 
-        if layout_type == "tabs":
+        if layout_type == "panel":
+            outer.setContentsMargins(0, 0, 0, 0)
+            self._build_panel_layout(main_layout)
+        elif layout_type == "tabs":
             self._build_tabs_layout(main_layout)
         elif layout_type == "columns":
             self._build_columns_layout(main_layout, layout_def)
@@ -122,9 +120,12 @@ class UIBuilder(QWidget):
                     self._build_grid(section, card_layout)
                 main_layout.addWidget(card)
         else:
-            card, card_layout = self._create_section_card(self._card_title)
-            self._build_grid(self._schema, card_layout)
-            main_layout.addWidget(card)
+            if self._card_title:
+                card, card_layout = self._create_section_card(self._card_title)
+                self._build_grid(self._schema, card_layout)
+                main_layout.addWidget(card)
+            else:
+                self._build_grid(self._schema, main_layout)
 
         if self._with_scroll:
             scroll = QScrollArea()
@@ -141,6 +142,105 @@ class UIBuilder(QWidget):
     # ──────────────────────────────────────────────────────────────────────────
     # Layout strategies
     # ──────────────────────────────────────────────────────────────────────────
+
+    def _build_panel_layout(self, main_layout: QVBoxLayout):
+        """Panel layout: optional header above a scrollable body with primary_fields + subtabs."""
+        main_layout.setSpacing(8)
+        schema = self._schema
+        ai = self.additional_input_instance
+
+        # ── Header (rendered directly, no sectionCard wrapper) ────────────────
+        if "header" in schema:
+            header_container = QWidget()
+            header_layout = QVBoxLayout(header_container)
+            header_layout.setContentsMargins(0, 0, 0, 0)
+            header_layout.setSpacing(0)
+            self._build_grid(schema["header"], header_layout)
+            main_layout.addWidget(header_container)
+
+        # ── Scrollable body ────────────────────────────────────────────────────
+        input_container = QWidget()
+        input_container.setStyleSheet("QWidget { background-color: white; border: none; border-radius: 7px; }")
+        input_layout = QVBoxLayout(input_container)
+        input_layout.setContentsMargins(0, 10, 0, 0)
+        input_layout.setSpacing(4)
+
+        if "primary_fields" in schema:
+            pf_wrapper = QWidget()
+            pf_wrapper.setObjectName("primary_fields.main")
+            pf_inner = QVBoxLayout(pf_wrapper)
+            pf_inner.setContentsMargins(16, 16, 16, 4)
+            pf_inner.setSpacing(10)
+            inputs_label = QLabel("Inputs:")
+            inputs_label.setStyleSheet(
+                "font-size: 12px; font-weight: bold; color: #000; border: none; background: transparent;"
+            )
+            pf_inner.addWidget(inputs_label)
+            self._build_grid(schema["primary_fields"], pf_inner)
+            input_layout.addWidget(pf_wrapper)
+
+        if "tabs" in schema:
+            tabs = QTabWidget()
+            tabs.setObjectName(schema.get("id", "") + ".tabs")
+            tabs.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            tabs.setTabBarAutoHide(False)
+            tabs.setStyleSheet("""
+                QTabWidget::pane { border: 1px solid #b0b0b0; background-color: white; }
+                QTabBar::tab {
+                    background-color: #e8e8e8; color: #555; padding: 10px 20px;
+                    border: 1px solid #b0b0b0; border-bottom: none; border-right: none;
+                    font-size: 11px; min-width: 80px;
+                }
+                QTabBar::tab:disabled { color: #bfbfbf; background: #e6e6e6; }
+                QTabBar::tab:last { border-right: 1px solid #b0b0b0; }
+                QTabBar::tab:selected {
+                    background-color: #90AF13; color: white; font-weight: bold;
+                    border: 1px solid #90AF13; border-bottom: none;
+                }
+                QTabBar::tab:hover:!selected { background-color: #d0d0d0; }
+            """)
+            tabs.tabBar().setElideMode(Qt.ElideNone)
+            tabs.tabBar().setExpanding(False)
+            tabs.tabBar().setUsesScrollButtons(True)
+            tabs.tabBar().setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+            for tab_def in schema["tabs"]:
+                tab_id = tab_def["id"]
+                tab_widget = UIBuilder(
+                    owner=self.owner,
+                    schema=tab_def,
+                    card_title="",
+                    main_widget_object_name=tab_id + ".main",
+                    additional_input_instance=ai,
+                    filler_column_index=2,
+                )
+                tabs.addTab(tab_widget, tab_def.get("label", ""))
+
+            def _resize_to_tab(idx, _tabs=tabs):
+                for i in range(_tabs.count()):
+                    w = _tabs.widget(i)
+                    if w:
+                        w.setSizePolicy(
+                            QSizePolicy.Expanding,
+                            QSizePolicy.Preferred if i == idx else QSizePolicy.Ignored,
+                        )
+                _tabs.adjustSize()
+
+            tabs.currentChanged.connect(_resize_to_tab)
+            _resize_to_tab(0)
+            input_layout.addWidget(tabs)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setStyleSheet(ADDITIONAL_INPUTS_SCROLL_STYLE + """
+            QScrollArea { border: 1px solid #b0b0b0; border-radius: 8px; background: white; }
+        """)
+        scroll.setWidget(input_container)
+        main_layout.addWidget(scroll)
 
     # ════════════════════════════════════════════════════════════════════════════
     # Patch for common_ui_builder.py
@@ -724,12 +824,26 @@ class UIBuilder(QWidget):
             cls = field_def.get("widget_class")
             if cls is None:
                 return QWidget()
- 
+
             widget = cls(parent=owner)
             field_id = str(field_def.get("id", ""))
             if field_id:
                 widget.setObjectName(field_id)
- 
+
+            props = field_def.get("widget_props") or {}
+            for prop, val in props.items():
+                if prop in ("wrap_in_scroll", "minimum_height", "maximum_height",
+                            "fixed_height", "container_min_height", "container_max_height",
+                            "container_style", "container_margins"):
+                    continue
+                setattr(widget, prop, val)
+            if "minimum_height" in props:
+                widget.setMinimumHeight(props["minimum_height"])
+            if "maximum_height" in props:
+                widget.setMaximumHeight(props["maximum_height"])
+            if "fixed_height" in props:
+                widget.setFixedHeight(props["fixed_height"])
+
             # Wire any Signal connections declared in the schema as string method names.
             for signal_name, method_key in [
                 ("row_selected",  "on_row_select"),
@@ -741,14 +855,32 @@ class UIBuilder(QWidget):
                 signal = getattr(widget, signal_name, None)
                 if signal is None:
                     continue
-                # Resolve handler on owner then ai
                 handler = (
                     getattr(owner, method_str, None)
                     or (getattr(ai, method_str, None) if ai else None)
                 )
                 if callable(handler):
                     signal.connect(handler)
- 
+
+            if props.get("wrap_in_scroll"):
+                container = QWidget()
+                container.setMinimumHeight(props.get("container_min_height", 280))
+                container.setMaximumHeight(props.get("container_max_height", 380))
+                if "container_style" in props:
+                    container.setStyleSheet(props["container_style"])
+                c_layout = QVBoxLayout(container)
+                margins = props.get("container_margins", [5, 5, 5, 5])
+                c_layout.setContentsMargins(*margins)
+                scroll = QScrollArea()
+                scroll.setWidgetResizable(True)
+                scroll.setFrameShape(QFrame.NoFrame)
+                scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+                scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+                scroll.setStyleSheet(ADDITIONAL_INPUTS_SCROLL_STYLE)
+                scroll.setWidget(widget)
+                c_layout.addWidget(scroll)
+                return container
+
             return widget
 
         elif ftype == TYPE_MODE_LINE:
@@ -943,8 +1075,8 @@ class UIBuilder(QWidget):
 
         container = QWidget()
         container.setFixedWidth(field_width)
-        container.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
-        container.hide()
+        container.setFixedHeight(36)
+        container.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
         vbox = QVBoxLayout(container)
         vbox.setContentsMargins(0, 0, 0, 0)
