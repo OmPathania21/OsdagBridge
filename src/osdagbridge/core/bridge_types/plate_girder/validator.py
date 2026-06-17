@@ -469,7 +469,7 @@ class BridgeInputValidator:
 
         # ── End Diaphragm Details (Custom, Welded Beam only) ──────────────────
         elif key == "member_properties.end_diaphragm_details.welded_beam.depth":  # placeholder – KEY_END_DIAPHRAGM_WELDED_DEPTH not yet defined
-            end_type    = str(inputs.get(KEY_END_DIAPHRAGM_TYPE) or "").strip()
+            end_type    = str(inputs.get(KEY_MP_ED_TYPE) or "").strip()
             design_mode = str(inputs.get(KEY_DESIGN_MODE) or "").strip().lower()
             if end_type == "Welded Beam" and design_mode == "custom":
                 v = self._to_float(inputs.get(key))
@@ -478,7 +478,7 @@ class BridgeInputValidator:
                 if v > 3000:  return 3000, "End diaphragm (Welded Beam) depth must be between 200 and 3000 mm."
 
         elif key == "member_properties.end_diaphragm_details.welded_beam.top_flange_width":  # placeholder – KEY_END_DIAPHRAGM_WELDED_TOP_FLANGE_WIDTH not yet defined
-            end_type    = str(inputs.get(KEY_END_DIAPHRAGM_TYPE) or "").strip()
+            end_type    = str(inputs.get(KEY_MP_ED_TYPE) or "").strip()
             design_mode = str(inputs.get(KEY_DESIGN_MODE) or "").strip().lower()
             if end_type == "Welded Beam" and design_mode == "custom":
                 v = self._to_float(inputs.get(key))
@@ -487,7 +487,7 @@ class BridgeInputValidator:
                 if v > 1500:  return 1500, "End diaphragm (Welded Beam) top flange width must be between 100 and 1500 mm."
 
         elif key == "member_properties.end_diaphragm_details.welded_beam.bottom_flange_width":  # placeholder – KEY_END_DIAPHRAGM_WELDED_BOTTOM_FLANGE_WIDTH not yet defined
-            end_type    = str(inputs.get(KEY_END_DIAPHRAGM_TYPE) or "").strip()
+            end_type    = str(inputs.get(KEY_MP_ED_TYPE) or "").strip()
             design_mode = str(inputs.get(KEY_DESIGN_MODE) or "").strip().lower()
             if end_type == "Welded Beam" and design_mode == "custom":
                 v = self._to_float(inputs.get(key))

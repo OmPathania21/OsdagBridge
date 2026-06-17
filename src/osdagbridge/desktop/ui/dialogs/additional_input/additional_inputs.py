@@ -48,13 +48,15 @@ class AdditionalInputs(QDialog):
         self.default_input_dict = {}
         # Work temporarily on a copy of default dictionary
         self.working_input_dict = {}
+        # Last confirmed-good spacing and girder count; restored if solver raises an error
+        self._last_good_layout: dict = {}
 
         # TO tract additional input is opened first time or not.
         # This is required for end connectors
         self.interacted_first = True
 
         self.setObjectName("AdditionalInputs")
-        self.resize(1024, 850)
+        self.resize(1024, 900)
         self.setMinimumSize(900, 520)
         self.setSizeGripEnabled(True)
         self.init_ui()
@@ -179,6 +181,11 @@ class AdditionalInputs(QDialog):
         self.set_defaults()
 
         self.default_input_dict.update(self.working_input_dict)
+
+        self._last_good_layout = {
+            KEY_TS_GIRDER_SPACING: self.working_input_dict.get(KEY_TS_GIRDER_SPACING),
+            KEY_TS_NO_OF_GIRDERS:  self.working_input_dict.get(KEY_TS_NO_OF_GIRDERS),
+        }
 
         if self.interacted_first:
             self.interacted_first = False
@@ -636,7 +643,7 @@ class AdditionalInputs(QDialog):
 
     # ── Typical Section - Primary Fields ───────────────────────────────────────────────────────
 
-    def recalculate_girders(self, changed_field=None):  # on_text_changed: recalculates linked girder layout fields from current Typical Section widths
+    def update_girder_layout(self, changed_field=None):  # recalculates overall bridge width and solves girder layout (spacing, overhang, count)
         primary_edit = changed_field in {"spacing", "overhang", "girders"}
         if not primary_edit:
             changed_field = "girders"
@@ -702,6 +709,20 @@ class AdditionalInputs(QDialog):
                 changed_field=changed_field,
             )
         except ValueError as exc:
+            if changed_field == "spacing":
+                prev = self._last_good_layout.get(KEY_TS_GIRDER_SPACING)
+                if prev is not None:
+                    d[KEY_TS_GIRDER_SPACING] = prev
+                    w = self.findChild(QLineEdit, KEY_TS_GIRDER_SPACING)
+                    if w:
+                        w.setText(f"{float(prev):.2f}")
+            elif changed_field == "girders":
+                prev = self._last_good_layout.get(KEY_TS_NO_OF_GIRDERS)
+                if prev is not None:
+                    d[KEY_TS_NO_OF_GIRDERS] = prev
+                    w = self.findChild(QLineEdit, KEY_TS_NO_OF_GIRDERS)
+                    if w:
+                        w.setText(str(int(float(prev))))
             CustomMessageBox(title="Layout", text=str(exc), buttons=["OK"], dialogType=MessageBoxType.Warning).exec()
             return False
 
@@ -739,6 +760,8 @@ class AdditionalInputs(QDialog):
                 lbl.setText(f"Values adjusted: {', '.join(reason_parts)}")
                 lbl.show()
 
+        self._last_good_layout[KEY_TS_GIRDER_SPACING] = result.girder_spacing
+        self._last_good_layout[KEY_TS_NO_OF_GIRDERS]  = result.no_of_girders
         return True
 
     def on_girder_spacing_changed(self):  # on_editing_finished: recalculates deck overhang after girder spacing changes
@@ -749,17 +772,7 @@ class AdditionalInputs(QDialog):
         scan = text[1:] if text[:1] in "+-" else text
         if text and not (scan.isdigit() or (scan.count(".") == 1 and scan.replace(".", "").isdigit())):
             return
-        self.recalculate_girders("spacing")
-
-    def on_deck_overhang_changed(self):  # on_editing_finished: recalculates girder spacing after deck overhang changes
-        field = self.findChild(QLineEdit, KEY_TS_DECK_OVERHANG)
-        if field is None:
-            return
-        text = field.text().strip()
-        scan = text[1:] if text[:1] in "+-" else text
-        if text and not (scan.isdigit() or (scan.count(".") == 1 and scan.replace(".", "").isdigit())):
-            return
-        self.recalculate_girders("overhang")
+        self.update_girder_layout("spacing")
 
     def on_no_of_girders_changed(self):  # on_editing_finished: recalculates layout and dynamic girder keys after girder count changes
         field = self.findChild(QLineEdit, KEY_TS_NO_OF_GIRDERS)
@@ -769,7 +782,7 @@ class AdditionalInputs(QDialog):
         scan = text[1:] if text[:1] in "+-" else text
         if text and not (scan.isdigit() or (scan.count(".") == 1 and scan.replace(".", "").isdigit())):
             return
-        if self.recalculate_girders("girders"):
+        if self.update_girder_layout("girders"):
             from osdagbridge.core.bridge_types.plate_girder.defaults import _on_no_of_girders_changed
             _on_no_of_girders_changed(self.working_input_dict)
 
@@ -809,6 +822,12 @@ class AdditionalInputs(QDialog):
         spacing = self.findChild(QLineEdit, KEY_CB_POST_SPACING)
         if spacing:
             spacing.setEnabled(is_metallic)
+
+        # Pre-apply new widths so update_girder_layout uses the correct overall width
+        result = self.compute_crash_barrier_values(self.working_input_dict)
+        for k, v in result.items():
+            self._update_input_dict(k, str(v))
+        self.update_girder_layout()
 
     def compute_crash_barrier_values(self, input_dict: dict) -> dict:
         from osdagbridge.core.utils.codes.irc5_2015 import IRC5_2015
@@ -907,6 +926,12 @@ class AdditionalInputs(QDialog):
         if spacing:
             spacing.setEnabled(is_metallic)
 
+        # Pre-apply new widths so update_girder_layout uses the correct overall width
+        result = self.compute_median_values(self.working_input_dict)
+        for k, v in result.items():
+            self._update_input_dict(k, str(v))
+        self.update_girder_layout()
+
     def compute_median_values(self, input_dict: dict) -> dict:
         from osdagbridge.core.utils.codes.irc5_2015 import IRC5_2015
         from osdagbridge.core.bridge_components.super_structure.median.geometry import (
@@ -955,7 +980,17 @@ class AdditionalInputs(QDialog):
 
         return {}
 
+    def on_layout_width_changed(self):  # on_editing_finished: triggers girder layout recalculation when CB/MD/RL/footpath width is edited
+        self.update_girder_layout()
+
     # ── Railing Sub-Tab ──────────────────────────────────────────────────────────────────────
+
+    def on_railing_type_changed(self, railing_type: str):
+        # Pre-apply new width so update_girder_layout uses the correct overall width
+        result = self.compute_railing_values(self.working_input_dict)
+        for k, v in result.items():
+            self._update_input_dict(k, str(v))
+        self.update_girder_layout()
 
     def compute_railing_values(self, input_dict: dict) -> dict:
         from osdagbridge.core.utils.codes.irc5_2015 import IRC5_2015

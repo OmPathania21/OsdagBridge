@@ -26,7 +26,7 @@ _DECK_DETAILS_TAB_SCHEMA = {
                     "id": KEY_TS_FOOTPATH_WIDTH,
                     "label": "Footpath Width (m):",
                     "type": TYPE_TEXTBOX,
-                    "on_text_changed": "on_layout_width_changed",
+                    "on_editing_finished": "on_layout_width_changed",
                 },
                 {
                     "id": KEY_TS_FOOTPATH_THICKNESS,
@@ -78,6 +78,7 @@ _CRASH_BARRIER_TAB_SCHEMA = {
                     "id": KEY_CB_WIDTH,
                     "label": "Width (m):",
                     "type": TYPE_TEXTBOX,
+                    "on_editing_finished": "on_layout_width_changed",
                 }
             ]
         },
@@ -160,7 +161,7 @@ _MEDIAN_TAB_SCHEMA = {
                     "id": KEY_MD_WIDTH,
                     "label": "Width (m):",
                     "type": TYPE_TEXTBOX,
-                    "on_text_changed": "on_layout_width_changed",
+                    "on_editing_finished": "on_layout_width_changed",
                 }
             ]
         },
@@ -216,6 +217,7 @@ _RAILING_TAB_SCHEMA = {
                     "label": "Type:",
                     "type": TYPE_COMBOBOX,
                     "choices": VALUES_RAILING_TYPE,
+                    "on_change": "on_railing_type_changed",
                     "on_change_compute": {"function": "compute_railing_values"},
                 }
             ]
@@ -226,7 +228,7 @@ _RAILING_TAB_SCHEMA = {
                     "id": KEY_RL_WIDTH,
                     "label": "Width (m):",
                     "type": TYPE_TEXTBOX,
-                    "on_text_changed": "on_layout_width_changed",
+                    "on_editing_finished": "on_layout_width_changed",
                 }
             ]
         },
@@ -236,7 +238,6 @@ _RAILING_TAB_SCHEMA = {
                     "id": KEY_RL_HEIGHT,
                     "label": "Height (m):",
                     "type": TYPE_TEXTBOX,
-                    "on_editing_finished": "validate_railing_height",
                 }
             ]
         },
@@ -385,7 +386,6 @@ TYPICAL_SECTION_SCHEMA = {
                         "label": "Deck Overhang Width (m):",
                         "type": TYPE_TEXTBOX,
                         "read_only": True,
-                        "on_editing_finished": "on_deck_overhang_changed",
                     },
                     {
                         "id": KEY_TS_OVERALL_WIDTH,

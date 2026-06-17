@@ -230,7 +230,6 @@ class BridgeConfigurationSolver:
         
         # Get bounds
         spacing_bounds = self._spacing_bounds(overall_width)
-        o_min, o_max = self._deck_overhang_range(overall_width)
         
         # Parse inputs (0 means use default)
         spacing_input = girder_spacing if girder_spacing > 0 else DEFAULT_GIRDER_SPACING
@@ -238,72 +237,53 @@ class BridgeConfigurationSolver:
         girders_input = no_of_girders if no_of_girders >= 2 else 0
         
         # =====================================================================
-        # Case: spacing changed -> n is FIXED, solve for overhang
+        # Case: spacing changed → n fixed, derive overhang.
+        # (n-1)*spacing + 2*overhang = overall_width
         # =====================================================================
         if changed_field == "spacing":
             if girders_input < 2:
-                raise ValueError("Number of girders must be at least 2")
-            
+                raise ValueError("Number of girders must be at least 2.")
             n = girders_input
-            spacing_use = self._clamp(spacing_input, *spacing_bounds)
-            # overhang = (width - (n - 1) * spacing) / 2
+            spacing_use = spacing_input
             overhang_use = (overall_width - (n - 1) * spacing_use) / 2.0
-            
-            if overhang_use < o_min - 1e-6:
+            if overhang_use < 0:
                 raise ValueError(
-                    f"Spacing {spacing_use:.2f}m too large for {n} girders. "
-                    f"Overhang would be {overhang_use:.2f}m (negative)."
+                    f"Spacing {spacing_use:.3f} m is too large for {n} girders "
+                    f"(overhang = {overhang_use:.3f} m). Reduce spacing or number of girders."
                 )
-            overhang_use = self._clamp(overhang_use, o_min, o_max)
-        
+
         # =====================================================================
-        # Case: overhang changed -> n is FIXED, solve for spacing
+        # Case: overhang changed → n fixed, derive spacing.
+        # (n-1)*spacing + 2*overhang = overall_width
         # =====================================================================
         elif changed_field == "overhang":
             if girders_input < 2:
-                raise ValueError("Number of girders must be at least 2")
-            
-            # Check if overhang is within valid range
-            if overhang_input < o_min - 1e-6 or overhang_input > o_max + 1e-6:
-                raise ValueError(
-                    f"Deck overhang must be between {o_min:.2f}m and {o_max:.2f}m. "
-                    f"You entered: {overhang_input:.2f}m"
-                )
-            
+                raise ValueError("Number of girders must be at least 2.")
             n = girders_input
-            overhang_use = self._clamp(overhang_input, o_min, o_max)
-            # spacing = (width - 2 * overhang) / (n - 1)
+            overhang_use = overhang_input
             spacing_use = (overall_width - 2 * overhang_use) / (n - 1)
-            
-            if spacing_use < spacing_bounds[0] - 1e-6:
+            if spacing_use < spacing_bounds[0]:
                 raise ValueError(
-                    f"Overhang {overhang_use:.2f}m too large for {n} girders. "
-                    f"Spacing would be {spacing_use:.2f}m (below minimum {spacing_bounds[0]:.2f}m)."
+                    f"Overhang {overhang_use:.3f} m is too large for {n} girders "
+                    f"(spacing = {spacing_use:.3f} m, min = {spacing_bounds[0]:.2f} m)."
                 )
-            spacing_use = self._clamp(spacing_use, *spacing_bounds)
-        
+
         # =====================================================================
-        # Case: girders changed -> compute spacing and overhang where overhang = spacing / 2
-        # From width = (n-1)*spacing + 2*overhang and overhang = spacing/2:
-        # width = (n-1)*spacing + spacing = n*spacing => spacing = width/n
+        # Case: girders changed → overhang = spacing / 2.
+        # n*spacing = overall_width  →  spacing = overall_width / n
+        # overhang  = spacing / 2
         # =====================================================================
         elif changed_field == "girders":
             if girders_input < 2:
-                raise ValueError("Number of girders must be at least 2")
-            
+                raise ValueError("Number of girders must be at least 2.")
             n = girders_input
-            # spacing = overall_width / n (gives overhang = spacing / 2)
             spacing_use = overall_width / n
-            spacing_use = self._clamp(round(spacing_use, 2), *spacing_bounds)
-            overhang_use = (overall_width - (n - 1) * spacing_use) / 2.0
-            
-            # Check if overhang is within valid range
-            if overhang_use < o_min - 1e-6 or overhang_use > o_max + 1e-6:
+            overhang_use = spacing_use / 2
+            if spacing_use < spacing_bounds[0]:
                 raise ValueError(
-                    f"Cannot satisfy constraints with {n} girders. "
-                    f"Overhang would be {overhang_use:.2f}m."
+                    f"{n} girders requires spacing = {spacing_use:.3f} m, "
+                    f"which is below the minimum ({spacing_bounds[0]:.2f} m)."
                 )
-            overhang_use = self._clamp(overhang_use, o_min, o_max)
         
         # Build result
         result = BridgeLayoutResult(
