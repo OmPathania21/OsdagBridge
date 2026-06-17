@@ -1666,14 +1666,41 @@ class CrossSectionCADWidget(QWidget):
         top_pts = []
         bottom_pts = []
 
-        for i in range(num_points + 1):
-            x = deck_slab_left + i * (deck_slab_right - deck_slab_left) / num_points
-            
-            y_top = deck_top_y + self._compute_slope_offset(x, slope_start_x, slope_end_x)
-            y_bottom = deck_bottom_y
+        # When the footpath is thinner than the deck the polygon steps DOWN at the
+        # footpath/carriageway boundary.  Two points at the same x (one at fp_top_y,
+        # one at deck_top_y) produce a vertical edge instead of a diagonal slant.
+        fp_thinner = fp_thick_px < deck_thick_px
+        left_fp_boundary  = left_barrier_x      if (fp_thinner and fp_config in ['left',  'both'] and left_fp_width  > 0) else None
+        right_fp_boundary = right_barrier_end_x  if (fp_thinner and fp_config in ['right', 'both'] and right_fp_width > 0) else None
 
-            top_pts.append(QPointF(x, y_top))
-            bottom_pts.insert(0, QPointF(x, y_bottom))
+        def _add(x, y):
+            top_pts.append(QPointF(x, y))
+            bottom_pts.insert(0, QPointF(x, deck_bottom_y))
+
+        # Left footpath segment (flat at fp_top_y)
+        if left_fp_boundary is not None:
+            for i in range(num_points + 1):
+                x = deck_slab_left + i * (left_fp_boundary - deck_slab_left) / num_points
+                _add(x, fp_top_y)
+            _add(left_fp_boundary, deck_top_y)   # vertical step up to deck level
+            main_start = left_fp_boundary
+        else:
+            main_start = deck_slab_left
+
+        # Right footpath segment boundaries
+        main_end = right_fp_boundary if right_fp_boundary is not None else deck_slab_right
+
+        # Main deck segment (carriageway + crash-barrier areas, with cross slope)
+        for i in range(num_points + 1):
+            x = main_start + i * (main_end - main_start) / num_points
+            _add(x, deck_top_y + self._compute_slope_offset(x, slope_start_x, slope_end_x))
+
+        # Right footpath segment (flat at fp_top_y)
+        if right_fp_boundary is not None:
+            _add(right_fp_boundary, fp_top_y)    # vertical step down to footpath level
+            for i in range(1, num_points + 1):
+                x = right_fp_boundary + i * (deck_slab_right - right_fp_boundary) / num_points
+                _add(x, fp_top_y)
 
         deck_polygon = QPolygonF(top_pts + bottom_pts)
 
