@@ -929,6 +929,11 @@ class SteelDesign(QDialog):
             return
 
         xs, bmd_values, sfd_values, defl_values, all_data = result
+        # Flip the sign of deflection so downward (currently +ve) renders as -ve
+        # across the deflection plot, the scroll cursor, and the max-value panel.
+        defl_values = -np.asarray(defl_values)
+        if isinstance(all_data, dict) and "dy" in all_data:
+            all_data["dy"] = -np.asarray(all_data["dy"])
         self._current_x    = xs
         self._current_bmd  = bmd_values
         self._current_sfd  = sfd_values
