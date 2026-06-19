@@ -178,7 +178,7 @@ class InputDock(QWidget):
         self.lock_btn.setObjectName("lock_btn")
         self.lock_btn.setCheckable(True)
         self.lock_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        self.lock_btn.clicked.connect(self.toggle_lock)
+        self.lock_btn.clicked.connect(lambda _: self.toggle_lock())
         top_bar.addWidget(self.lock_btn)
 
         self.lock_btn_tooltip = QLabel("🔒 Unlock to Edit")
@@ -768,7 +768,19 @@ class InputDock(QWidget):
     # Lock / unlock
     # ══════════════════════════════════════════════════════════════════════════
 
-    def toggle_lock(self):
+    def toggle_lock(self, confirm=True):
+        if self.is_locked and confirm:
+            result = CustomMessageBox(
+                title="Clear Results",
+                text="Unlocking will delete all results and plots.",
+                informativeText="Do you want to continue?",
+                buttons=["Continue", "Cancel"],
+                dialogType=MessageBoxType.Warning,
+            ).exec()
+            if result != "Continue":
+                self.lock_btn.setChecked(True)
+                return
+
         self.is_locked = not self.is_locked
 
         if not self.is_locked:

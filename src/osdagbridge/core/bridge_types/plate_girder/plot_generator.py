@@ -27,11 +27,14 @@ FORCE_MAP = {
     "Mz": ("Mz_i", "Mz_j"),
 }
 
-# Human-readable labels shown in plot titles / axis labels
-# Human-readable labels shown in plot titles / axis labels
+# Human-readable labels shown in plot titles / axis labels.
+# Keys are the internal force keys (see _RICH_LABEL_TO_FORCE in mpl_plot_widget.py);
+# they must match the symbol the user picked in the output dock:
+#   Fx -> axial force F_x,  Fy/Fz -> shear V_y/V_z,
+#   Mx -> torsion T_x,      My/Mz -> bending M_y/M_z.
 FORCE_DISPLAY = {
-    "Fx": "V$_x$", "Fy": "V$_y$", "Fz": "V$_z$",
-    "Mx": "M$_x$", "My": "M$_y$", "Mz": "M$_z$",
+    "Fx": "F$_x$", "Fy": "V$_y$", "Fz": "V$_z$",
+    "Mx": "T$_x$", "My": "M$_y$", "Mz": "M$_z$",
 }
 
 # Displacement component map  key → component name in ds["displacements"]
@@ -867,7 +870,7 @@ def build_figure_sfd(ds, force_key, nodes, members, edge_dist=0.0, eng_scale=1.0
     # inside the same cube for different v_scale values.
     ax.set_box_aspect([x_range, z_range, (x_range * 0.30) * max(v_scale, 1e-6)])
     ax.yaxis.set_major_locator(MaxNLocator(nbins=4, steps=[1, 2, 2.5, 5, 10]))
-    ax.set_title(f"Shear Force Diagram  —  {disp_key}", fontsize=12, fontweight="bold", pad=12)
+    ax.set_title(f"Shear Force Diagram  —  {disp_key} (kN)", fontsize=12, fontweight="bold", pad=12)
     fig._eng_scale = v_scale
     ax.view_init(elev=DEFAULT_ELEV, azim=DEFAULT_AZIM)
     ax.xaxis.pane.fill = False
@@ -1014,7 +1017,7 @@ def build_figure_bmd(ds, force_key, nodes, members, edge_dist=0.0, eng_scale=1.0
                 color="#FF4136", linewidth=1.5, linestyle="--", zorder=3, gid="max_line")
         # Bold Dark Grey Text
         ax.text(xs[idx_max], z_base, y_plot[idx_max],
-                f" {Mz[idx_max]:.2f}", color="#333333", fontsize=8, fontweight="bold", zorder=6, gid="max_line",
+                f" {Mz[idx_max]:.2f} kNm", color="#333333", fontsize=8, fontweight="bold", zorder=6, gid="max_line",
                 bbox=dict(facecolor='white', edgecolor='none', alpha=0.85, pad=1.0))
 
         # Min line (Dashed, Tagged for toggling)
@@ -1022,12 +1025,12 @@ def build_figure_bmd(ds, force_key, nodes, members, edge_dist=0.0, eng_scale=1.0
         ax.plot([xs[idx_min], xs[idx_min]], [z_base, z_base], [0, y_plot[idx_min]],
                 color="#0074D9", linewidth=1.5, linestyle="--", zorder=3, gid="min_line")
         ax.text(xs[idx_min], z_base, y_plot[idx_min],
-                f" {Mz[idx_min]:.2f}", color="#333333", fontsize=8, fontweight="bold", zorder=6, gid="min_line",
+                f" {Mz[idx_min]:.2f} kNm", color="#333333", fontsize=8, fontweight="bold", zorder=6, gid="min_line",
                 bbox=dict(facecolor='white', edgecolor='none', alpha=0.85, pad=1.0))
 
         # 'All' values annotations (Slightly lighter grey, Tagged for toggling)
         for xi, yi, mzi in zip(xs, y_plot, Mz):
-            ax.text(xi, z_base, yi, f" {mzi:.2f}", color="#555555", fontsize=7, zorder=5, gid="all_vals")
+            ax.text(xi, z_base, yi, f" {mzi:.2f} kNm", color="#555555", fontsize=7, zorder=5, gid="all_vals")
 
         # Slicing [1:-1] strips away the first and last dots so the supports stay clean!
         sc = ax.scatter(xs[1:-1], z_arr[1:-1], y_plot[1:-1],
@@ -1101,7 +1104,7 @@ def build_figure_bmd(ds, force_key, nodes, members, edge_dist=0.0, eng_scale=1.0
     ax.set_zlim(zmin - pad, zmax + pad)
     ax.set_box_aspect([x_range, z_range, (x_range * 0.30) * max(v_scale, 1e-6)])
     ax.yaxis.set_major_locator(MaxNLocator(nbins=4, steps=[1, 2, 2.5, 5, 10]))
-    ax.set_title(f"Bending Moment Diagram  —  {disp_key}", fontsize=12, fontweight="bold", pad=12)
+    ax.set_title(f"Bending Moment Diagram  —  {disp_key} (kNm)", fontsize=12, fontweight="bold", pad=12)
     fig._eng_scale = v_scale
     ax.view_init(elev=DEFAULT_ELEV, azim=DEFAULT_AZIM)
     ax.xaxis.pane.fill = False
@@ -1532,7 +1535,7 @@ def build_figure_deflection(ds, disp_key, nodes, members, edge_dist=0.0, eng_sca
     ax.set_box_aspect(aspect=(2.5, 1.2, max(v_scale, 1e-6)))
     fig._eng_scale = v_scale
 
-    ax.set_title(f"Deflection Diagram  —  {disp_label}", fontsize=12, fontweight="bold", pad=12)
+    ax.set_title(f"Deflection Diagram  —  {disp_label} (mm)", fontsize=12, fontweight="bold", pad=12)
     ax.view_init(elev=DEFAULT_ELEV, azim=DEFAULT_AZIM)
     
     # Pane styling
@@ -1555,3 +1558,123 @@ def figure_to_bytes(fig, fmt="png", dpi=150):
     buf.seek(0)
     plt.close(fig)
     return buf.read()
+
+def _render_report_figure(fig, show_max: bool, show_min: bool):
+    """Apply report annotations, set isometric view, save to PNG bytes, close figure.
+
+    Returns PNG bytes (whitespace auto-cropped via PIL) or None on failure.
+    """
+    import logging
+    _log = logging.getLogger(__name__)
+    try:
+        for ax in fig.axes:
+            for artist in list(ax.lines) + list(ax.texts):
+                gid = artist.get_gid()
+                if gid == "max_line":
+                    artist.set_visible(show_max)
+                elif gid == "min_line":
+                    artist.set_visible(show_min)
+                elif gid == "all_vals":
+                    artist.set_visible(False)
+
+        if fig.axes:
+            ax = fig.axes[0]
+            if hasattr(ax, 'view_init'):
+                ax.view_init(elev=30, azim=-60)
+
+        # dpi=150 is enough for PDF; bbox_inches='tight' intentionally
+        # omitted — it triggers multiple extra render passes on 3D axes.
+        raw_buf = io.BytesIO()
+        fig.savefig(raw_buf, format='png', dpi=150, facecolor='white')
+        plt.close(fig)
+        raw_buf.seek(0)
+
+        try:
+            from PIL import Image, ImageChops
+            img  = Image.open(raw_buf).convert('RGB')
+            bg   = Image.new('RGB', img.size, (255, 255, 255))
+            bbox = ImageChops.difference(img, bg).getbbox()
+            if bbox:
+                pad = 4
+                w, h = img.size
+                bbox = (max(0, bbox[0] - pad), max(0, bbox[1] - pad),
+                        min(w, bbox[2] + pad), min(h, bbox[3] + pad))
+                img = img.crop(bbox)
+            out = io.BytesIO()
+            img.save(out, format='PNG')
+            return out.getvalue()
+        except Exception:
+            raw_buf.seek(0)
+            return raw_buf.read()
+    except Exception as exc:
+        _log.warning("_render_report_figure: %s", exc)
+        try:
+            plt.close(fig)
+        except Exception:
+            pass
+    return None
+
+
+def capture_report_figures(ds_all, nodes, members, edge_dist=0.0, eng_scale=1.0) -> dict:
+    """Build the Envelope ULS analysis plots for the report — fully off-screen.
+
+    Builds each figure directly via the build_figure_* generators. No UI,
+    no canvas, nothing written to disk.
+
+    Captures:
+      • bm_envelope — Mz (bending moment), Max annotation, isometric
+      • sf_envelope — Vy (shear),           Max + Min annotations, isometric
+      • defl_ll     — Dy (deflection),       Max annotation, isometric (1.0 LL)
+
+    Returns {key: bytes} — PNG data in RAM.
+    """
+    import logging
+    _log = logging.getLogger(__name__)
+
+    if ds_all is None:
+        _log.warning("capture_report_figures: plot data not ready — skipped")
+        return {}
+
+    data = {}
+
+    # Bending Moment Envelope (Mz, Envelope ULS) — Max annotation
+    try:
+        ds_env = ds_all.sel(Loadcase="Envelope ULS")
+        fig, _ = build_figure_bmd(
+            ds_env, "Mz", nodes, members,
+            edge_dist=edge_dist, eng_scale=eng_scale, selected_girder="All",
+        )
+        b = _render_report_figure(fig, show_max=True, show_min=False)
+        if b:
+            data['bm_envelope'] = b
+    except Exception as exc:
+        _log.warning("capture_report_figures: bm_envelope failed: %s", exc)
+
+    # Shear Force Envelope (Vy, Envelope ULS) — Max + Min annotations
+    try:
+        ds_env = ds_all.sel(Loadcase="Envelope ULS")
+        fig, _ = build_figure_sfd(
+            ds_env, "Fy", nodes, members,
+            edge_dist=edge_dist, eng_scale=eng_scale, selected_girder="All",
+        )
+        b = _render_report_figure(fig, show_max=True, show_min=True)
+        if b:
+            data['sf_envelope'] = b
+    except Exception as exc:
+        _log.warning("capture_report_figures: sf_envelope failed: %s", exc)
+
+    # Deflection (Dy, 1.0 LL) — Max annotation
+    try:
+        ds_ll = ds_all.sel(Loadcase="1.0 LL")
+        fig, _ = build_figure_deflection(
+            ds_ll, "Dy", nodes, members,
+            edge_dist=edge_dist, eng_scale=eng_scale, selected_girder="All",
+        )
+        b = _render_report_figure(fig, show_max=True, show_min=False)
+        if b:
+            data['defl_ll'] = b
+    except Exception as exc:
+        _log.warning("capture_report_figures: defl_ll failed: %s", exc)
+
+    _log.info("capture_report_figures: %d plot(s) captured", len(data))
+    return data
