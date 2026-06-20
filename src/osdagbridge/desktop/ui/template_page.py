@@ -532,6 +532,88 @@ class CustomWindow(QWidget):
             return False  # Validation failed
         return True  # Validation passed
     
+    def _is_optimized_run(self) -> bool:
+        """True when Design Type is Optimized and the Overall Design Check box is ticked."""
+        mode    = str(self.input_dict.get(KEY_DESIGN_MODE, "")).strip().lower()
+        checked = bool(self.input_dict.get(KEY_OVERALL_DESIGN_CHECK, False))
+        return mode == "optimized" and checked
+
+    def _run_parallel_optimization(self, base_input_dict: dict) -> dict:
+        """
+        Run the multiprocessing weight optimisation, streaming x/N progress and
+        per-candidate component weights into the loading popup. Returns the
+        winning candidate's input_dict (Custom mode, fixed dims) for the backend
+        to design + build CAD from.
+        """
+        from osdagbridge.core.optimizer.parallel_bridge_optimizer import optimize_parallel
+
+        # Budget for the interactive run: 50 candidates per batch, a few DE
+        # refinement generations on top of the initial population. Keep this
+        # small so the run finishes in minutes, not hours.
+        POP_SIZE    = 50
+        GENERATIONS = 3
+
+        bridge_logger.info(
+            f"Overall Design Check : evaluating {POP_SIZE} designs per round "
+            f"across {GENERATIONS + 1} round(s) in parallel ..."
+        )
+        bridge_logger._emit("__progress__0", "progress")
+        QApplication.processEvents()
+
+        def _on_candidate(info: dict) -> None:
+            done, total, gen = info["done"], info["total"], info["gen"]
+            # Monotonic bar over the whole run; "x/50" text stays per-round.
+            pct   = int(info["overall_done"] / info["overall_total"] * 100) if info["overall_total"] else 0
+            stage = "Initial population" if gen == 0 else f"Generation {gen}"
+            if info["feasible"]:
+                c = info["components"]
+                best = info.get("best_kN")
+                bridge_logger.success(
+                    f"{stage} : design {done}/{total}  "
+                    f"weight {info['weight_kN']:.0f} kN "
+                    f"(steel {c['steel_girders_kN']:.0f} + deck {c['deck_concrete_kN']:.0f})"
+                    + (f"  | best so far {best:.0f} kN" if best else "")
+                )
+            else:
+                bridge_logger.info(f"{stage} : design {done}/{total}  infeasible")
+            bridge_logger._emit(f"__progress__{pct}", "progress")
+            QApplication.processEvents()      # keep the popup live + Stop responsive
+            bridge_logger.check_cancel()       # raises RuntimeError if user cancelled
+
+        best_bridge = optimize_parallel(
+            base_input_dict,
+            pop_size     = POP_SIZE,
+            generations  = GENERATIONS,
+            on_candidate = _on_candidate,
+            build_cad    = False,
+        )
+        # Stash the full run so the report tab can be shown after the CAD is built.
+        self._optimization_records = getattr(best_bridge, "optimization_records", [])
+        self._optimization_summary = getattr(best_bridge, "optimization_summary", {})
+
+        bridge_logger.success("Overall Design Check complete — building CAD for the optimal design.")
+        bridge_logger._emit("__progress__100", "progress")
+        QApplication.processEvents()
+        return best_bridge.input_dict
+
+    def _show_optimization_report(self) -> None:
+        """Pop up the per-design report tab if the last run was an optimisation."""
+        records = getattr(self, "_optimization_records", None)
+        if not records:
+            return
+        try:
+            from osdagbridge.desktop.ui.dialogs.optimization_report import OptimizationReportDialog
+            dlg = OptimizationReportDialog(
+                records, getattr(self, "_optimization_summary", {}), parent=self
+            )
+            dlg.exec()
+        except Exception:
+            bridge_logger.warning("Could not open the optimisation report tab.")
+        finally:
+            # One report per run — clear so a later non-optimised design won't reuse it.
+            self._optimization_records = []
+            self._optimization_summary = {}
+
     def _start_loading(self):
         """Start loading popup"""
         # Install global input blocker filter on QApplication instance to shield CustomWindow
@@ -630,7 +712,14 @@ class CustomWindow(QWidget):
             )
             
             try:
-                self.backend.set_input(self.input_dict)
+                # Optimized mode: run the parallel weight optimisation first and
+                # design only the winning candidate. design_input therefore holds
+                # the optimal section/layout; the original UI dict is untouched.
+                design_input = self.input_dict
+                if self._is_optimized_run():
+                    design_input = self._run_parallel_optimization(self.input_dict)
+
+                self.backend.set_input(design_input)
                 try:
                     self.backend.design()
                 finally:
@@ -682,6 +771,8 @@ class CustomWindow(QWidget):
             if not _cancelled:
                 # Focus 3D-Cad widget
                 self.cad_3d_view_toggle(force_show=True)
+                # Optimized run: pop up the per-design report tab (all candidates).
+                self._show_optimization_report()
 
         if trigger == "Save":
             self.saveOSI_inputs()

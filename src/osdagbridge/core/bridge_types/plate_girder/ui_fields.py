@@ -198,6 +198,16 @@ class FrontendData:
                     "required":      True,
                 }),
 
+            # TEMP: read-only checkbox auto-ticked iff Design Type == "Optimized".
+            # Toggled from _on_design_mode_changed; user cannot edit it directly.
+            (KEY_OVERALL_DESIGN_CHECK, "Overall Design Check", TYPE_CHECKBOX, None,
+                True, "No Validator",
+                {
+                    "default_checked": str(BASIC_INPUT_DICT.get(KEY_DESIGN_MODE) or "")
+                                        .strip().lower() == "optimized",
+                    "read_only": True,
+                }),
+
             # ── Material Inputs ───────────────────────────────────────────────
             (KEY_SECTION_MATERIAL, DISP_TITLE_MATERIAL, TYPE_TITLE, None, True, "No Validator",
                 {"container": "superstructure"}),
