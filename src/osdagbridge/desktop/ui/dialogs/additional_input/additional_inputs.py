@@ -7,9 +7,9 @@ from copy import deepcopy
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QTabBar, QLabel, QLineEdit,
     QComboBox, QPushButton, QCheckBox, QSizePolicy,
-    QDialog, QSizePolicy, QSizeGrip
+    QDialog, QSizePolicy, QSizeGrip,
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer, QPoint, QEvent
 from PySide6.QtGui import QDoubleValidator
 
 from osdagbridge.core.bridge_types.plate_girder.validator import BridgeInputValidator
@@ -153,6 +153,14 @@ class AdditionalInputs(QDialog):
         main_layout.addSpacing(6)
         main_layout.addWidget(action_bar)
 
+        self.lock_tooltip = QLabel("🔒 Unlock to Edit")
+        self.lock_tooltip.setStyleSheet("""
+            QLabel { background-color:#f1f1f1; color:#000; border:1px solid #90AF13;
+                     padding:4px; font-size:15px; border-radius:0px; }
+        """)
+        self.lock_tooltip.setWindowFlags(Qt.ToolTip)
+        self.lock_tooltip.hide()
+
         # Enforce max 2 decimal places for all double validators in the dialog
         self._enforce_decimal_places(2)
         # Normalize existing numeric text to 2 decimal places for consistent display
@@ -173,6 +181,36 @@ class AdditionalInputs(QDialog):
                 self._print_widget_tree(child, indent + 1)
 
     # ── Dialog Lifecycle ─────────────────────────────────────────────────────────
+
+    def lock(self, lock: bool = True):  # enables or disables all input widgets inside the tab area; action buttons (save/defaults) are unaffected
+        widgets = (
+            self.findChildren(QLineEdit) +
+            self.findChildren(QComboBox) +
+            self.findChildren(QCheckBox) +
+            self.findChildren(QPushButton)
+        )
+        for w in widgets:
+            w.setEnabled(not lock)
+            if lock:
+                w.installEventFilter(self)
+            else:
+                w.removeEventFilter(self)
+
+    def eventFilter(self, obj, event):  # shows "Unlock to Edit" tooltip on click of any locked widget
+        if event.type() == QEvent.MouseButtonPress and not obj.isEnabled():
+            if hasattr(self, "tooltip_timer") and self.tooltip_timer.isActive():
+                self.tooltip_timer.stop()
+            self.lock_tooltip.adjustSize()
+            self.lock_tooltip.move(event.globalPosition().toPoint() + QPoint(5, 0))
+            self.lock_tooltip.show()
+            self.lock_tooltip.raise_()
+            if not hasattr(self, "tooltip_timer"):
+                self.tooltip_timer = QTimer()
+                self.tooltip_timer.setSingleShot(True)
+                self.tooltip_timer.timeout.connect(self.lock_tooltip.hide)
+            self.tooltip_timer.start(3000)
+            return True
+        return super().eventFilter(obj, event)
 
     def set_input_dictionary(self, input_dict: dict):  # lifecycle: sets default/working dicts and wires END_CONNECTORS on first open
         self.default_input_dict = input_dict

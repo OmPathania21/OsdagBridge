@@ -769,6 +769,7 @@ class InputDock(QWidget):
     # ══════════════════════════════════════════════════════════════════════════
 
     def toggle_lock(self, confirm=True):
+
         if self.is_locked and confirm:
             result = CustomMessageBox(
                 title="Clear Results",
@@ -782,6 +783,9 @@ class InputDock(QWidget):
                 return
 
         self.is_locked = not self.is_locked
+
+        # Update Additional Input State (Lock/Unlock)
+        self.parent._additional_inputs_dialog.lock(lock=self.is_locked)
 
         if not self.is_locked:
             # Clear 3D-Cad
