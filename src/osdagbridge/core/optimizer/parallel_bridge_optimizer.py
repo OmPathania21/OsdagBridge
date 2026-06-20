@@ -314,6 +314,30 @@ def candidate_is_feasible(cand: Candidate, cfg: OptiConfig) -> bool:
 
 
 # ------------------------------------------------------------------------------
+#  Multiprocessing start method (cross-platform)
+# ------------------------------------------------------------------------------
+
+def default_start_method() -> str:
+    """
+    Best multiprocessing start method for the current OS.
+
+    - Linux / macOS : "forkserver" — workers fork from a clean helper process,
+      never inheriting the parent's non-fork-safe native state (Qt, OpenSees).
+    - Windows        : "spawn" — the only method available; each worker is a
+      fresh interpreter.
+
+    This is chosen for the *current* process. It is safe to call from the
+    isolated optimisation runner (a clean, Qt-free process), where "spawn"
+    re-imports only the runner module — not the GUI app's ``__main__``.
+    """
+    import multiprocessing as _mp
+    methods = _mp.get_all_start_methods()
+    if "forkserver" in methods:
+        return "forkserver"
+    return "spawn"
+
+
+# ------------------------------------------------------------------------------
 #  Worker side: one global config per process, one picklable fitness function
 # ------------------------------------------------------------------------------
 
@@ -409,7 +433,7 @@ def optimize_parallel(
     max_workers     : Optional[int]  = None,
     build_cad       : bool           = False,
     on_candidate    : "Optional[callable]" = None,
-    start_method    : str            = "forkserver",
+    start_method    : "Optional[str]" = None,
 ) -> PlateGirderBridge:
     """
     Optimise the plate-girder superstructure for minimum weight, evaluating the
@@ -437,6 +461,8 @@ def optimize_parallel(
     ``RuntimeError`` if no feasible candidate was found.
     """
     cfg = OptiConfig.from_input_dict(base_input_dict, steel_density, concrete_density)
+    if start_method is None:
+        start_method = default_start_method()   # forkserver on POSIX, spawn on Windows
 
     # Translate the engine's low-level progress into a UI-friendly info dict,
     # tracking the running best so the loader can show it live. The bar is made
@@ -509,9 +535,9 @@ def optimize_parallel(
         worker_init     = _init_worker,
         worker_initargs = (cfg,),
         progress_cb     = _engine_progress,
-        # "forkserver": workers fork from a clean helper process, NOT from the
-        # live Qt/OpenSees parent (which is not fork-safe and crashes children).
-        # Unlike "spawn" it does not re-import the app's __main__ module.
+        # OS-aware: forkserver on POSIX, spawn on Windows (see default_start_method).
+        # Intended to run inside the isolated `run_optimization` process, where
+        # neither method touches the GUI app's __main__.
         start_method    = start_method,
     )
 
