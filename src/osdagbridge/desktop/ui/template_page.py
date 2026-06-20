@@ -539,18 +539,38 @@ class CustomWindow(QWidget):
 
     def _run_parallel_optimization(self, base_input_dict: dict) -> dict:
         """
-        Run the multiprocessing weight optimisation, streaming x/N progress and
-        per-candidate component weights into the loading popup. Returns the
-        winning candidate's input_dict (Custom mode, fixed dims) for the backend
+        Run the multiprocessing weight optimisation in an **isolated subprocess**
+        and stream x/N progress + per-candidate component weights into the
+        loading popup. Returns the winning candidate's input_dict for the backend
         to design + build CAD from.
-        """
-        from osdagbridge.core.optimizer.parallel_bridge_optimizer import optimize_parallel
 
-        # Budget for the interactive run: 50 candidates per batch, a few DE
-        # refinement generations on top of the initial population. Keep this
-        # small so the run finishes in minutes, not hours.
+        The optimisation runs in a clean child process (``run_optimization``),
+        not in the GUI process, so the heavy process pool never inherits Qt /
+        OpenSees state. This is what makes it work on **both Linux and Windows**:
+        the child picks forkserver (POSIX) or spawn (Windows) for its own pool,
+        and on Windows ``spawn`` re-imports only the clean runner — never the
+        GUI app's ``__main__``.
+        """
+        import os
+        import sys
+        import json
+        import pickle
+        import tempfile
+        import subprocess
+        from PySide6.QtCore import QThread, Signal, QEventLoop
+
         POP_SIZE    = 50
         GENERATIONS = 3
+
+        # ---- write the job payload to a temp pickle ------------------------
+        in_fd,  in_path  = tempfile.mkstemp(prefix="osdag_opt_in_",  suffix=".pkl")
+        out_fd, out_path = tempfile.mkstemp(prefix="osdag_opt_out_", suffix=".pkl")
+        os.close(in_fd); os.close(out_fd)
+        with open(in_path, "wb") as fh:
+            pickle.dump({
+                "base_input_dict": base_input_dict,
+                "params": {"pop_size": POP_SIZE, "generations": GENERATIONS},
+            }, fh)
 
         bridge_logger.info(
             f"Overall Design Check : evaluating {POP_SIZE} designs per round "
@@ -559,41 +579,94 @@ class CustomWindow(QWidget):
         bridge_logger._emit("__progress__0", "progress")
         QApplication.processEvents()
 
-        def _on_candidate(info: dict) -> None:
-            done, total, gen = info["done"], info["total"], info["gen"]
-            # Monotonic bar over the whole run; "x/50" text stays per-round.
-            pct   = int(info["overall_done"] / info["overall_total"] * 100) if info["overall_total"] else 0
-            stage = "Initial population" if gen == 0 else f"Generation {gen}"
-            if info["feasible"]:
-                c = info["components"]
-                best = info.get("best_kN")
-                bridge_logger.success(
-                    f"{stage} : design {done}/{total}  "
-                    f"weight {info['weight_kN']:.0f} kN "
-                    f"(steel {c['steel_girders_kN']:.0f} + deck {c['deck_concrete_kN']:.0f})"
-                    + (f"  | best so far {best:.0f} kN" if best else "")
-                )
-            else:
-                bridge_logger.info(f"{stage} : design {done}/{total}  infeasible")
-            bridge_logger._emit(f"__progress__{pct}", "progress")
-            QApplication.processEvents()      # keep the popup live + Stop responsive
-            bridge_logger.check_cancel()       # raises RuntimeError if user cancelled
-
-        best_bridge = optimize_parallel(
-            base_input_dict,
-            pop_size     = POP_SIZE,
-            generations  = GENERATIONS,
-            on_candidate = _on_candidate,
-            build_cad    = False,
+        # ---- launch the isolated runner ------------------------------------
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "osdagbridge.core.optimizer.run_optimization",
+             in_path, out_path],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            text=True, bufsize=1,
         )
-        # Stash the full run so the report tab can be shown after the CAD is built.
-        self._optimization_records = getattr(best_bridge, "optimization_records", [])
-        self._optimization_summary = getattr(best_bridge, "optimization_summary", {})
+
+        # Reader thread: emits each stdout line to the GUI thread (queued).
+        class _Reader(QThread):
+            line = Signal(str)
+            def run(self_inner):
+                try:
+                    for ln in proc.stdout:
+                        self_inner.line.emit(ln)
+                except Exception:
+                    pass
+
+        reader = _Reader()
+        loop   = QEventLoop()
+        state  = {"error": None, "cancelled": False}
+        SENT   = "@@OPT@@"
+
+        def _on_line(ln: str) -> None:
+            ln = ln.strip()
+            if ln.startswith(SENT):
+                try:
+                    msg = json.loads(ln[len(SENT):])
+                except Exception:
+                    return
+                t = msg.get("type")
+                if t == "progress":
+                    pct = (int(msg["overall_done"] / msg["overall_total"] * 100)
+                           if msg.get("overall_total") else 0)
+                    stage = "Initial population" if msg["gen"] == 0 else f"Generation {msg['gen']}"
+                    if msg["feasible"]:
+                        best = msg.get("best_kN")
+                        bridge_logger.success(
+                            f"{stage} : design {msg['done']}/{msg['total']}  "
+                            f"weight {msg['weight_kN']:.0f} kN "
+                            f"(steel {msg['steel_kN']:.0f} + deck {msg['deck_kN']:.0f})"
+                            + (f"  | best so far {best:.0f} kN" if best else "")
+                        )
+                    else:
+                        bridge_logger.info(f"{stage} : design {msg['done']}/{msg['total']}  infeasible")
+                    bridge_logger._emit(f"__progress__{pct}", "progress")
+                elif t == "error":
+                    state["error"] = msg.get("message", "optimisation failed")
+                    loop.quit()
+                elif t == "done":
+                    loop.quit()
+            # Stop button → kill the runner.
+            if getattr(self, "loading", None) is not None and self.loading.is_cancelled():
+                state["cancelled"] = True
+                try: proc.terminate()
+                except Exception: pass
+                loop.quit()
+
+        reader.line.connect(_on_line)              # cross-thread queued connection
+        reader.finished.connect(loop.quit)         # safety net if the pipe closes
+        reader.start()
+        loop.exec()                                # GUI stays responsive here
+        try: proc.wait(timeout=10)
+        except Exception:
+            try: proc.kill()
+            except Exception: pass
+        reader.wait(2000)
+
+        # ---- collect result / clean up -------------------------------------
+        try:
+            if state["cancelled"]:
+                raise RuntimeError("Analysis cancelled by user")
+            if state["error"]:
+                raise RuntimeError(state["error"])
+            with open(out_path, "rb") as fh:
+                result = pickle.load(fh)
+        finally:
+            for p in (in_path, out_path):
+                try: os.remove(p)
+                except Exception: pass
+
+        self._optimization_records = result.get("records", [])
+        self._optimization_summary = result.get("summary", {})
 
         bridge_logger.success("Overall Design Check complete — building CAD for the optimal design.")
         bridge_logger._emit("__progress__100", "progress")
         QApplication.processEvents()
-        return best_bridge.input_dict
+        return result["input_dict"]
 
     def _show_optimization_report(self) -> None:
         """Pop up the per-design report tab if the last run was an optimisation."""
