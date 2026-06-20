@@ -56,6 +56,9 @@ KEY_FOOTPATH = "geometry.footpath"
 KEY_SKEW_ANGLE = "geometry.skew_angle"
 KEY_ADDITIONAL_GEOMETRY = "geometry.additional_btn"
 KEY_DESIGN_MODE = "geometry.design_mode"
+# TEMP: auto-ticked (read-only) when Design Type == "Optimized". Marks that the
+# parallel overall design-check / weight optimisation should run on Design.
+KEY_OVERALL_DESIGN_CHECK = "geometry.overall_design_check"
 KEY_GIRDER = "material.girder"
 KEY_CROSS_BRACING = "material.cross_bracing"
 KEY_END_DIAPHRAGM = "material.end_diaphragm"
