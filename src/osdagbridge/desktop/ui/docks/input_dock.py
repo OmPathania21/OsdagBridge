@@ -15,7 +15,7 @@ import json
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
     QComboBox, QScrollArea, QLabel, QLineEdit, QGroupBox, QSizePolicy,
-    QDialog, QFrame, QToolButton,
+    QDialog, QFrame, QToolButton, QCheckBox,
 )
 from PySide6.QtCore import Qt, QRegularExpression, QSize, QTimer, QPoint, QEvent, Signal
 from PySide6.QtGui import QDoubleValidator, QRegularExpressionValidator, QIcon, QColor, QBrush
@@ -301,6 +301,9 @@ class InputDock(QWidget):
             elif ftype == TYPE_BUTTON:
                 glayout.addLayout(self._make_button_row(key, label, meta))
 
+            elif ftype == TYPE_CHECKBOX:
+                glayout.addLayout(self._field_row("", self._make_checkbox(key, label, meta), meta))
+
             elif ftype == TYPE_NOTE:
                 note = QLabel(label or "")
                 note.setStyleSheet(LABEL_STYLE)
@@ -403,6 +406,25 @@ class InputDock(QWidget):
                 if callable(cb):
                     cb(widget.currentText())
 
+        return widget
+
+    def _make_checkbox(self, key, label, meta) -> QCheckBox:
+        """
+        Basic-dock checkbox. ``read_only`` checkboxes are display-only: disabled
+        so the user can't toggle them, but their checked state is still mirrored
+        into input_dict (used by the TEMP "Overall Design Check" flag, which is
+        driven by the Design Type combo via _on_design_mode_changed).
+        """
+        widget = QCheckBox(label or "")
+        widget.setObjectName(key)
+        checked = bool(meta.get("default_checked", False))
+        widget.setChecked(checked)
+        if meta.get("read_only"):
+            widget.setEnabled(False)
+        widget.toggled.connect(
+            lambda state, k=key: self._update_input_dict(k, bool(state))
+        )
+        self._update_input_dict(key, checked)
         return widget
 
     def _make_textbox(self, key, validator, meta) -> QLineEdit:
@@ -632,6 +654,16 @@ class InputDock(QWidget):
 
     def _on_design_mode_changed(self, mode_text: str = ""):
         self._current_design_mode = str(mode_text or "Optimized").strip()
+        is_optimized = self._current_design_mode.lower() == "optimized"
+
+        # TEMP: keep the read-only "Overall Design Check" box ticked iff Optimized.
+        chk = self._w(KEY_OVERALL_DESIGN_CHECK)
+        if isinstance(chk, QCheckBox):
+            chk.blockSignals(True)
+            chk.setChecked(is_optimized)
+            chk.blockSignals(False)
+            self._update_input_dict(KEY_OVERALL_DESIGN_CHECK, is_optimized)
+
         if self._current_design_mode.lower() == "custom":
             self.parent.common_design_func("Additional Inputs", target_tab="Member Properties")
             self.is_require_field_changed = True
