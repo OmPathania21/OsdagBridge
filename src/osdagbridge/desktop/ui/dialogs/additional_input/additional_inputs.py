@@ -183,6 +183,7 @@ class AdditionalInputs(QDialog):
     # ── Dialog Lifecycle ─────────────────────────────────────────────────────────
 
     def lock(self, lock: bool = True):  # enables or disables all input widgets inside the tab area; action buttons (save/defaults) are unaffected
+        self._locked = lock
         widgets = (
             self.findChildren(QLineEdit) +
             self.findChildren(QComboBox) +
@@ -195,6 +196,10 @@ class AdditionalInputs(QDialog):
                 w.installEventFilter(self)
             else:
                 w.removeEventFilter(self)
+
+    def _set_enabled(self, widget, enabled: bool):  # setEnabled wrapper used by mode/customize handlers — never re-enables a widget while the dialog is locked
+        if widget:
+            widget.setEnabled(bool(enabled) and not getattr(self, "_locked", False))
 
     def eventFilter(self, obj, event):  # shows "Unlock to Edit" tooltip on click of any locked widget
         if event.type() == QEvent.MouseButtonPress and not obj.isEnabled():
@@ -309,12 +314,12 @@ class AdditionalInputs(QDialog):
         for key in [KEY_MP_GIRDER_TYPE, KEY_MP_GIRDER_SYMMETRY]:
             w = self.findChild(QWidget, key)
             if w:
-                w.setEnabled(not is_optimized)
+                self._set_enabled(w, not is_optimized)
 
         # Web Type — read-only and forced to "Thin Web with ITS" when Optimized ----------------
         web_type_w = self.findChild(QComboBox, KEY_MP_GIRDER_WEB_TYPE)
         if web_type_w:
-            web_type_w.setEnabled(not is_optimized)
+            self._set_enabled(web_type_w, not is_optimized)
             if is_optimized:
                 web_type_w.blockSignals(True)
                 web_type_w.setCurrentText("Thin Web with ITS")
@@ -342,7 +347,7 @@ class AdditionalInputs(QDialog):
         for key in stiffener_keys:
             w = self.findChild(QWidget, key)
             if w:
-                w.setEnabled(not is_optimized)
+                self._set_enabled(w, not is_optimized)
 
         # In Custom mode re-apply conditional sub-field states------------------------
         if not is_optimized:
@@ -388,7 +393,7 @@ class AdditionalInputs(QDialog):
         for key in ed_disable_keys:
             w = self.findChild(QWidget, key)
             if w:
-                w.setEnabled(not is_optimized)
+                self._set_enabled(w, not is_optimized)
 
         # Re-apply End Diaphragm bracing layout state (K-Bracing disables bottom chord, CAD sync)
         self._on_ed_bracing_layout_changed()
@@ -407,7 +412,7 @@ class AdditionalInputs(QDialog):
         for key in cb_disable_keys:
             w = self.findChild(QWidget, key)
             if w:
-                w.setEnabled(not is_optimized)
+                self._set_enabled(w, not is_optimized)
 
         # Re-apply CB layout state so checkbox-gating is respected on top of mode
         self._on_cb_bracing_layout_changed("", None)
@@ -619,11 +624,9 @@ class AdditionalInputs(QDialog):
         for cond in conditions:
             enabled = d.get(cond["key"]) in cond["values"]
             widget = self.findChild(QWidget, cond["widget_id"])
-            if widget:
-                widget.setEnabled(enabled)
+            self._set_enabled(widget, enabled)
             label = self.findChild(QLabel, cond["widget_id"] + "_label")
-            if label:
-                label.setEnabled(enabled)
+            self._set_enabled(label, enabled)
 
     # ── Typical Section Tab ──────────────────────────────────────────────────────────
 
@@ -853,13 +856,11 @@ class AdditionalInputs(QDialog):
         # All fixed fields disabled for non-custom; custom gets full edit access
         for key in [KEY_CB_DENSITY, KEY_CB_WIDTH, KEY_CB_HEIGHT, KEY_CB_AREA, KEY_CB_LOAD]:
             w = self.findChild(QLineEdit, key)
-            if w:
-                w.setEnabled(is_custom)
+            self._set_enabled(w, is_custom)
 
         # Post Spacing editable for Metallic only (not shown for Custom)
         spacing = self.findChild(QLineEdit, KEY_CB_POST_SPACING)
-        if spacing:
-            spacing.setEnabled(is_metallic)
+        self._set_enabled(spacing, is_metallic)
 
         # Pre-apply new widths so update_girder_layout uses the correct overall width
         result = self.compute_crash_barrier_values(self.working_input_dict)
@@ -956,13 +957,11 @@ class AdditionalInputs(QDialog):
         # All fixed fields disabled for non-custom
         for key in [KEY_MD_DENSITY, KEY_MD_WIDTH, KEY_MD_HEIGHT, KEY_MD_AREA, KEY_MD_LOAD]:
             w = self.findChild(QLineEdit, key)
-            if w:
-                w.setEnabled(is_custom)
+            self._set_enabled(w, is_custom)
 
         # Post Spacing editable for Metallic only
         spacing = self.findChild(QLineEdit, KEY_MD_POST_SPACING)
-        if spacing:
-            spacing.setEnabled(is_metallic)
+        self._set_enabled(spacing, is_metallic)
 
         # Pre-apply new widths so update_girder_layout uses the correct overall width
         result = self.compute_median_values(self.working_input_dict)
@@ -1087,16 +1086,16 @@ class AdditionalInputs(QDialog):
         elif railing_type == "Custom":
             for key in [KEY_RL_WIDTH, KEY_RL_HEIGHT]:
                 w = self.findChild(QLineEdit, key)
-                if w: w.setEnabled(True)
-            if mode_combo: mode_combo.setEnabled(True)
+                self._set_enabled(w, True)
+            self._set_enabled(mode_combo, True)
             mode = mode_combo.currentText() if mode_combo else "As per IRC 6"
             if mode == "As per IRC 6":
-                if load_edit: load_edit.setEnabled(False)
+                self._set_enabled(load_edit, False)
                 area = rigid_barrier_with_railing_area("rcc")["barrier_area"]
                 load = load_from_area(area, RCC_DENSITY)
                 return {KEY_RL_LOAD_VALUE: f"{load:.3f}"}
             else:
-                if load_edit: load_edit.setEnabled(True)
+                self._set_enabled(load_edit, True)
                 return {}
 
         return {}
@@ -1110,21 +1109,20 @@ class AdditionalInputs(QDialog):
             return
 
         if mode == "As per IRC 6":
-            if load_edit: load_edit.setEnabled(False)
+            self._set_enabled(load_edit, False)
             from osdagbridge.core.bridge_components.super_structure.railing.properties import load_from_area, RCC_DENSITY
             from osdagbridge.core.bridge_components.super_structure.railing.geometry import rigid_barrier_with_railing_area
             area = rigid_barrier_with_railing_area("rcc")["barrier_area"]
             load = load_from_area(area, RCC_DENSITY)
             if load_edit: load_edit.setText(f"{load:.3f}")
         else:
-            if load_edit: load_edit.setEnabled(True)
+            self._set_enabled(load_edit, True)
 
     # ── Wearing Course Sub-Tab ───────────────────────────────────────────────────────────────
 
     def on_wearing_material_changed(self, material: str):
         density_w = self.findChild(QLineEdit, KEY_WC_DENSITY)
-        if density_w:
-            density_w.setEnabled(material == "Custom")
+        self._set_enabled(density_w, material == "Custom")
 
     def compute_wearing_course_values(self, input_dict: dict) -> dict:
         from osdagbridge.core.bridge_components.super_structure.deck.geometry import (
@@ -1540,8 +1538,8 @@ class AdditionalInputs(QDialog):
         bt = self.findChild(QWidget, KEY_MP_GIRDER_BOTTOM_FLANGE_THICKNESS)
         # Disable bottom flange fields when symmetric OR when in Optimized mode
         disable_bottom = is_symmetric or is_optimized
-        if bw: bw.setEnabled(not disable_bottom)
-        if bt: bt.setEnabled(not disable_bottom)
+        self._set_enabled(bw, not disable_bottom)
+        self._set_enabled(bt, not disable_bottom)
 
         if is_symmetric:
             self._on_top_flange_changed()  # reuse — does the mirror + drawing update
@@ -1806,8 +1804,8 @@ class AdditionalInputs(QDialog):
         ]:
             w   = self.findChild(QWidget, key)
             lbl = self.findChild(QLabel,  key + "_label")
-            if w:   w.setEnabled(is_yes)
-            if lbl: lbl.setEnabled(is_yes)
+            self._set_enabled(w, is_yes)
+            self._set_enabled(lbl, is_yes)
 
         spacing_widget = self.findChild(QWidget, KEY_MP_STIFFENER_INTERMEDIATE_SPACING)
         if is_yes:
@@ -1857,14 +1855,13 @@ class AdditionalInputs(QDialog):
         spacing_lbl = self.findChild(QLabel,  KEY_MP_STIFFENER_SPACING + "_label")
         enable = count > 1
         if spacing_w:
-            spacing_w.setEnabled(enable)
+            self._set_enabled(spacing_w, enable)
             if isinstance(spacing_w, QLineEdit):
                 if enable and (not spacing_w.text().strip() or spacing_w.text().strip() == "0"):
                     spacing_w.setText("50")
                 elif not enable:
                     spacing_w.setText("")
-        if spacing_lbl:
-            spacing_lbl.setEnabled(enable)
+        self._set_enabled(spacing_lbl, enable)
 
         self._update_stiffener_cad()
 
@@ -1872,8 +1869,8 @@ class AdditionalInputs(QDialog):
         is_yes = str(value).strip() != "No"
         w   = self.findChild(QWidget, KEY_MP_STIFFENER_LONGITUDINAL_THICKNESS)
         lbl = self.findChild(QLabel,  KEY_MP_STIFFENER_LONGITUDINAL_THICKNESS + "_label")
-        if w:   w.setEnabled(is_yes)
-        if lbl: lbl.setEnabled(is_yes)
+        self._set_enabled(w, is_yes)
+        self._set_enabled(lbl, is_yes)
         self._update_stiffener_cad()
 
     def _on_stiffener_apply_all_clicked(self) -> None:  # on_click: copies current stiffener config to all other girders/members
@@ -2217,8 +2214,7 @@ class AdditionalInputs(QDialog):
             if bottom_lbl:
                 bottom_lbl.setStyleSheet("font-size: 11px; color: #aaaaaa;")
         else:
-            if bottom_cb:
-                bottom_cb.setEnabled(True)
+            self._set_enabled(bottom_cb, True)
             if bottom_lbl:
                 bottom_lbl.setStyleSheet("font-size: 11px; color: #000;")
 
@@ -2229,13 +2225,11 @@ class AdditionalInputs(QDialog):
         is_custom = str(self.working_input_dict.get(KEY_DESIGN_MODE, "Optimized")).strip() == "Custom"
         for key in (KEY_MP_ED_TOP_CHORD_SECTION_TYPE, KEY_MP_ED_TOP_CHORD_SECTION_DESIG):
             w = self.findChild(QWidget, key)
-            if w:
-                w.setEnabled(is_custom and top_checked)
+            self._set_enabled(w, is_custom and top_checked)
 
         for key in (KEY_MP_ED_BOTTOM_CHORD_SECTION_TYPE, KEY_MP_ED_BOTTOM_CHORD_SECTION_DESIG):
             w = self.findChild(QWidget, key)
-            if w:
-                w.setEnabled(is_custom and bottom_props_enabled)
+            self._set_enabled(w, is_custom and bottom_props_enabled)
 
         cad = self.findChild(QWidget, KEY_MP_ED_BRACING_LAYOUT_CAD)
         if cad and hasattr(cad, "set_layout"):
@@ -2704,8 +2698,7 @@ class AdditionalInputs(QDialog):
             if bottom_lbl:
                 bottom_lbl.setStyleSheet("font-size: 11px; color: #aaaaaa;")
         else:
-            if bottom_cb:
-                bottom_cb.setEnabled(True)
+            self._set_enabled(bottom_cb, True)
             if bottom_lbl:
                 bottom_lbl.setStyleSheet("font-size: 11px; color: #000;")
 
@@ -2716,20 +2709,17 @@ class AdditionalInputs(QDialog):
         # Enable/disable Bracing section type & designation
         for key in (KEY_MP_CB_BRACING_SECTION_TYPE, KEY_MP_CB_BRACING_SECTION_DESIGNATION):
             w = self.findChild(QWidget, key)
-            if w:
-                w.setEnabled(is_custom)
+            self._set_enabled(w, is_custom)
 
         # Enable/disable Top Chord section type & designation
         for key in (KEY_MP_CB_TOP_CHORD_SECTION_TYPE, KEY_MP_CB_TOP_CHORD_SECTION_DESIG):
             w = self.findChild(QWidget, key)
-            if w:
-                w.setEnabled(is_custom and top_checked)
+            self._set_enabled(w, is_custom and top_checked)
 
         # Enable/disable Bottom Chord section type & designation
         for key in (KEY_MP_CB_BOTTOM_CHORD_SECTION_TYPE, KEY_MP_CB_BOTTOM_CHORD_SECTION_DESIG):
             w = self.findChild(QWidget, key)
-            if w:
-                w.setEnabled(is_custom and bottom_checked)
+            self._set_enabled(w, is_custom and bottom_checked)
 
         # Show/hide Top Chord CAD section card
         top_section = self.findChild(QWidget, KEY_MP_CB_TOP_CHORD_PREVIEW_SECTION)
