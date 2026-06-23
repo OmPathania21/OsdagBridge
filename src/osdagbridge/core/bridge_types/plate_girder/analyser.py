@@ -1909,6 +1909,19 @@ class BridgeGrillageModel:
             end = og.Point(span + max_len, 0, 0)
             moving_path = og.create_moving_path(start_point=start, end_point=end)
 
+            # Search-phase fidelity: when the optimiser has set a list of critical
+            # reference x-positions (2 near each support + a mid-span cluster), the
+            # moving load samples ONLY those instead of the default 50-step uniform
+            # sweep — a big cost cut while still capturing peak shear & moment. The
+            # path is a straight line at y=z=0 here, so y/z stay at the start coord.
+            # Unset (production design()) ⇒ full 50-step sweep, untouched.
+            custom_x = getattr(self, "_search_path_positions_x", None)
+            if custom_x is not None:
+                xs = [float(v) for v in custom_x]
+                moving_path.path_points_x = xs
+                moving_path.path_points_y = [start.y] * len(xs)
+                moving_path.path_points_z = [start.z] * len(xs)
+
             moving_name = f"Moving Case{case_num}"
             moving_load = og.create_moving_load(name=moving_name)
             moving_load.set_path(moving_path)

@@ -93,6 +93,11 @@ class OptimisationResult:
 #  Core synchronous parallel DE
 # ------------------------------------------------------------------------------
 
+def within_bounds(x: np.ndarray, bounds: np.ndarray) -> bool:
+    """True if x lies within the [lo, hi] envelope given by bounds (n_dims, 2)."""
+    return bool(np.all(x >= bounds[:, 0]) and np.all(x <= bounds[:, 1]))
+
+
 def parallel_differential_evolution(
     fitness_func    : Callable[[np.ndarray], float],
     bounds_func     : Callable[[np.ndarray], np.ndarray],
@@ -108,9 +113,19 @@ def parallel_differential_evolution(
     worker_initargs : Sequence[Any]          = (),
     progress_cb     : Optional[ProgressCallback] = None,
     start_method    : Optional[str]          = None,
+    max_tasks_per_child : Optional[int]      = 1,
 ) -> OptimisationResult:
     """
     Synchronous (generational) parallel Differential Evolution.
+
+    ``max_tasks_per_child`` recycles a pool worker after it has evaluated this
+    many designs (default 1 = a fresh process per design). Recycling is what
+    actually returns a design's memory to the OS: ``gc`` / ``ops.wipe()`` free
+    Python and the FE domain, but C-level allocations inside OpenSees / ospgrillage
+    are not handed back while the worker lives, so over a long run they pile up
+    and only drop when the pool finally shuts down. Tearing the worker down after
+    each design reclaims everything immediately. ``None`` keeps workers for the
+    whole run (fastest, but memory grows with the number of designs).
 
     ``start_method`` selects the multiprocessing start method for the pool
     ("spawn", "fork", "forkserver"). Use "spawn" when the parent process has a
@@ -143,9 +158,12 @@ def parallel_differential_evolution(
         futures = {executor.submit(fitness_func, pop[i]): i for i in range(n)}
         done = 0
         for fut in as_completed(futures):
-            i        = futures[fut]
-            out[i]   = fut.result()
-            done    += 1
+            i = futures[fut]
+            try:
+                out[i] = fut.result()
+            except ValueError:
+                out[i] = np.inf          # treat an impossible candidate as infeasible
+            done += 1
             if progress_cb is not None:
                 progress_cb(done, n, gen, pop[i], float(out[i]))
         return out
@@ -168,11 +186,18 @@ def parallel_differential_evolution(
     import multiprocessing as _mp
     mp_context = _mp.get_context(start_method) if start_method else None
 
+    # max_tasks_per_child requires Python 3.11+; only pass it when set so the
+    # engine still imports on older runtimes.
+    pool_kwargs = {}
+    if max_tasks_per_child is not None:
+        pool_kwargs["max_tasks_per_child"] = max_tasks_per_child
+
     with ProcessPoolExecutor(
         max_workers = max_workers,
         initializer = worker_init,
         initargs    = tuple(worker_initargs),
         mp_context  = mp_context,
+        **pool_kwargs,
     ) as executor:
 
         # --- Evaluate the initial population in parallel ----------------------
@@ -191,9 +216,21 @@ def parallel_differential_evolution(
                 candidates = [j for j in range(pop_size) if j != i]
                 a, b, c    = rng.choice(candidates, size=3, replace=False)
 
-                mutant     = population[a] + F * (population[b] - population[c])
-                dep_bounds = bounds_func(mutant)
-                mutant     = np.clip(mutant, dep_bounds[:, 0], dep_bounds[:, 1])
+                mutant = population[a] + F * (population[b] - population[c])
+
+                try:
+                    dep_bounds = bounds_func(mutant)
+                except ValueError:
+                    trials[i] = population[i]   # bounds undefined -> keep the parent
+                    continue
+                mutant = np.clip(mutant, dep_bounds[:, 0], dep_bounds[:, 1])   # to clip
+
+                """
+                # to hard_reject
+                if not within_bounds(mutant, dep_bounds):
+                    trials[i] = population[i]
+                    continue
+                """
 
                 cross_mask = rng.random(n_dims) < CR
                 cross_mask[rng.integers(0, n_dims)] = True   # force >=1 dim
@@ -215,11 +252,13 @@ def parallel_differential_evolution(
             history[gen, :-1] = best_vector
             history[gen,  -1] = best_fitness
 
-            # Convergence: best improved by less than tol over one generation.
-            if gen > 1 and abs(history[gen - 1, -1] - best_fitness) < tol:
+            # Convergence check (disabled: always run the full generation budget).
+            """
+            if gen > (generations * 0.5) and abs(history[gen - 1, -1] - best_fitness) < tol:
                 converged  = True
                 actual_gen = gen + 1
                 break
+            """
 
     history = history[:actual_gen]   # trim unused rows on early exit
 
@@ -245,7 +284,7 @@ class ParallelOptimizer:
         fitness_func    : Callable[[np.ndarray], float],
         bounds_func     : Callable[[np.ndarray], np.ndarray],
         initial_guess   : np.ndarray,
-        tol             : float                  = 1e-3,
+        tolerance       : float                  = 1e-3,
         pop_size        : int                    = 60,
         generations     : int                    = 300,
         F               : float                  = 0.8,
@@ -256,6 +295,7 @@ class ParallelOptimizer:
         worker_initargs : Sequence[Any]          = (),
         progress_cb     : Optional[ProgressCallback] = None,
         start_method    : Optional[str]          = None,
+        max_tasks_per_child : Optional[int]      = 1,
     ) -> OptimisationResult:
 
         return parallel_differential_evolution(
@@ -266,11 +306,12 @@ class ParallelOptimizer:
             generations     = generations,
             F               = F,
             CR              = CR,
-            tol             = tol,
+            tol             = tolerance,
             seed            = seed,
             max_workers     = max_workers,
             worker_init     = worker_init,
             worker_initargs = worker_initargs,
             progress_cb     = progress_cb,
             start_method    = start_method,
+            max_tasks_per_child = max_tasks_per_child,
         )
