@@ -554,10 +554,11 @@ class CustomWindow(QWidget):
         import os
         import sys
         import json
+        import signal
         import pickle
         import tempfile
         import subprocess
-        from PySide6.QtCore import QThread, Signal, QEventLoop
+        from PySide6.QtCore import QThread, Signal, QEventLoop, QTimer
 
         POP_SIZE    = 50
         GENERATIONS = 3
@@ -580,12 +581,33 @@ class CustomWindow(QWidget):
         QApplication.processEvents()
 
         # ---- launch the isolated runner ------------------------------------
+        # Put the runner in its OWN process group / session so that on Stop we
+        # can kill the runner AND every worker it spawned in one shot (the pool
+        # workers are children of the runner, not of the GUI).
+        if os.name == "nt":
+            popen_group = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+        else:
+            popen_group = {"start_new_session": True}   # setsid -> new process group
         proc = subprocess.Popen(
             [sys.executable, "-m", "osdagbridge.core.optimizer.run_optimization",
              in_path, out_path],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             text=True, bufsize=1,
+            **popen_group,
         )
+
+        def _kill_tree() -> None:
+            """Terminate the runner and its whole pool immediately."""
+            try:
+                if os.name == "nt":
+                    # CTRL_BREAK reaches the new process group; fall back to kill.
+                    proc.send_signal(signal.CTRL_BREAK_EVENT)
+                    proc.kill()
+                else:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except Exception:
+                try: proc.kill()
+                except Exception: pass
 
         # Reader thread: emits each stdout line to the GUI thread (queued).
         class _Reader(QThread):
@@ -602,6 +624,11 @@ class CustomWindow(QWidget):
         state  = {"error": None, "cancelled": False}
         SENT   = "@@OPT@@"
 
+        # Live "which core is working on which design" popup.
+        from osdagbridge.desktop.ui.dialogs.core_monitor import CoreMonitorDialog
+        core_monitor = CoreMonitorDialog(self)
+        core_monitor.show()
+
         def _on_line(ln: str) -> None:
             ln = ln.strip()
             if ln.startswith(SENT):
@@ -610,6 +637,9 @@ class CustomWindow(QWidget):
                 except Exception:
                     return
                 t = msg.get("type")
+                if t == "core":
+                    core_monitor.on_core_event(msg)
+                    return
                 if t == "progress":
                     pct = (int(msg["overall_done"] / msg["overall_total"] * 100)
                            if msg.get("overall_total") else 0)
@@ -630,21 +660,44 @@ class CustomWindow(QWidget):
                     loop.quit()
                 elif t == "done":
                     loop.quit()
-            # Stop button → kill the runner.
+            # Stop button → kill the runner (also polled below, so a stop is
+            # honoured even between progress lines).
             if getattr(self, "loading", None) is not None and self.loading.is_cancelled():
                 state["cancelled"] = True
-                try: proc.terminate()
-                except Exception: pass
+                _kill_tree()
                 loop.quit()
+
+        # Poll the Stop button independently of stdout, so hitting Stop kills the
+        # analysis at once instead of waiting for the next design's progress line.
+        cancel_timer = QTimer()
+        cancel_timer.setInterval(150)
+
+        def _poll_cancel() -> None:
+            if getattr(self, "loading", None) is not None and self.loading.is_cancelled():
+                state["cancelled"] = True
+                _kill_tree()
+                loop.quit()
+
+        cancel_timer.timeout.connect(_poll_cancel)
 
         reader.line.connect(_on_line)              # cross-thread queued connection
         reader.finished.connect(loop.quit)         # safety net if the pipe closes
         reader.start()
+        cancel_timer.start()
         loop.exec()                                # GUI stays responsive here
-        try: proc.wait(timeout=10)
+        cancel_timer.stop()
+        try:
+            core_monitor.mark_finished(
+                "Run stopped." if state["cancelled"] else "Run finished."
+            )
+            core_monitor.close()
         except Exception:
-            try: proc.kill()
-            except Exception: pass
+            pass
+        # On a normal finish proc.wait() returns at once; on cancel the tree is
+        # already being killed, so don't block the GUI waiting on it.
+        try: proc.wait(timeout=(2 if state["cancelled"] else 10))
+        except Exception:
+            _kill_tree()
         reader.wait(2000)
 
         # ---- collect result / clean up -------------------------------------

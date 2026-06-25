@@ -41,6 +41,7 @@ Usage
 from __future__ import annotations
 
 import copy
+import gc
 import math
 import sys
 from dataclasses import dataclass
@@ -280,37 +281,101 @@ class _NullWriter:
     def flush(self): pass
 
 
+def reset_design(bridge: "Optional[PlateGirderBridge]") -> None:
+    """
+    Clear ONE evaluated design from memory.
+
+    A single candidate produces a fully analysed ``PlateGirderBridge`` that holds
+    large objects — the grillage model, the xarray result datasets, the IRC 22
+    DCR engine, the deck-design output, the load-effect / deflection caches — and
+    leaves this design's nodes / elements / loads in the OpenSees C++ global
+    domain. None of that is needed once the design's details have been recorded.
+    Across a 200-design run it would otherwise pile up, so we wipe it *per design*:
+    design 1 is freed the instant its details are saved, then design 2 is built,
+    evaluated, freed, and so on. Memory stays flat instead of growing with N.
+
+      1. Wipe the OpenSees global domain (process-global C++ state shared by every
+         design in this worker).
+      2. Detach the bridge's heavy attributes so the Python objects — which form
+         reference cycles via numpy / xarray and so survive plain refcounting —
+         become collectable.
+      3. Force a gc pass to reclaim them now, not at some later collection.
+
+    Safe to call with ``bridge is None`` or on a partially built bridge: every
+    step is best-effort.
+    """
+    # 1. OpenSees C++ global domain — shared across all designs in this process.
+    try:
+        import openseespy.opensees as ops
+        ops.wipe()
+    except Exception:
+        pass
+
+    # 2. Drop this design's heavy Python state.
+    if bridge is not None:
+        gm = getattr(bridge, "grillage_model", None)
+        if gm is not None:
+            # the ospgrillage / OpenSees model object and its dataset
+            for attr in ("model", "_deduplicated_results", "_results"):
+                try:
+                    setattr(gm, attr, None)
+                except Exception:
+                    pass
+        for attr in (
+            "grillage_model", "result_data", "_results_with_envelope",
+            "_dcr_engine", "design_results", "output_dict",
+            "_load_effects_cache", "_deflections_cache",
+            "_lc_summary", "_reaction_summary",
+        ):
+            try:
+                setattr(bridge, attr, None)
+            except Exception:
+                pass
+
+    # 3. Reclaim immediately so memory does not creep across the 200 designs.
+    gc.collect()
+
+
 def candidate_is_feasible(cand: Candidate, cfg: OptiConfig) -> bool:
     """
     Run the same staged pipeline ``PlateGirderBridge.design()`` runs, up to and
     including the IRC 22:2015 DCR checks, then report whether the controlling
     girder passes. Deck / transverse / CAD stages are intentionally skipped.
+
+    The design's heavy state (grillage model, result datasets, OpenSees domain)
+    is freed via ``reset_design`` in the ``finally`` the instant its DCR status
+    has been read — so memory stays flat across the whole run.
     """
     bridge = PlateGirderBridge()
-    bridge.set_input(candidate_input_dict(cand, cfg))
+    try:
+        bridge.set_input(candidate_input_dict(cand, cfg))
 
-    # Pre-stage unit handling + stages 1..4G, mirroring design().
-    bridge._resolve_optimized_bounds_to_mm()   # no-op in Custom mode
-    bridge._convert_girder_dims_mm_to_m()
-    bridge._validate_inputs()
-    bridge._solve_bridge_layout()
-    bridge._stage_grillage_setup()
-    bridge.add_dead_loads()
-    bridge.add_live_loads()
-    bridge.add_wind_loads()
-    bridge.add_temperature_load()
-    bridge.add_seismic_loads()
-    bridge._stage_load_combinations()
-    dataset = bridge._reanalyze_with_dedup()
-    dataset = bridge.create_envelope_load_case(dataset)
+        # Pre-stage unit handling + stages 1..4G, mirroring design().
+        bridge._resolve_optimized_bounds_to_mm()   # no-op in Custom mode
+        bridge._convert_girder_dims_mm_to_m()
+        bridge._validate_inputs()
+        bridge._solve_bridge_layout()
+        bridge._stage_grillage_setup()
+        bridge.add_dead_loads()
+        bridge.add_live_loads()
+        bridge.add_wind_loads()
+        bridge.add_temperature_load()
+        bridge.add_seismic_loads()
+        bridge._stage_load_combinations()
+        dataset = bridge._reanalyze_with_dedup()
+        dataset = bridge.create_envelope_load_case(dataset)
 
-    # Stage 5: DCR checks. Populates bridge._dcr_engine.
-    bridge._run_dcr_checks(dataset)
+        # Stage 5: DCR checks. Populates bridge._dcr_engine.
+        bridge._run_dcr_checks(dataset)
 
-    engine = getattr(bridge, "_dcr_engine", None)
-    if engine is None:
-        return False
-    return engine.overall_status() != "FAIL"
+        engine = getattr(bridge, "_dcr_engine", None)
+        if engine is None:
+            return False
+        return engine.overall_status() != "FAIL"
+    finally:
+        # This design's details have now been read, so clear it from memory
+        # immediately — before the next candidate is built.
+        reset_design(bridge)
 
 
 # ------------------------------------------------------------------------------
@@ -342,12 +407,20 @@ def default_start_method() -> str:
 # ------------------------------------------------------------------------------
 
 _CFG: Optional[OptiConfig] = None
+# Per-worker handle to the live core-monitor queue (a Manager().Queue passed in
+# by the parent via _init_worker). None when no UI asked for a monitor.
+_EVENT_Q = None
 
 
-def _init_worker(cfg: OptiConfig) -> None:
-    """Pool initializer: install the run config and silence pipeline output."""
-    global _CFG
+def _init_worker(cfg: OptiConfig, event_q=None) -> None:
+    """Pool initializer: install the run config and silence pipeline output.
+
+    ``event_q`` is the optional live core-monitor queue. Each worker pushes its
+    start/done events onto it; the parent drains them and forwards to the UI.
+    """
+    global _CFG, _EVENT_Q
     _CFG = cfg
+    _EVENT_Q = event_q
     # The design pipeline is chatty (stdout) and emits many UserWarnings
     # (no footpath/railing/median) for every candidate. Silence both so they
     # don't flood the parent's terminal during the parallel search.
@@ -357,22 +430,63 @@ def _init_worker(cfg: OptiConfig) -> None:
     warnings.filterwarnings("ignore")
 
 
+def _emit_core_event(ev: dict) -> None:
+    """Best-effort push of a live 'which core is on which design' event."""
+    q = _EVENT_Q
+    if q is None:
+        return
+    try:
+        q.put(ev)
+    except Exception:
+        pass
+
+
 def _fitness(x: np.ndarray) -> float:
     """
     Picklable fitness used by every worker. Returns the candidate's weight if it
     is feasible, ``+inf`` otherwise (so infeasible candidates always lose greedy
     selection). Any exception in the heavy pipeline is treated as infeasible.
+
+    Memory note: ``candidate_is_feasible`` already frees the design via
+    ``reset_design`` the moment its details are read. The ``finally`` here is a
+    backstop ``reset_design(None)`` — it wipes the OpenSees global domain and
+    forces a gc pass even if the candidate blew up before a bridge was built — so
+    memory stays flat across the whole run.
     """
+    import os
+    import time
+
     cfg = _CFG
     if cfg is None:
         raise RuntimeError("_fitness called before _init_worker installed OptiConfig")
+
+    pid = os.getpid()
+    t0  = time.time()
     try:
         cand = normalize_candidate(np.asarray(x, dtype=float), cfg)
-        if not candidate_is_feasible(cand, cfg):
-            return math.inf
-        return candidate_weight(cand, cfg)
+        # Tell the live monitor this core has STARTED this design.
+        _emit_core_event({
+            "ev": "start", "pid": pid,
+            "n": cand.n, "t_slab": cand.t_slab, "D": cand.D,
+            "bf": cand.bf, "tf": cand.tf, "tw": cand.tw,
+        })
+        feasible = candidate_is_feasible(cand, cfg)
+        weight   = candidate_weight(cand, cfg) if feasible else None
+        _emit_core_event({
+            "ev": "done", "pid": pid, "feasible": bool(feasible),
+            "weight": weight, "secs": round(time.time() - t0, 1),
+        })
+        return weight if feasible else math.inf
     except Exception:
+        _emit_core_event({
+            "ev": "done", "pid": pid, "feasible": False,
+            "weight": None, "secs": round(time.time() - t0, 1),
+        })
         return math.inf
+    finally:
+        # Backstop: candidate_is_feasible already reset its bridge; this covers
+        # the path where it never got that far.
+        reset_design(None)
 
 
 # ------------------------------------------------------------------------------
@@ -433,7 +547,9 @@ def optimize_parallel(
     max_workers     : Optional[int]  = None,
     build_cad       : bool           = False,
     on_candidate    : "Optional[callable]" = None,
+    on_core_event   : "Optional[callable]" = None,
     start_method    : "Optional[str]" = None,
+    max_tasks_per_child : Optional[int] = 1,
 ) -> PlateGirderBridge:
     """
     Optimise the plate-girder superstructure for minimum weight, evaluating the
@@ -463,6 +579,47 @@ def optimize_parallel(
     cfg = OptiConfig.from_input_dict(base_input_dict, steel_density, concrete_density)
     if start_method is None:
         start_method = default_start_method()   # forkserver on POSIX, spawn on Windows
+
+    # Live per-core monitor plumbing. Workers push start/done events onto a
+    # Manager queue (picklable across any start method); a background thread here
+    # drains it and forwards to on_core_event. Only set up when a UI asked for it.
+    import threading
+    _mgr      = None
+    _event_q  = None
+    _drainer  = None
+    _stop_drn = threading.Event()
+    if on_core_event is not None:
+        import multiprocessing as _mp
+        _mgr     = _mp.Manager()
+        _event_q = _mgr.Queue()
+
+        def _drain_events():
+            while not _stop_drn.is_set():
+                try:
+                    ev = _event_q.get(timeout=0.2)
+                except Exception:
+                    continue
+                if ev is None:
+                    break
+                try:
+                    on_core_event(ev)
+                except Exception:
+                    pass
+            # flush anything still queued at shutdown
+            while True:
+                try:
+                    ev = _event_q.get_nowait()
+                except Exception:
+                    break
+                if ev is None:
+                    continue
+                try:
+                    on_core_event(ev)
+                except Exception:
+                    pass
+
+        _drainer = threading.Thread(target=_drain_events, daemon=True)
+        _drainer.start()
 
     # Translate the engine's low-level progress into a UI-friendly info dict,
     # tracking the running best so the loader can show it live. The bar is made
@@ -523,23 +680,39 @@ def optimize_parallel(
             "record":        record,
         })
 
-    result: OptimisationResult = ParallelOptimizer.run(
-        fitness_func    = _fitness,
-        bounds_func     = _make_bounds(cfg),
-        initial_guess   = initial_guess(cfg),
-        tol             = tol,
-        pop_size        = pop_size,
-        generations     = generations,
-        seed            = seed,
-        max_workers     = max_workers,
-        worker_init     = _init_worker,
-        worker_initargs = (cfg,),
-        progress_cb     = _engine_progress,
-        # OS-aware: forkserver on POSIX, spawn on Windows (see default_start_method).
-        # Intended to run inside the isolated `run_optimization` process, where
-        # neither method touches the GUI app's __main__.
-        start_method    = start_method,
-    )
+    try:
+        result: OptimisationResult = ParallelOptimizer.run(
+            fitness_func    = _fitness,
+            bounds_func     = _make_bounds(cfg),
+            initial_guess   = initial_guess(cfg),
+            tol             = tol,
+            pop_size        = pop_size,
+            generations     = generations,
+            seed            = seed,
+            max_workers     = max_workers,
+            worker_init     = _init_worker,
+            worker_initargs = (cfg, _event_q),
+            progress_cb     = _engine_progress,
+            # OS-aware: forkserver on POSIX, spawn on Windows (see default_start_method).
+            # Intended to run inside the isolated `run_optimization` process, where
+            # neither method touches the GUI app's __main__.
+            start_method    = start_method,
+            # Recycle each worker after one design so its memory (incl. C-level
+            # OpenSees / ospgrillage state) is returned to the OS per design, not
+            # only when the whole run ends.
+            max_tasks_per_child = max_tasks_per_child,
+        )
+    finally:
+        # Tear down the live-monitor drainer + manager.
+        _stop_drn.set()
+        if _event_q is not None:
+            try: _event_q.put(None)
+            except Exception: pass
+        if _drainer is not None:
+            _drainer.join(timeout=2.0)
+        if _mgr is not None:
+            try: _mgr.shutdown()
+            except Exception: pass
 
     if not result.feasible:
         raise RuntimeError(

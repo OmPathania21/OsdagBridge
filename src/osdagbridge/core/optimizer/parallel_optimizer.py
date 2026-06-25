@@ -108,9 +108,19 @@ def parallel_differential_evolution(
     worker_initargs : Sequence[Any]          = (),
     progress_cb     : Optional[ProgressCallback] = None,
     start_method    : Optional[str]          = None,
+    max_tasks_per_child : Optional[int]      = 1,
 ) -> OptimisationResult:
     """
     Synchronous (generational) parallel Differential Evolution.
+
+    ``max_tasks_per_child`` recycles a pool worker after it has evaluated this
+    many designs (default 1 = a fresh process per design). Recycling is what
+    actually returns a design's memory to the OS: ``gc`` / ``ops.wipe()`` free
+    Python and the FE domain, but C-level allocations inside OpenSees / ospgrillage
+    are not handed back while the worker lives, so over a long run they pile up
+    and only drop when the pool finally shuts down. Tearing the worker down after
+    each design reclaims everything immediately. ``None`` keeps workers for the
+    whole run (fastest, but memory grows with the number of designs).
 
     ``start_method`` selects the multiprocessing start method for the pool
     ("spawn", "fork", "forkserver"). Use "spawn" when the parent process has a
@@ -168,11 +178,18 @@ def parallel_differential_evolution(
     import multiprocessing as _mp
     mp_context = _mp.get_context(start_method) if start_method else None
 
+    # max_tasks_per_child requires Python 3.11+; only pass it when set so the
+    # engine still imports on older runtimes.
+    pool_kwargs = {}
+    if max_tasks_per_child is not None:
+        pool_kwargs["max_tasks_per_child"] = max_tasks_per_child
+
     with ProcessPoolExecutor(
         max_workers = max_workers,
         initializer = worker_init,
         initargs    = tuple(worker_initargs),
         mp_context  = mp_context,
+        **pool_kwargs,
     ) as executor:
 
         # --- Evaluate the initial population in parallel ----------------------
@@ -256,6 +273,7 @@ class ParallelOptimizer:
         worker_initargs : Sequence[Any]          = (),
         progress_cb     : Optional[ProgressCallback] = None,
         start_method    : Optional[str]          = None,
+        max_tasks_per_child : Optional[int]      = 1,
     ) -> OptimisationResult:
 
         return parallel_differential_evolution(
@@ -273,4 +291,5 @@ class ParallelOptimizer:
             worker_initargs = worker_initargs,
             progress_cb     = progress_cb,
             start_method    = start_method,
+            max_tasks_per_child = max_tasks_per_child,
         )

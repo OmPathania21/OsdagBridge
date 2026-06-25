@@ -34,15 +34,22 @@ from __future__ import annotations
 import json
 import pickle
 import sys
+import threading
 
 SENTINEL = "@@OPT@@"
+
+# Progress lines (main thread) and core-monitor lines (drainer thread) both write
+# to stdout, so serialise whole-line writes to keep them from interleaving.
+_EMIT_LOCK = threading.Lock()
 
 
 def _emit(obj: dict) -> None:
     """Write one sentinel-prefixed JSON line to stdout and flush immediately."""
     try:
-        sys.__stdout__.write(SENTINEL + json.dumps(obj) + "\n")
-        sys.__stdout__.flush()
+        line = SENTINEL + json.dumps(obj) + "\n"
+        with _EMIT_LOCK:
+            sys.__stdout__.write(line)
+            sys.__stdout__.flush()
     except Exception:
         pass
 
@@ -64,6 +71,50 @@ def main(argv=None) -> int:
 
         _emit({"type": "start", "pop_size": params.get("pop_size"),
                "generations": params.get("generations")})
+
+        # --- live per-core monitor ------------------------------------------
+        # Workers are recycled per design (new PID each time), so map each PID to
+        # a stable "core" slot (reusing slots as workers finish) and tag each
+        # started design with a running number — that's the "Core C → Design #k"
+        # the GUI popup shows.
+        _core_state = {
+            "slot_of": {},   # pid -> core slot
+            "free":    [],   # freed slots ready to reuse
+            "count":   0,    # designs started so far
+        }
+        _core_lock = threading.Lock()
+
+        def _on_core_event(ev: dict) -> None:
+            pid = ev.get("pid")
+            kind = ev.get("ev")
+            if kind == "start":
+                with _core_lock:
+                    slot = _core_state["slot_of"].get(pid)
+                    if slot is None:
+                        slot = (_core_state["free"].pop()
+                                if _core_state["free"]
+                                else len(_core_state["slot_of"]))
+                        _core_state["slot_of"][pid] = slot
+                    _core_state["count"] += 1
+                    design_no = _core_state["count"]
+                _emit({
+                    "type": "core", "ev": "start",
+                    "core": slot, "pid": pid, "design_no": design_no,
+                    "n": ev.get("n"), "t_slab": ev.get("t_slab"),
+                    "D": ev.get("D"), "bf": ev.get("bf"),
+                    "tf": ev.get("tf"), "tw": ev.get("tw"),
+                })
+            elif kind == "done":
+                with _core_lock:
+                    slot = _core_state["slot_of"].pop(pid, None)
+                    if slot is not None:
+                        _core_state["free"].append(slot)
+                _emit({
+                    "type": "core", "ev": "done",
+                    "core": slot, "pid": pid,
+                    "feasible": ev.get("feasible"),
+                    "weight": ev.get("weight"), "secs": ev.get("secs"),
+                })
 
         def _on_candidate(info: dict) -> None:
             # Forward only JSON-serialisable fields (drop numpy vector etc.).
@@ -89,6 +140,7 @@ def main(argv=None) -> int:
         bridge = optimize_parallel(
             base_input_dict,
             on_candidate=_on_candidate,
+            on_core_event=_on_core_event,
             build_cad=False,
             **params,
         )
