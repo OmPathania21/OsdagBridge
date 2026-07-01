@@ -167,6 +167,13 @@ class CAD3DWindow(QWidget):
 
         # Generate fresh model data
         self.generator.model_data = self.generator.generate(design_params)
+        # Railing exists only when there is a footpath; Median only when enabled.
+        available = set()
+        if getattr(design_params, "footpath_config", "NONE") != "NONE":
+            available.add("Railing")
+        if getattr(design_params, "enable_median", False):
+            available.add("Median")
+        self.component_selector.set_available_components(available)
 
         # Render on display
         self.load_bridge()
@@ -1196,6 +1203,9 @@ class BridgeComponentCheckbox(QWidget):
         ("Node Numbers",  "NodeNumbers"),
     ]
     OVERLAY_KEYS = {"Grillage", "Node", "NodeNumbers"}
+    # Base components that are only present in some designs. Their checkboxes
+    # are hidden when the component is not part of the current design.
+    OPTIONAL_KEYS = {"Railing", "Median"}
 
     def __init__(self, parent: CAD3DWindow):
         super().__init__(parent)
@@ -1203,6 +1213,10 @@ class BridgeComponentCheckbox(QWidget):
 
         self.setObjectName("cad_component_selector")
         self.setFixedHeight(30)
+
+        # Optional-component keys hidden for the current design (see
+        # set_available_components). These are excluded from visibility.
+        self._unavailable: set = set()
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 4, 12, 4)
@@ -1290,6 +1304,8 @@ class BridgeComponentCheckbox(QWidget):
         for cb, (_, key) in zip(self._checkboxes[1:], self.COMPONENTS[1:]):
             if not key:
                 continue
+            if key in self._unavailable:
+                continue
             if key in self.OVERLAY_KEYS:
                 if cb.isChecked():
                     result.append(key)
@@ -1311,6 +1327,28 @@ class BridgeComponentCheckbox(QWidget):
             self._cad.update_component_visibility(selected)
         else:
             self._cad.show_full_model()
+
+    def set_available_components(self, available_keys):
+        """Show/hide the OPTIONAL_KEYS checkboxes (Railing, Median) based on
+        whether those components are part of the current design.
+
+        `available_keys` is the subset of OPTIONAL_KEYS that IS present.
+        Any optional component not in the set has its checkbox unchecked and
+        hidden, and is excluded from the "Bridge" (Model) selection.
+        Called from CAD3DWindow.render_3d_cad() before load_bridge()."""
+        available = set(available_keys)
+        self._unavailable = set()
+        for cb, (_, key) in zip(self._checkboxes, self.COMPONENTS):
+            if key not in self.OPTIONAL_KEYS:
+                continue
+            if key in available:
+                cb.show()
+            else:
+                cb.blockSignals(True)
+                cb.setChecked(False)
+                cb.blockSignals(False)
+                cb.hide()
+                self._unavailable.add(key)
 
     def apply_selection(self):
         """Public entry-point called after load_bridge to apply default state."""
