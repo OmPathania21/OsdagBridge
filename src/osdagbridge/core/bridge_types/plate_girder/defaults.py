@@ -626,6 +626,11 @@ def _on_no_of_girders_changed(working_input_dict: dict) -> None:
                     if design_mode == 'Optimized' or key not in working_input_dict or working_input_dict[key] in (None, "", "All"):
                         working_input_dict[key] = value
 
+        # Sync base (non-dynamic) keys with current mode — edge beams fall back to these
+        # when their per-girder key doesn't exist (e.g. G5.M1 for 4-girder bridge).
+        for base_key, value in MP_GIRDER_PROPS:
+            working_input_dict[base_key] = value
+
     # ── Stiffener ─────────────────────────────────────────────────────────────
 
     # --- Remove all stale dynamic stiffener keys (handles girder count change) ---

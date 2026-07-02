@@ -633,9 +633,9 @@ class InputDock(QWidget):
 
     def _on_design_mode_changed(self, mode_text: str = ""):
         self._current_design_mode = str(mode_text or "Optimized").strip()
+        self.is_require_field_changed = True
         if self._current_design_mode.lower() == "custom":
             self.parent.common_design_func("Additional Inputs", target_tab="Member Properties")
-            self.is_require_field_changed = True
     # ══════════════════════════════════════════════════════════════════════════
     # Carriageway validation
     # ══════════════════════════════════════════════════════════════════════════
