@@ -915,6 +915,8 @@ class CustomViewer3d(qtViewer3d):
                 self._zoom_win_active = True
                 self._rubber_band.setGeometry(QRect(self._zoom_win_start, QSize()))
                 self._rubber_band.show()
+            elif self.active_nav_mode == NavMode.PAN:
+                self.setCursor(Qt.ClosedHandCursor)
 
             event.accept()
             return
@@ -943,12 +945,18 @@ class CustomViewer3d(qtViewer3d):
                 if rect.width() > 4 and rect.height() > 4:
                     self._execute_zoom_window(rect)
 
+            if self.active_nav_mode == NavMode.PAN:
+                self.setCursor(Qt.OpenHandCursor)
+
             self.is_dragging_nav = False
             self.last_mouse_pos = None
             event.accept()
             return
 
-        self.unsetCursor()
+        if self.active_nav_mode == NavMode.PAN:
+            self.setCursor(Qt.OpenHandCursor)
+        else:
+            self.unsetCursor()
         QApplication.restoreOverrideCursor()
         self.releaseMouse()
         super().mouseReleaseEvent(event)
@@ -1006,6 +1014,16 @@ class CustomViewer3d(qtViewer3d):
     _AUTO_ROTATE_SPEED_PX: int = 3   # virtual horizontal drag per frame (px)
     _AUTO_ROTATE_FPS:      int = 60  # frames per second
 
+    # qtViewer3d pushes application override cursors that stack up and mask
+    # setCursor(); neutralise its setter so this widget fully owns the cursor.
+    @property
+    def cursor(self):
+        return self._current_cursor
+
+    @cursor.setter
+    def cursor(self, value):
+        self._current_cursor = value
+
     def set_navigation_mode(self, mode) -> None:
         """Set the active nav mode, starting / stopping auto-rotate as needed."""
         prev = self.active_nav_mode
@@ -1015,6 +1033,14 @@ class CustomViewer3d(qtViewer3d):
             self._stop_auto_rotate()
         if mode == NavMode.ROTATE:
             self._start_auto_rotate()
+
+        # Cursor feedback, same as the plots: open hand for pan, arrow otherwise.
+        if mode == NavMode.PAN:
+            while QApplication.overrideCursor() is not None:  # clear stale overrides
+                QApplication.restoreOverrideCursor()
+            self.setCursor(Qt.OpenHandCursor)
+        else:
+            self.setCursor(Qt.ArrowCursor)
 
     def _start_auto_rotate(self) -> None:
         """Begin continuous horizontal (turntable) rotation at ~60 fps."""
