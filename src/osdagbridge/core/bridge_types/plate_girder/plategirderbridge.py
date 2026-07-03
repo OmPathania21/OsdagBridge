@@ -3080,12 +3080,12 @@ class PlateGirderBridge:
             (see :func:`deckdesign.design_deck_slab`).  The same dict is stored
             in ``self.output_dict["deck_design_results"]``.
         """
-        concrete_grade = str(self.input_dict[KEY_DECK_CONCRETE_GRADE_BASIC]).strip()
         rebar_grade = str(self.input_dict[KEY_DS_REINF_MATERIAL]).strip()
 
-        fck = self._lookup_material(concrete_grade, "fck")
-        Ecm = self._lookup_material(concrete_grade, "Ecm")
-        fctm = self._lookup_material(concrete_grade, "fctm")
+        # Use already-resolved concrete props (handles custom grades).
+        fck  = self.material_props.concrete_prop.fck
+        Ecm  = self.material_props.concrete_prop.Ecm
+        fctm = self.material_props.concrete_prop.fctm
         fy = self._lookup_material(rebar_grade, "fy")
         Es = self._lookup_material(rebar_grade, "Es")
 
