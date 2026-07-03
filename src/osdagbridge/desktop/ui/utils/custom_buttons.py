@@ -29,6 +29,9 @@ class DockCustomButton(QPushButton):
             QPushButton:hover {
                 background-color: #7a9a12;
             }
+            QPushButton:disabled {
+                background-color: #D6E3A3;
+            }
         """)
 
         # Layout for icons and text
