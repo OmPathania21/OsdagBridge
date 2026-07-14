@@ -5,7 +5,7 @@ import io
 import re
 
 def _to_display_style(latex: str) -> str:
-    """Replace \frac with \dfrac so num/denom render at full glyph size."""
+    r"""Replace \frac with \dfrac so num/denom render at full glyph size."""
     return latex.replace(r"\frac", r"\dfrac")
 
 import matplotlib
@@ -51,8 +51,8 @@ _FONTSIZE_FRAC   = 66
 # is_frac=True for equations containing \frac or complex \sqrt
 _EQ_LATEX: dict[str, tuple[tuple[str, int, bool], ...]] = {
     KEY_CHECK_FLEXURE: (
-        (r"$M_d \leq M_r$",                                          80, False),
-        (r"$M_r = \beta_b \cdot Z_p \cdot f_y / \gamma_{m}$",      180, False),
+        (r"$M_d \leq M_r = M_p$",                                   110, False),
+        (r"$\mathrm{(IRC\ 22\ Annex\ I,\ Table\ I.1)}$",            220, False),
     ),
     KEY_CHECK_SHEAR: (
         (r"$V_d \leq V_r$",                                          80, False),
@@ -62,13 +62,13 @@ _EQ_LATEX: dict[str, tuple[tuple[str, int, bool], ...]] = {
         (r"$\frac{M_d}{\beta_b Z_p f_y/\gamma_{m0}} + \frac{V_d}{A_v f_y/(\sqrt{3}\,\gamma_{m0})} \leq 1.0$", 300, True),
     ),
     KEY_CHECK_LTB: (
-        (r"$M_d \leq M_{cr}$",                                       80, False),
-        (r"$M_{cr} \approx \frac{\pi^2 E\,I_y}{L_{LTB}^{2}}$",     140, True),
+        (r"$M_d \leq M_{cr}$", 80, False),
+        (r"$M_{cr}=\sqrt{\left(\frac{\pi^{2}EI_y}{L_{LT}^{2}}\right)\left(GI_t+\frac{\pi^{2}EI_w}{L_{LT}^{2}}\right)}$", 280, True),
     ),
     KEY_CHECK_SHEAR_LONG_TRANS: (
-        (r"$V_L \leq n \cdot Q_u / s$",                             100, False),
-        (r"$V_L = V_d \cdot A_{ec} \cdot Y / I_c$",                 140, False),
-        (r"$Q_u = \min(0.8 f_u A,\; 0.29\alpha d^2\sqrt{f_{ck} E_{cm}}/\gamma_v)$", 280, False),
+        (r"$V_L \leq n \cdot Q_u / s$", 100, False),
+        (r"$V_L = V_d \cdot A_{ec} \cdot Y / I_c$", 140, False),
+        (r"$Q_u=\min\left(\frac{0.8\,f_u\,A}{\gamma_v},\;\frac{0.29\,\alpha\,d^{2}\sqrt{f_{ck}E_{cm}}}{\gamma_v}\right)$", 400, True),
     ),
     KEY_CHECK_FATIGUE: (
         (r"$\Delta\sigma \leq \Delta\sigma_{allowable}$",            160, False),
@@ -83,6 +83,73 @@ _EQ_LATEX: dict[str, tuple[tuple[str, int, bool], ...]] = {
         (r"$\mathrm{(Default}\ x = 600\mathrm{)}$",                 160, False),
     ),
 }
+
+# ---------------------------------------------------------------------------
+# Flexure card — Mp equation varies with the position of the Plastic Neutral
+# Axis (PNA). Transcribed verbatim from IRC:22-2015 Annexure I, Table I.1
+# ("Positive Moment Capacity of Composite Section with full Shear
+# Interaction") — the three case rows, using the table's own symbols:
+#   As, fy, gamma_m  — steel area / yield stress / material safety factor
+#   dc, ds           — centroid-to-centroid distance / slab depth
+#   beff, bf, tf, tw — effective slab width / top flange width & thickness /
+#                      web thickness ; Af = bf.tf
+#   xu, lambda       — PNA depth from top of concrete / stress-block factor
+# The "a" coefficient (a = (fy/gamma_m) / [(alpha_cc/gamma_c).eta.lambda.fck],
+# Annex eq. I.1) feeds the table's xu column and is omitted from the Mp
+# lines below to keep each case to one card-height row, exactly as the Mp
+# column of the table itself has no "a" term.
+# ---------------------------------------------------------------------------
+
+_EQ_FLEXURE_CASE1_SLAB = (
+    r"$M_p=\frac{A_sf_y\left(d_c+0.5d_s-\frac{\lambda x_u}{2}\right)}{\gamma_m},"
+    r"\ \ x_u=\frac{aA_s}{b_{eff}}$"
+)
+_EQ_FLEXURE_CASE2_TOP_FLANGE = (
+    r"$M_p=\frac{f_y\left[A_s\{d_c+0.5d_s(1-\lambda)\}"
+    r"-b_f(x_u-d_s)\{x_u+(1-\lambda)d_s\}\right]}{\gamma_m}$"
+)
+_EQ_FLEXURE_CASE3_WEB_ROW1 = (
+    r"$M_p=\frac{f_y}{\gamma_m}[A_s\{d_c+0.5d_s(1-\lambda)\}"
+    r"-2A_f\{0.5t_f+(1-\lambda/2)d_s\}$"
+)
+_EQ_FLEXURE_CASE3_WEB_ROW2 = (
+    r"$-t_w(x_u-d_s-t_f)\{(x_u-d_s)+(1-\lambda)d_s+t_f\}]$"
+)
+
+_PNA_LABEL_LATEX: dict[str, str] = {
+    "slab":          r"$\mathrm{Case\ 1:\ PNA\ in\ Slab}$",
+    "top_flange":    r"$\mathrm{Case\ 2:\ PNA\ in\ Top\ Flange}$",
+    "web":           r"$\mathrm{Case\ 3:\ PNA\ in\ Web}$",
+}
+
+
+def _flexure_eq_lines(pna_location: str) -> tuple[tuple[str, int, bool], ...]:
+    """Pick the Mp equation matching the computed PNA location.
+
+    Cases 1-3 map straight onto IRC:22-2015 Annexure I Table I.1. The code's
+    "bottom_flange" outcome (PNA below the web) falls outside the table's
+    three rows, so it keeps the neutral placeholder rather than guessing an
+    unpublished fourth formula.
+    """
+    check_line = (r"$M_d \leq M_r = M_p$", 110, False)
+
+    if pna_location == "slab":
+        lines = [check_line, (_EQ_FLEXURE_CASE1_SLAB, 260, True)]
+    elif pna_location == "top_flange":
+        lines = [check_line, (_EQ_FLEXURE_CASE2_TOP_FLANGE, 300, False)]
+    elif pna_location == "web":
+        lines = [
+            check_line,
+            (_EQ_FLEXURE_CASE3_WEB_ROW1, 300, False),
+            (_EQ_FLEXURE_CASE3_WEB_ROW2, 300, False),
+        ]
+    else:
+        return _EQ_LATEX[KEY_CHECK_FLEXURE]
+
+    label = _PNA_LABEL_LATEX.get(pna_location)
+    if label:
+        lines.append((label, 200, False))
+    return tuple(lines)
 
 # ---------------------------------------------------------------------------
 # LaTeX → SVG via matplotlib mathtext
@@ -177,6 +244,18 @@ class LatexEquationView(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
         outer.setAlignment(Qt.AlignVCenter)
+        self._outer = outer
+
+        self.set_lines(lines)
+
+    def set_lines(self, lines) -> None:
+        """Rebuild the rendered equation rows in place (e.g. flexure card
+        swapping its Mp formula to match the computed PNA location)."""
+        while self._outer.count():
+            item = self._outer.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.deleteLater()
 
         if not lines:
             return
@@ -199,10 +278,10 @@ class LatexEquationView(QWidget):
             row.addWidget(MathSvgWidget(svg_bytes, target_h))
             row.addStretch()
             inner_layout.addLayout(row)
-            
-        outer.addStretch()
-        outer.addWidget(inner)
-        outer.addStretch()
+
+        self._outer.addStretch()
+        self._outer.addWidget(inner)
+        self._outer.addStretch()
 # ---------------------------------------------------------------------------
 # StatusBadge
 # ---------------------------------------------------------------------------
@@ -482,6 +561,9 @@ class SteelDesignCheckTab(QWidget):
             if badge:
                 badge.set_neutral()
                 badge.setVisible(False)
+        eq_view = self.check_eq_views.get(KEY_CHECK_FLEXURE)
+        if eq_view is not None:
+            eq_view.set_lines(_EQ_LATEX[KEY_CHECK_FLEXURE])
         self.design_results = []
         self._relayout_visible_cards()
         self._refresh_summary()
@@ -522,12 +604,16 @@ class SteelDesignCheckTab(QWidget):
                 worst = _worst(*ids)
                 if worst is None:
                     continue
-                results_by_key[key] = {
+                entry = {
                     "demand":   worst.demand,
                     "capacity": worst.capacity,
                     "ratio":    worst.dcr,
                     "passed":   worst.status != "FAIL",
                 }
+                if key == KEY_CHECK_FLEXURE:
+                    m = re.search(r"PNA in (\w+)", worst.note or "")
+                    entry["pna_location"] = m.group(1) if m else ""
+                results_by_key[key] = entry
             except Exception:
                 logger.exception("Failed to load checks %s for key %s", ids, key)
 
@@ -551,6 +637,11 @@ class SteelDesignCheckTab(QWidget):
         ratio    = res.get("ratio",    0.0)
         passed   = res.get("passed",   False)
         unit_str = f" {DESIGN_CHECK_UNITS[key]}" if DESIGN_CHECK_UNITS.get(key) else ""
+
+        if key == KEY_CHECK_FLEXURE:
+            eq_view = self.check_eq_views.get(key)
+            if eq_view is not None:
+                eq_view.set_lines(_flexure_eq_lines(res.get("pna_location", "")))
 
         if key == KEY_CHECK_INTERACTION:
             val_text = (
