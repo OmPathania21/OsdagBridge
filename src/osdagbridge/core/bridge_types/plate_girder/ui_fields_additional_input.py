@@ -2865,12 +2865,12 @@ ADDITIONAL_INPUTS_SCHEMA = [
         "main_id": "loading.main",
         "with_scroll": False,
     },
-    {
-        "label":   "Support Conditions",
-        "schema":  SUPPORT_CONDITIONS_SCHEMA,
-        "main_id": "support_conditions.main",
-        "with_scroll": True,
-    },
+    # {
+    #     "label":   "Support Conditions",
+    #     "schema":  SUPPORT_CONDITIONS_SCHEMA,
+    #     "main_id": "support_conditions.main",
+    #     "with_scroll": True,
+    # },
     {
         "label":   "Analysis/Design Options",
         "schema":  DESIGN_OPTIONS_SCHEMA,
