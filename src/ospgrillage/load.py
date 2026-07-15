@@ -1598,6 +1598,8 @@ class LoadModel:
             return self.create_classA_vehicle()
         elif self.model_type == "CLASS70R":
             return self.create_class70r_vehicle()
+        elif self.model_type == "FATIGUE":
+            return self.create_fatigue_vehicle()
 
     def create_m1600_vehicle(self, gap):
         """
@@ -1787,7 +1789,130 @@ class LoadModel:
                 ClassA_vehicle.add_load(load=point)
 
         return ClassA_vehicle
-    
+
+    def create_fatigue_vehicle(self):
+        """
+        IRC fatigue truck (Clause 204.6)
+        Returns a CompoundLoad in local coordinates
+        """
+
+        # Units
+        m = 1
+        kN = 1e3
+        g = 9.81  # m/s^2
+
+        # Geometry
+        axle_dist1 = 4.500 * m
+        axle_dist2 = 1.400 * m
+
+        # Axle loads (tonnes ?? g ??? N)
+        wheel_loads = [
+            12 * kN * g,
+            14 * kN * g,
+            14 * kN * g,
+        ]
+
+        # Longitudinal axle positions
+        load_positions_x = [
+            0,
+            axle_dist1,
+            axle_dist1 + axle_dist2,
+        ]
+
+        # Apply global offsets
+        load_positions_x = [x + self.x_offset for x in load_positions_x]
+
+        # Wheel track width
+        load_positions_z = [-0.840, 0.840]
+        load_positions_z = [z + self.z_offset for z in load_positions_z]
+
+        # Create compound load
+        fatigue_vehicle = create_compound_load(name="Fatigue Vehicle")
+
+        # Create point loads
+        for axle_index, x in enumerate(load_positions_x):
+            for z in load_positions_z:
+                vert = create_load_vertex(
+                    x=x,
+                    z=z,
+                    p=wheel_loads[axle_index] / 2  # split axle load into two wheels
+                )
+                point = create_load(
+                    loadtype="point",
+                    name="Fatigue wheel",
+                    point1=vert
+                )
+                fatigue_vehicle.add_load(load=point)
+
+        return fatigue_vehicle
+
+    def create_special_vehicle(self):
+        """
+        IRC special vehicle (Clause 204.5 / 204.5.1)
+        Prime mover (1 steering + 2 bogie axles) + 20 axle hydraulic trailer.
+        Returns a CompoundLoad in local coordinates
+        """
+
+        # Units
+        m = 1
+        kN = 1e3
+        g = 9.81  # m/s^2
+
+        # Longitudinal spacing
+        dist12 = 3.200 * m
+        dist23 = 1.370 * m
+        dist34 = 5.389 * m
+        trailer_spacing = 1.500 * m
+
+        # Axle loads (tonnes)
+        axle_loads_tonne = (
+            [6.0]           # 1 steering axle
+            + [9.5, 9.5]    # 2 bogie axles
+            + [18.0] * 20   # 20 trailer axles
+        )
+
+        # Axle loads (tonnes ?? g ??? N)
+        wheel_loads = [ax * kN * g for ax in axle_loads_tonne]
+
+        # Longitudinal axle positions
+        load_positions_x = [0.0]
+        load_positions_x.append(load_positions_x[-1] + dist12)
+        load_positions_x.append(load_positions_x[-1] + dist23)
+        load_positions_x.append(load_positions_x[-1] + dist34)
+        # 19 spacings -> 20 trailer axle positions total
+        for _ in range(19):
+            load_positions_x.append(load_positions_x[-1] + trailer_spacing)
+
+        assert len(load_positions_x) == len(axle_loads_tonne), \
+            "Axle count and position count mismatch"
+
+        # Apply global offsets
+        load_positions_x = [x + self.x_offset for x in load_positions_x]
+
+        # Wheel track width
+        load_positions_z = [-0.9, 0.9]
+        load_positions_z = [z + self.z_offset for z in load_positions_z]
+
+        # Create compound load
+        special_vehicle = create_compound_load(name="Special Vehicle")
+
+        # Create point loads
+        for axle_index, x in enumerate(load_positions_x):
+            for z in load_positions_z:
+                vert = create_load_vertex(
+                    x=x,
+                    z=z,
+                    p=wheel_loads[axle_index] / 2  # split axle load into two wheels
+                )
+                point = create_load(
+                    loadtype="point",
+                    name="Special wheel",
+                    point1=vert
+                )
+                special_vehicle.add_load(load=point)
+
+        return special_vehicle
+
 # ---------------------------------------------------------------------------------------------------------------
 class ShapeFunction:
     """
