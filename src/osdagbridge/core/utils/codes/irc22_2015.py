@@ -794,15 +794,17 @@ class IRC22_2014:
         else:
             tau_b = fyw_MPa / (math.sqrt(3) * lambda_w ** 2)
 
-        # 5) Design shear resistance
-        Vrd_N = Av_mm2 * tau_b
+        # 5) Nominal and design shear resistance — IS 800:2007 Cl.8.4.2.1: Vn = Vcr, Vd = Vn/gamma_m0
+        Vn_N = Av_mm2 * tau_b
+        Vd_N = Vn_N / GAMMA_M0_STEEL
 
         return {
             "Kv": round(Kv, 3),
             "tau_cr_MPa": round(tau_cr, 3),
             "lambda_w": round(lambda_w, 3),
             "tau_b_MPa": round(tau_b, 3),
-            "Vrd_kN": round(Vrd_N / 1e3, 3),
+            "Vn_kN": round(Vn_N / 1e3, 3),
+            "Vrd_kN": round(Vd_N / 1e3, 3),
             "clause": "IRC 22:2014 - 603.3.3.2 (IS 800:2007 8.4.2.2a)"
         }
 
@@ -829,7 +831,7 @@ class IRC22_2014:
         tau_b_MPa: post-critical shear stress from the simple post-critical method.
         Vp is computed internally from web geometry and yield stress.
         """
-        phi, Mfr_t, Mfr_b, s_t, s_b, w_tf, psi, fv, Vtf_N = (
+        phi, Mfr_t, Mfr_b, s_t, s_b, w_tf, psi, fv, _ = (
             IS800_2007.cl_8_4_2_2_TensionField_unequal_Isection(
                 c=c_mm, d=d_mm, tw=tw_mm, fyw=fyw_MPa,
                 bf_top=bf_top_mm, tf_top=tf_top_mm,
@@ -838,6 +840,15 @@ class IRC22_2014:
                 A_v=Av_mm2, tau_b=tau_b_MPa,
             )
         )
+        # IS800_2007's own V_tf mixes a nominal term with a V_p that's already
+        # divided by gamma_m0 before taking min() -- recomputed here instead,
+        # using its returned phi/w_tf/fv, so both terms are nominal and
+        # gamma_m0 is applied exactly once to get the design value.
+        sin_phi = math.sin(math.radians(phi))
+        Vn_tf_N = Av_mm2 * tau_b_MPa + 0.9 * w_tf * tw_mm * fv * sin_phi
+        Vn_p_N  = d_mm * tw_mm * fyw_MPa / math.sqrt(3)
+        Vn_tf_N = min(Vn_tf_N, Vn_p_N)
+        Vd_tf_N = Vn_tf_N / GAMMA_M0_STEEL
         return {
             "phi_deg"     : round(phi, 3),
             "Mfr_top_Nmm" : round(Mfr_t, 3),
@@ -847,7 +858,8 @@ class IRC22_2014:
             "wtf_mm"      : round(w_tf, 3),
             "psi_MPa"     : round(psi, 3),
             "fv_MPa"      : round(fv, 3),
-            "Vtf_kN"      : round(Vtf_N / 1e3, 3),
+            "Vn_tf_kN"    : round(Vn_tf_N / 1e3, 3),
+            "Vtf_kN"      : round(Vd_tf_N / 1e3, 3),
             "clause"      : "IRC 22:2014 - 603.3.3.2 (2)(b) | IS 800:2007 8.4.2.2(b)",
         }
 

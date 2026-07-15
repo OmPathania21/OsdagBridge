@@ -123,6 +123,28 @@ _PNA_LABEL_LATEX: dict[str, str] = {
 }
 
 
+def _interaction_eq_lines(check_id: int | None, is_high_shear: bool) -> tuple[tuple[str, int, bool], ...]:
+    """Pick the interaction equation matching the check that actually governed.
+
+    Cl.603.3.3.3: the shear term never appears as an additive fraction. Instead,
+    when Vu > 0.6Vd, the bending capacity itself is reduced to Mdv before the
+    plain M-V (or M-N) check is run; when Vu <= 0.6Vd, no reduction applies and
+    Mdv == Md. check_id 4 (M-N) only exists at all when axial force is present.
+    """
+    if check_id == 4:
+        return (
+            (r"$\frac{N_u}{N_{Rd}} + \frac{M_u}{M_{dv}} \leq 1.0$", 220, True),
+        )
+    if is_high_shear:
+        return (
+            (r"$M_u \leq M_{dv}$", 110, False),
+            (r"$M_{dv}=M_d-\beta(M_d-M_{fd})\ \ \mathrm{(Cl.\ 603.3.3.3,\ high\ shear)}$", 360, False),
+        )
+    return (
+        (r"$M_u \leq M_{dv}=M_d\ \ \mathrm{(Cl.\ 603.3.3.3,\ no\ shear\ reduction)}$", 320, False),
+    )
+
+
 def _flexure_eq_lines(pna_location: str) -> tuple[tuple[str, int, bool], ...]:
     """Pick the Mp equation matching the computed PNA location.
 
@@ -613,6 +635,18 @@ class SteelDesignCheckTab(QWidget):
                 if key == KEY_CHECK_FLEXURE:
                     m = re.search(r"PNA in (\w+)", worst.note or "")
                     entry["pna_location"] = m.group(1) if m else ""
+                if key == KEY_CHECK_INTERACTION:
+                    note = worst.note or ""
+                    entry["check_id"] = worst.check_id
+                    entry["Mu_kNm"]  = getattr(demand, "Mu_kNm", 0.0)
+                    entry["Mdv_kNm"] = getattr(capacity, "Mdv_kNm", 0.0)
+                    if worst.check_id == 4:
+                        entry["is_high_shear"] = "shear-reduced" in note
+                        entry["Nu_kN"]  = getattr(demand, "Nu_kN", 0.0)
+                        entry["NRd_kN"] = getattr(capacity, "NRd_kN", 0.0)
+                    else:
+                        m = re.search(r"beta=([\d.]+)", note)
+                        entry["is_high_shear"] = bool(m) and float(m.group(1)) > 0
                 results_by_key[key] = entry
             except Exception:
                 logger.exception("Failed to load checks %s for key %s", ids, key)
@@ -644,10 +678,44 @@ class SteelDesignCheckTab(QWidget):
                 eq_view.set_lines(_flexure_eq_lines(res.get("pna_location", "")))
 
         if key == KEY_CHECK_INTERACTION:
-            val_text = (
-                f"<i>M<sub>d</sub></i> / <i>M<sub>r</sub></i> + "
-                f"<i>V<sub>d</sub></i> / <i>V<sub>r</sub></i> = {ratio:.2f}"
-            )
+            old_eq = self.check_eq_views.get(key)
+            if old_eq is not None:
+                card = self.check_cards[key]
+                layout = card.layout()
+                # Remove old equation widget
+                layout.removeWidget(old_eq)
+                old_eq.hide()
+                old_eq.setParent(None)
+                old_eq.deleteLater()
+                
+                # Create new equation widget
+                new_eq = LatexEquationView(
+                    _interaction_eq_lines(
+                        res.get("check_id"),
+                        res.get("is_high_shear", False)
+                    )
+                )
+                # Insert below the title
+                layout.insertWidget(1, new_eq)
+
+                # Store new widget
+                self.check_eq_views[key] = new_eq
+
+            Mu_kNm  = res.get("Mu_kNm", 0.0)
+            Mdv_kNm = res.get("Mdv_kNm", 0.0)
+            if res.get("check_id") == 4:
+                Nu_kN  = res.get("Nu_kN", 0.0)
+                NRd_kN = res.get("NRd_kN", 0.0)
+                val_text = (
+                    f"<i>N<sub>u</sub></i> = {Nu_kN:.2f} kN, <i>N<sub>Rd</sub></i> = {NRd_kN:.2f} kN<br>"
+                    f"<i>M<sub>u</sub></i> = {Mu_kNm:.2f} kNm, <i>M<sub>dv</sub></i> = {Mdv_kNm:.2f} kNm<br>"
+                    f"<i>N<sub>u</sub></i>/<i>N<sub>Rd</sub></i> + <i>M<sub>u</sub></i>/<i>M<sub>dv</sub></i> = {ratio:.2f}"
+                )
+            else:
+                val_text = (
+                    f"<i>M<sub>u</sub></i> = {Mu_kNm:.2f} kNm, <i>M<sub>dv</sub></i> = {Mdv_kNm:.2f} kNm<br>"
+                    f"<i>M<sub>u</sub></i>/<i>M<sub>dv</sub></i> = {ratio:.2f}"
+                )
         else:
             dem_pfx = DESIGN_CHECK_DEM_PFX.get(key, "Demand")
             cap_pfx = DESIGN_CHECK_CAP_PFX.get(key, "Capacity")
