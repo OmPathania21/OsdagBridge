@@ -55,7 +55,8 @@ from osdagbridge.core.utils.common import (
 
 from osdagbridge.core.reports.report_utils import _tex, _render_value
 
-def ch3_loads(input_dict):
+def ch3_loads(input_dict, output_dict=None):
+    output_dict = output_dict if output_dict is not None else {}
     # Live load vehicle names mapping
     vehicles = []
     if input_dict.get(KEY_LL_IRC_CLASS_A):
@@ -200,23 +201,34 @@ def ch3_loads(input_dict):
     def _sl(v, unit=""):
         return f"{float(v):.4f}{unit}" if v not in (None, "") else "N/A"
 
-    # Table 3.6 — Temperature: compute effective bridge temp range from shade temps
-    tl_temp_min = tl_temp_max = tl_rise = tl_fall = "N/A"
-    try:
-        _tmax = input_dict.get(KEY_TL_HIGHEST_MAX_TEMP) or input_dict.get('shade_temp_max')
-        _tmin = input_dict.get(KEY_TL_LOWEST_MIN_TEMP)  or input_dict.get('shade_temp_min')
-        if _tmax and _tmin:
-            _res    = IRC6_2017.cl_215_2_effective_bridge_temperature(
-                          float(_tmax), float(_tmin), 'metallic', False)
-            _bt_min = _res.get('T_min', 0)
-            _bt_max = _res.get('T_max', 0)
-            _mean   = (_bt_max + _bt_min) / 2.0
-            tl_temp_min = f"{_bt_min:.2f}"
-            tl_temp_max = f"{_bt_max:.2f}"
-            tl_rise     = f"{_bt_max - _mean:.2f}"
-            tl_fall     = f"{_mean - _bt_min:.2f}"
-    except Exception:
-        pass
+    # Table 3.6 rows 3 & 4 — effective bridge temperature range and rise/fall.
+    # Prefer values already present in output_dict (populated by the additional-
+    # inputs UI / design snapshot); otherwise compute the fallback here from the
+    # raw shade temperatures and store the results back into output_dict.
+    if not output_dict.get(KEY_TL_BRIDGE_TEMP_MIN):
+        try:
+            # Raw shade temperatures — same source as rows 1 & 2 above. The
+            # user-entered value may sit in output_dict (design snapshot) or in
+            # input_dict; the weather/location-derived 'shade_temp_*' are added
+            # to input_dict during report build. Try all so the fallback fires.
+            _tmax = (output_dict.get(KEY_TL_HIGHEST_MAX_TEMP)
+                     or input_dict.get(KEY_TL_HIGHEST_MAX_TEMP)
+                     or input_dict.get('shade_temp_max'))
+            _tmin = (output_dict.get(KEY_TL_LOWEST_MIN_TEMP)
+                     or input_dict.get(KEY_TL_LOWEST_MIN_TEMP)
+                     or input_dict.get('shade_temp_min'))
+            if _tmax and _tmin:
+                _res    = IRC6_2017.cl_215_2_effective_bridge_temperature(
+                              float(_tmax), float(_tmin), 'metallic', False)
+                _bt_min = _res.get('T_min', 0)
+                _bt_max = _res.get('T_max', 0)
+                _mean   = (_bt_max + _bt_min) / 2.0
+                output_dict[KEY_TL_BRIDGE_TEMP_MIN] = f"{_bt_min:.2f}"
+                output_dict[KEY_TL_BRIDGE_TEMP_MAX] = f"{_bt_max:.2f}"
+                output_dict[KEY_TL_TEMP_RISE]       = f"{_bt_max - _mean:.2f}"
+                output_dict[KEY_TL_TEMP_FALL]       = f"{_mean - _bt_min:.2f}"
+        except Exception:
+            pass
 
     # --- Table 3.7: Load Combinations (dynamically generated from IRC 6) ---
     _LOAD_LABEL_MAP = {
@@ -375,9 +387,9 @@ This section summarizes all loads applied to the bridge and the load combination
 \hline
 \textnormal{Minimum Shade Temperature} & """ + (_render_value(input_dict,'shade_temp_min')) + r""" $^\circ$C \\[6pt]
 \hline
-\textnormal{Effective Bridge Temp. Range} & """ + (_render_value(input_dict, KEY_TL_BRIDGE_TEMP_MIN)) + r""" to """ + (_render_value(input_dict, KEY_TL_BRIDGE_TEMP_MAX)) + r""" $^\circ$C \\[6pt]
+\textnormal{Effective Bridge Temp. Range} & """ + (_render_value(output_dict, KEY_TL_BRIDGE_TEMP_MIN)) + r""" to """ + (_render_value(output_dict, KEY_TL_BRIDGE_TEMP_MAX)) + r""" $^\circ$C \\[6pt]
 \hline
-\textnormal{Temperature Rise / Fall for Design} & +""" + (_render_value(input_dict, KEY_TL_TEMP_RISE)) + r""" $^\circ$C / \textminus{}""" + (_render_value(input_dict, KEY_TL_TEMP_FALL)) + r""" $^\circ$C \\[6pt]
+\textnormal{Temperature Rise / Fall for Design} & +""" + (_render_value(output_dict, KEY_TL_TEMP_RISE)) + r""" $^\circ$C / \textminus{}""" + (_render_value(output_dict, KEY_TL_TEMP_FALL)) + r""" $^\circ$C \\[6pt]
 \hline
 \end{longtable}
 
