@@ -10,7 +10,7 @@ from osdagbridge.core.reports.report_utils import _tex, _fig_embed
 if TYPE_CHECKING:
     from .report_generator import ReportDataBridge
 
-def ch4_analysis(asum, fig_paths, bridge: "ReportDataBridge", span_m: float):
+def ch4_analysis(asum, fig_paths, bridge: "ReportDataBridge"):
     lc_summary  = (asum or {}).get('load_cases', {})
     rxn_summary = (asum or {}).get('reactions',  {})
 

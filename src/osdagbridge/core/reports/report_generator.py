@@ -107,17 +107,6 @@ import os, shutil, logging, datetime, tempfile, subprocess
 from dataclasses import dataclass, field
 from typing import Optional, List, Literal
 
-from osdagbridge.core.utils.common import (
-    KEY_DESIGN_MODE,
-    KEY_SPAN,
-    KEY_TL_BRIDGE_TEMP_MAX,
-    KEY_TL_BRIDGE_TEMP_MIN,
-    KEY_TL_HIGHEST_MAX_TEMP,
-    KEY_TL_LOWEST_MIN_TEMP,
-    KEY_TL_TEMP_FALL,
-    KEY_TL_TEMP_RISE
-)
-
 from osdagbridge.core.reports.report_utils import _tex
 from .executive_summary import executive_summary
 from .chap1 import ch1_project_info
@@ -737,33 +726,6 @@ def build_report_payload(request, input_dict, output_dict):
         except Exception as e:
             logger.warning(f"Failed to parse project location data: {e}")
 
-        # ── Table 3.6 rows 3 & 4: effective bridge temp range and rise/fall ────
-        # The computed keys live in output_dict (which is a snapshot of input_dict
-        # at design time). Merge them into input_dict if not already present.
-        for _tkey in (KEY_TL_BRIDGE_TEMP_MIN, KEY_TL_BRIDGE_TEMP_MAX,
-                      KEY_TL_TEMP_RISE, KEY_TL_TEMP_FALL):
-            if not input_dict.get(_tkey) and output_dict.get(_tkey):
-                input_dict[_tkey] = output_dict[_tkey]
-
-        # If still missing, compute from whatever temperature inputs are available.
-        if not input_dict.get(KEY_TL_BRIDGE_TEMP_MIN):
-            try:
-                max_str = input_dict.get(KEY_TL_HIGHEST_MAX_TEMP) or input_dict.get('shade_temp_max')
-                min_str = input_dict.get(KEY_TL_LOWEST_MIN_TEMP)  or input_dict.get('shade_temp_min')
-                if max_str and min_str:
-                    from osdagbridge.core.utils.codes.irc6_2017 import IRC6_2017
-                    res   = IRC6_2017.cl_215_2_effective_bridge_temperature(
-                                float(max_str), float(min_str), 'metallic', False)
-                    t_min = res.get('T_min', 0)
-                    t_max = res.get('T_max', 0)
-                    mean  = (t_max + t_min) / 2.0
-                    input_dict[KEY_TL_BRIDGE_TEMP_MIN] = f"{t_min:.2f}"
-                    input_dict[KEY_TL_BRIDGE_TEMP_MAX] = f"{t_max:.2f}"
-                    input_dict[KEY_TL_TEMP_RISE]       = f"{t_max - mean:.2f}"
-                    input_dict[KEY_TL_TEMP_FALL]       = f"{mean - t_min:.2f}"
-            except Exception as _te:
-                logger.warning(f"Could not compute temperature values for report: {_te}")
-
         asum = {}
         if output_dict:
             asum = output_dict.get('analysis_summary', {})
@@ -901,7 +863,6 @@ def generate_report(payload, request):
 
             # ── Assemble LaTeX document (fig_paths now has tmp_dir paths) ──
             bridge = ReportDataBridge(payload.output_dict, payload.inputs, payload)
-            span_m = float(payload.inputs.get(KEY_SPAN, 0) or 0)
 
             doc_parts = []
             doc_parts.append(preamble(payload.metadata.project_name, payload.metadata.job_number, payload.metadata.report_date, payload.metadata.subtitle or 'Rev 0'))
@@ -920,19 +881,15 @@ def generate_report(payload, request):
             doc_parts.append(ch2_input_parameters(payload.metadata, payload.inputs, payload.output_dict))
 
             if 'loads' in secs:
-                doc_parts.append(ch3_loads(payload.inputs))
+                doc_parts.append(ch3_loads(payload.inputs, payload.output_dict))
             if 'analysis' in secs:
-                doc_parts.append(ch4_analysis(payload.analysis_summary, fig_paths, bridge, span_m))
+                doc_parts.append(ch4_analysis(payload.analysis_summary, fig_paths, bridge))
             if 'design_checks' in secs:
                 doc_parts.append(ch5_design_checks(payload.design_checks, bridge))
             if 'drawings' in secs and payload.options.include_figures:
                 doc_parts.append(ch6_drawings(fig_paths))
 
             doc_parts.append(ch7_quantities(payload.inputs))
-
-            mode = str(payload.inputs.get(KEY_DESIGN_MODE, "Optimized")).strip().lower()
-            is_custom = mode in {"custom", "customized"}
-        
 
             doc_parts.append(ch8_design_log(payload.log_entries, payload.inputs))
 
