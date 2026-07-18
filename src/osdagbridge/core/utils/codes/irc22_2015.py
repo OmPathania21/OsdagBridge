@@ -1784,6 +1784,15 @@ class IRC22_2014:
             "VL_N_per_mm": round(VL_N_per_mm, 3),
             "studs_per_section": studs_per_section,
             "spacing_mm": round(spacing_mm, 2),
+            "V_kN": V_kN,
+            "Aec_mm2": round(Aec, 2),
+            "Y_mm": round(Y, 2),
+            "Ic_mm4": round(Ic_mm4, 2),
+            "t_eff_mm": round(t_eff, 2),
+            "beff_mm": beff_mm,
+            "xu_mm": xu_mm,
+            "t_slab_mm": t_slab_mm,
+            
             "clause": "IRC 22:2015 - 606.4.1 Longitudinal Shear and Spacing"
         }
 
@@ -1846,6 +1855,10 @@ class IRC22_2014:
 
         return {
             "Aec_mm2": round(Aec_mm2, 2),
+            "As_mm2": round(As_mm2, 2),
+            "fyk_MPa": fyk_MPa,
+            "gamma_m": gamma_m,
+            "fck_cu_MPa": fck_cu_MPa,            
             "H1_kN": round(H1_kN, 3),
             "H2_kN": round(H2_kN, 3),
             "H_governing_kN": round(H_kN, 3),
@@ -1904,6 +1917,7 @@ class IRC22_2014:
         spacing_mm = total_Qu_kN / Vr_per_mm_kN
 
         return {
+            "Vr_kN": round(Vr_kN, 2),
             "Aec_mm2": round(Aec_mm2, 2),
             "t_eff_mm": round(t_eff, 2),
             "Y_mm": round(Y_mm, 2),

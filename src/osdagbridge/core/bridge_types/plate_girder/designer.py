@@ -1367,6 +1367,14 @@ class IRC22CapacityCalculator:
         return {
             "modular_ratio"      : res["n_modular_ratio"],
             "VL_N_per_mm"        : res["VL_N_per_mm"],
+            "V_kN"               : res["V_kN"],
+            "Aec_mm2"            : res["Aec_mm2"],
+            "Y_mm"               : res["Y_mm"],
+            "Ic_mm4"             : res["Ic_mm4"],
+            "t_eff_mm"           : res["t_eff_mm"],
+            "beff_mm"            : res["beff_mm"],
+            "xu_mm"              : res["xu_mm"],
+            "t_slab_mm"          : res["t_slab_mm"],
             "spacing_mm"         : res["spacing_mm"],
             "n_studs_per_section": n_studs,
             "clause"             : res["clause"],
@@ -1410,6 +1418,11 @@ class IRC22CapacityCalculator:
             studs_per_section=n_studs,
         )
         return {
+            "As_mm2"         : res["As_mm2"],
+            "fyk_MPa"        : res["fyk_MPa"],
+            "gamma_m"        : res["gamma_m"],
+            "fck_cu_MPa"     : res["fck_cu_MPa"],
+            "Aec_mm2"        : res["Aec_mm2"],
             "H1_kN"           : res["H1_kN"],
             "H2_kN"           : res["H2_kN"],
             "H_governing_kN"  : res["H_governing_kN"],
@@ -2141,7 +2154,7 @@ class DCREngine:
                          d.Mu_kNm, c.Md_kNm, "kNm",
                          note=f"PNA in {c.pna_location}, xu={c.xu_mm:.1f} mm")
 
-        # ── CATEGORY 2: Strength Limit State (Shear) ─────────────────────────
+            # ── CATEGORY 2: Strength Limit State (Shear) ─────────────────────────
         self._add_check(
             2,
             "ULS Shear",
@@ -3576,8 +3589,13 @@ def run_design_check(
         KEY_SD_SC_SL1              : capacity.stud_spacing_mm,
         KEY_SD_SC_SL2              : capacity.stud_spacing_full_shear_mm,
         KEY_SD_SC_SR               : capacity.stud_spacing_fatigue_mm,
+        KEY_SD_SC_AEC_MM2          : capacity.details.get("stud_spacing_full_shear").get("Aec_mm2"),
+        KEY_SD_SC_H1_kN            : capacity.details.get("stud_spacing_full_shear").get("H1_kN"),
+        KEY_SD_SC_H2_kN            : capacity.details.get("stud_spacing_full_shear").get("H2_kN"),
+        KEY_SD_SC_SHEAR_SPAN       : capacity.details.get("stud_spacing_full_shear").get("shear_span_mm"),
         KEY_SD_SC_H_kN             : (capacity.details.get("stud_spacing_full_shear") or {}).get("H_governing_kN"),
         KEY_SD_SC_Vr_kN            : (capacity.details.get("stud_spacing_fatigue")    or {}).get("Vr_kN"),
+        KEY_SD_SC_VR_PER_MM        : capacity.details.get("stud_spacing_fatigue").get("Vr_per_mm_kN"),
         KEY_SD_SC_LIMIT_600        : (capacity.details.get("stud_spacing_limits")     or {}).get("limit_600_mm"),
         KEY_SD_SC_LIMIT_3TSLAB     : (capacity.details.get("stud_spacing_limits")     or {}).get("limit_3_tslab_mm"),
         KEY_SD_SC_LIMIT_4HSTUD     : (capacity.details.get("stud_spacing_limits")     or {}).get("limit_4_hstud_mm"),
@@ -3595,6 +3613,9 @@ def run_design_check(
         KEY_SD_TS_VCAP_CONC        : (capacity.details.get("transverse_shear") or {}).get("Vcap1_kN_per_m"),
         KEY_SD_TS_VCAP_REINF       : (capacity.details.get("transverse_shear") or {}).get("Vcap2_kN_per_m"),
         KEY_SD_TS_VRD              : (capacity.details.get("transverse_shear") or {}).get("governing_capacity_kN_per_m"),
+        KEY_SD_TS_AEC              : capacity.details.get("stud_spacing").get("Aec_mm2"),
+        KEY_SD_TS_Y                : capacity.details.get("stud_spacing").get("Y_mm"),
+        KEY_TS_DECK_THICKNESS : config.slab.thickness,
         # -- crack control --
         "As_min_crack_mm2"          : capacity.As_min_crack_mm2,
         "As_provided_crack_mm2"     : capacity.As_provided_crack_mm2,

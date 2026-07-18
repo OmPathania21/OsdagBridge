@@ -103,6 +103,13 @@ from osdagbridge.core.utils.common import (
     KEY_SD_SC_SL1,
     KEY_SD_SC_SL2,
     KEY_SD_SC_SR,
+    KEY_SD_SC_AEC_MM2,
+    KEY_SD_SC_VR_PER_MM,
+    KEY_SD_SC_H1_kN,
+    KEY_SD_SC_H2_kN,
+    KEY_SD_SC_SHEAR_SPAN,
+    KEY_SD_SC_H_kN,
+    KEY_SD_SC_Vr_kN,
     KEY_SD_SECTION_CLASS,
     KEY_SD_SECTION_PROP_AREA,
     KEY_SD_SECTION_PROP_IZ,
@@ -127,6 +134,8 @@ from osdagbridge.core.utils.common import (
     KEY_SD_TOTAL_DEPTH,
     KEY_SD_TS_VL,
     KEY_SD_TS_VRD,
+    KEY_SD_TS_AEC,
+    KEY_SD_TS_Y,
     KEY_SD_ULS_PER_GIRDER,
     KEY_SD_WEB_CLASS_LIMIT,
     KEY_SD_WEB_SLENDERNESS,
@@ -335,7 +344,7 @@ def ch5_design_checks(checks_data, bridge) -> str:
     t57_rows = []
     for lbl, _ in girder_entries:
         t57_rows.append(
-            r"\multirow{6}{*}{\makecell{" + lbl + r"""}} & \textnormal{Shear Buckling Design Method} & """ + _render_value(bridge.output_dict, KEY_SD_STIFF_METHOD) + r""" \\[6pt]
+            r"\multirow{6}{*}{\makecell{" + lbl + r"""}} & \textnormal{Shear Buckling Design Method} & """ + str(_render_value(bridge.output_dict, KEY_SD_STIFF_METHOD)).replace("_", " ").title() + r""" \\[6pt]
 \cline{2-3}
  & \textnormal{Intermediate Stiffener Thickness (mm)} & """ + _render_value(bridge.output_dict, KEY_SD_STIFF_INT_THICK) + r""" \\[6pt]
 \cline{2-3}
@@ -618,14 +627,97 @@ Fatigue Shear Resistance, $Q_r$ & IRC 22 Table 8 ($\phi d$, $N_{sc}$) & """
     def _sp_row(crit, req):
         return (crit + r" & " + _mm(req) + r" & " + _sc_prov_str + r" & "
                 + _defl_status(_sc_prov, req) + r" \\[6pt]")
+        
+    def _detail_row(text):
+        return (
+            r"\multicolumn{4}{|p{0.96\linewidth}|}{"
+            r"\hspace{2mm}\small "
+            + text +
+            r"} \\"
+        )
+    def _detail_value(name, value, unit=""):
+        s = _dfmt(value, nd=2)
+        return _detail_row(
+            rf"{name} = {s}" + (f" {unit}" if s else "")
+        )    
+    
 
     t515_content = (
-        _sp_row("ULS Shear (SL1)",            _dr_sc.get(KEY_SD_SC_SL1)) + "\n\\hline\n"
-        + _sp_row("Full Composite (SL2)",       _dr_sc.get(KEY_SD_SC_SL2)) + "\n\\hline\n"
-        + _sp_row("SLS Fatigue (SR)",           _dr_sc.get(KEY_SD_SC_SR)) + "\n\\hline\n"
-        + _sp_row("Max Spacing Limit (IRC 22)", _dr_sc.get("stud_spacing_max_mm")) + "\n\\hline"
-    )
+        _sp_row("ULS Shear (SL1)", _dr_sc.get(KEY_SD_SC_SL1))
+        + "\n\\hline\n"
+        + _sp_row("Full Composite (SL2)", _dr_sc.get(KEY_SD_SC_SL2))
+        + "\n\\hline\n"
+        + _sp_row("SLS Fatigue (SR)", _dr_sc.get(KEY_SD_SC_SR))
+        + "\n\\hline\n"
+        + _sp_row("Max Spacing Limit (IRC 22)", _dr_sc.get("stud_spacing_max_mm"))
+        + "\n\\hline"
+    )  
+    t515_calc_content = rf"""
+    \vspace{{0.4em}}
 
+    \noindent
+    \textbf{{Supporting Calculations}}
+
+    \begin{{flushleft}}
+    
+    % ---------------- S_L1 ----------------
+    \noindent\textbullet\hspace{{0.5em}}
+    $S_{{L1}}=\dfrac{{\sum Q_u}}{{V_L}}$
+    \hfill
+    {{\small
+    $(V_L:\ \text{{See Table 5.15; IRC 22 Cl. 606.4.1}})$
+    }}
+
+    \noindent\textbullet\hspace{{0.5em}}
+    $S_{{L2}}=\dfrac{{\sum Q_u}}{{H}}\,L$
+    \hfill
+    {{\small
+    ($L={_dfmt(_dr_sc.get(KEY_SD_SC_SHEAR_SPAN),2)}\,\mathrm{{mm}}$
+    : Shear Span)}}
+
+    \hfill
+
+
+    \hspace*{{1.5em}}
+    $H_1=\dfrac{{A_{{sl}}f_{{yk}}}}{{\gamma_m}}\times10^{{-3}}
+    ={_dfmt(_dr_sc.get(KEY_SD_SC_H1_kN),2)}\,\mathrm{{kN}}
+    \qquad
+    (A_{{sl}}={_dfmt(_dr_sc.get("Ag_mm2"),2)}\,\mathrm{{mm^2}})$
+
+    \\
+
+    \hspace*{{1.5em}}
+    $H_2=0.36\,f_{{ck}}A_{{ec}}\times10^{{-3}}
+    ={_dfmt(_dr_sc.get(KEY_SD_SC_H2_kN),2)}\,\mathrm{{kN}}
+    \qquad
+    (A_{{ec}}=b_{{eff}}\,t_{{eff}}
+    ={_dfmt(_dr_sc.get(KEY_SD_SC_AEC_MM2),2)}\,\mathrm{{mm^2}})$
+
+    \\
+
+    \hspace*{{1.5em}}
+    $H=\min(H_1,H_2)
+    ={_dfmt(_dr_sc.get(KEY_SD_SC_H_kN),2)}\,\mathrm{{kN}}$
+
+    \\
+    
+    \vspace{{0.4em}}
+
+    \noindent\textbullet\hspace{{0.5em}}$S_R=\dfrac{{\sum Q_r}}{{V_r}}$
+
+    \hspace*{{1.5em}}
+    $V_r=\dfrac{{V_R\,A_{{ec}}\,Y}}{{I_c}}$
+
+    \hspace*{{1.5em}}
+    $V_R={_dfmt(_dr_sc.get(KEY_SD_SC_Vr_kN),2)}\,\mathrm{{kN}},
+    \;
+    V_r={_dfmt(_dr_sc.get(KEY_SD_SC_VR_PER_MM),2)}\,\mathrm{{kN/mm}}$
+
+    \hfill
+    {{\small ($Y,I_c$: See Table 5.15)}}
+    \vspace{{-1.0em}}
+    \end{{flushleft}}
+    """
     # ── Table 5.16: Transverse Shear & Detailing Checks (bridge-level) ───────
     # Transverse shear (Cl.606.10): VL vs slab capacity VRd. Detailing (Cl.606.6):
     # min transverse reinforcement, stud diameter ≤ 2·tf, edge distance ≥ 25 mm.
@@ -637,9 +729,22 @@ Fatigue Shear Resistance, $Q_r$ & IRC 22 Table 8 ($\phi d$, $N_{sc}$) & """
     def _knm(v):
         s = _dfmt(v, nd=2)
         return (s + " kN/m") if s else ""
+    
+    def _mm2(v):
+        s = _dfmt(v, nd=2)
+        return (s + " mm$^2$") if s else ""
+    
+    def _mm4(v):
+        s = _dfmt(v, nd=2)
+        return (s + " mm$^4$") if s else ""
 
     _ts_vl  = _dr_sc.get(KEY_SD_TS_VL)
     _ts_vrd = _dr_sc.get(KEY_SD_TS_VRD)
+    _ts_v   = _dr_sc.get("Vu_kN")
+    _ts_aec   = _dr_sc.get(KEY_SD_TS_AEC)
+    _ts_y     = _dr_sc.get(KEY_SD_TS_Y)
+    _ts_ic    = _dr_sc.get("I_comp_short_mm4")
+    _t_slab = _dr_511.get(KEY_TS_DECK_THICKNESS)
     if _ts_vl is not None and _ts_vrd is not None:
         try:
             _ts_vl_f = float(_ts_vl)
@@ -671,10 +776,49 @@ Fatigue Shear Resistance, $Q_r$ & IRC 22 Table 8 ($\phi d$, $N_{sc}$) & """
     _d_lim    = _dr_sc.get(KEY_SD_SC_D_LIMIT)
     _edge     = _dr_sc.get(KEY_SD_SC_EDGE_DIST)
     _edge_req = _dr_sc.get(KEY_SD_SC_REQ_EDGE_DIST)
+    
+    def _row515a(parameter, expression, value,):
+        return parameter + r" & " + expression + r" & " + value + r" \\[6pt]"
 
     def _row516(check, value, status):
         return check + r" & " + value + r" & " + status + r" \\[6pt]"
+    
+    t515a_content = (
+        _row515a(
+            r"$V$",
+            r"\textnormal{Factored Shear Force, $V$}",
+            _dfmt(_ts_v, nd=2) + " kN",
+        )
+        + "\n\\hline\n"
 
+        + _row515a(
+            r"$A_{ec}$ {\small(Transformed)}",
+            r"Transformed Compressive Concrete Area, $A_{ec}=\dfrac{b_{eff}t_{eff}}{n}$",
+            _mm2(_ts_aec),
+        )
+        + "\n\\hline\n"
+
+        + _row515a(
+            r"$Y$",
+            r"\textnormal{Distance to Centroid, $Y$}",
+            _mm(_ts_y),
+        )
+        + "\n\\hline\n"
+
+        + _row515a(
+            r"$I_c$",
+            r"\textnormal{Composite Second Moment of Area, $I_c$}",
+            _mm4(_ts_ic),
+        )
+        + "\n\\hline\n"
+
+        + _row515a(
+            r"$V_L$",
+            r"$V_L=\dfrac{V\times A_{ec}\times Y}{I_c}$",
+            _dfmt(_ts_vl, nd=2) + " N/mm",
+        )
+        + "\n\\hline"
+    )
     t516_content = (
         _row516(r"\textnormal{Longitudinal Shear per unit length, $V_L$}", _knm(_ts_vl), "---") + "\n\\hline\n"
         + _row516(r"\textnormal{Transverse Shear Capacity of Slab, $V_{Rd}$}", _knm(_ts_vrd), "---") + "\n\\hline\n"
@@ -1212,7 +1356,27 @@ This section presents all structural design checks performed by OsdagBridge. For
 \hline
 """ + t515_content + r"""
 \end{longtable}
-\noindent\textit{Note: IRC 22 Cl. 606.4, 606.9. Governing spacing $= \min(S_{L1}, S_{L2}, S_R)$.}
+\noindent\textit{Note: IRC 22 Cl. 606.4, 606.9.
+Governing spacing $= \min(S_{L1}, S_{L2}, S_R)$.}
+""" + t515_calc_content + r"""
+\smallskip
+\noindent\hrulefill
+\vspace{1.2em}
+% -----------------------------
+% Table 5.15: Longitudinal Shear
+% -----------------------------
+
+\vspace{1em}
+
+\begin{longtable}{|L{3.0cm}|>{\arraybackslash}p{7.5cm}|C{4.0cm}|}
+\caption{\textbf{Longitudinal Shear Calculation (IRC 22 Cl.606.4.1)}}
+\hline
+\textbf{Parameter} &
+\textbf{Expression} &
+\textbf{Value} \\[6pt]
+\hline
+""" + t515a_content + r"""
+\end{longtable}
 
 \vspace{1em}
 \begin{longtable}{|L{5.3cm}|>{\arraybackslash}p{7.2cm}|C{2.0cm}|}
