@@ -54,6 +54,61 @@ def _max_member_efficiency(pair_designs):
     return best
 
 
+def _deck_governing(deck_results):
+    """Return (max_ur, label) for the deck slab's worst utilization, e.g.
+    (0.72, "ULS - Bottom (Sagging)"). Returns (None, "") when none exist."""
+    try:
+        from osdagbridge.core.bridge_types.plate_girder.ui_fields_additional_input import (
+            DECK_DESIGN_SUMMARY_SCHEMA,
+        )
+        labels = {c["key"]: c["label"]
+                  for c in DECK_DESIGN_SUMMARY_SCHEMA.get("utilization_card", {}).get("checks", [])
+                  if str(c.get("key", "")).startswith("ur_")}
+    except Exception:
+        labels = {}
+    best_ur, best_key = None, ""
+    for k, v in (deck_results or {}).items():
+        if not str(k).startswith("ur_"):
+            continue
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            continue
+        if best_ur is None or f > best_ur:
+            best_ur, best_key = f, str(k)
+    if best_ur is None:
+        return (None, "")
+    return (best_ur, labels.get(best_key, best_key))
+
+
+def _governing_member(pair_designs):
+    """Return (efficiency, label) for the worst member/force-type in a cross-bracing
+    or end-diaphragm result dump, e.g. (0.63, "Diagonal (Compression)").
+    Returns (None, "") when none exist."""
+    from osdagbridge.core.bridge_types.plate_girder.results_data import _extract_osdag_summary
+    if not isinstance(pair_designs, dict):
+        return (None, "")
+    best_ur, best_label = None, ""
+    for members in pair_designs.values():
+        if not isinstance(members, dict):
+            continue
+        for member_name, force_types in members.items():
+            if not isinstance(force_types, dict):
+                continue
+            for force_type, raw in force_types.items():
+                try:
+                    val = _extract_osdag_summary(raw or {}).get("efficiency")
+                    if val is None:
+                        continue
+                    f = float(val)
+                except (TypeError, ValueError, AttributeError):
+                    continue
+                if best_ur is None or f > best_ur:
+                    best_ur = f
+                    best_label = f"{str(member_name).title()} ({str(force_type).title()})"
+    return (best_ur, best_label)
+
+
 def executive_summary(input_dict, output_dict, fig_paths) -> str:
     plan_fig = _fig_or_placeholder(fig_paths.get('girder_top'), 'Figure 1 -- Overall Bridge Plan')
     cs_fig = _fig_or_placeholder(fig_paths.get('cross_section'),
@@ -177,6 +232,29 @@ def executive_summary(input_dict, output_dict, fig_paths) -> str:
               r'\hline' + '\n'
               r'\end{tabular}')
 
+    # Key Design Outcomes rows: controlling check, its UR, and pass/fail per component.
+    def _outcome_row(component, check, ur, is_fail):
+        chk_cell = _tex(check) if check else "---"
+        if ur is None:
+            ur_cell, status_cell = "---", "---"
+        else:
+            ur_cell = f"{ur:.2f}"
+            status_cell = r"\textcolor{red}{Fail}" if is_fail else "Pass"
+        return (component + r" & " + chk_cell + r" & " + ur_cell + r" & "
+                + status_cell + r" \\" + "\n\\hline")
+
+    _cb_ur, _cb_check = _governing_member(cb_results)
+    _ed_ur, _ed_check = _governing_member(ed_results)
+    _dk_ur, _dk_check = _deck_governing(deck_results)
+
+    outcome_rows = "\n".join([
+        _outcome_row("Girder Design", gov_name, girder_max_ur, bool(failing)) if per_girder
+            else _outcome_row("Girder Design", "", None, False),
+        _outcome_row("Cross Bracing Design", _cb_check, _cb_ur, _cb_ur is not None and _cb_ur > 1.0),
+        _outcome_row("End Diaphragm Design", _ed_check, _ed_ur, _ed_ur is not None and _ed_ur > 1.0),
+        _outcome_row("Deck Design", _dk_check, _dk_ur, _dk_ur is not None and _dk_ur > 1.0),
+    ])
+
     return r"""
 \newpage
 {\centering\Large\bfseries Executive Summary\par}
@@ -230,10 +308,12 @@ This section provides a concise summary of the bridge design, key inputs, govern
 \addcontentsline{toc}{section}{Key Design Outcomes Summary}
 \label{sec:key-outcomes}
 
-\noindent Girder design pass \\
-Cross bracing design pass \\
-End Diaphragm design pass \\
-Deck design pass
+\begin{tabular}{|L{4.0cm}|L{5.5cm}|C{2.8cm}|C{1.8cm}|}
+\hline
+\textbf{Component} & \textbf{Controlling Check} & \textbf{Utilization Ratio} & \textbf{Status} \\
+\hline
+""" + outcome_rows + r"""
+\end{tabular}
 
 \section*{Design Assumptions and Limitations}
 \addcontentsline{toc}{section}{Design Assumptions and Limitations}
