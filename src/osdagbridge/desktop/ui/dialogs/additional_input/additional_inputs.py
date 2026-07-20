@@ -261,10 +261,10 @@ class AdditionalInputs(QDialog):
                 if isinstance(value, dict):
                     continue
                 try:
-                    if name == "design_options_cont.fatigue.load_cycles":
-                        text = str(int(value))
-                    elif "thermal_coeff" in name:
+                    if "thermal_coeff" in name:
                         text = f"{float(value):.2e}"
+                    elif str(value).strip().lstrip('-').isdigit():
+                        text = str(value).strip()
                     else:
                         text = f"{float(value):.2f}"
                 except (ValueError, TypeError):
@@ -357,11 +357,19 @@ class AdditionalInputs(QDialog):
             if w:
                 self._set_enabled(w, not is_optimized)
 
+        # Reload current member so widgets reflect dict values on every mode switch.
+        # set_defaults only wrote base-key defaults so without this the initially
+        # selected member (and the active member when switching back to Optimized)
+        # would show empty outstands / spacing.
+        _stiff_combo = self.findChild(QComboBox, KEY_MP_STIFFENER_SELECT_MEMBER_ID)
+        if _stiff_combo and _stiff_combo.currentText().strip():
+            self._load_stiffener_member_data(_stiff_combo.currentText().strip())
+
         # In Custom mode re-apply conditional sub-field states------------------------
         if not is_optimized:
             w = self.findChild(QComboBox, KEY_MP_STIFFENER_INTERMEDIATE)
             if w:
-                self._on_intermediate_stiffener_changed(w.currentText())
+                self._on_intermediate_stiffener_changed(w.currentText(), restore_default=False)
             w = self.findChild(QComboBox, KEY_MP_STIFFENER_LONGITUDINAL)
             if w:
                 self._on_longitudinal_stiffener_changed(w.currentText())
@@ -459,8 +467,8 @@ class AdditionalInputs(QDialog):
 
             if isinstance(widget, QLineEdit):
                 try:
-                    if name == "design_options_cont.fatigue.load_cycles":
-                        text = str(int(value))
+                    if str(value).strip().lstrip('-').isdigit():
+                        text = str(value).strip()
                     else:
                         text = f"{float(value):.2f}"
                 except (ValueError, TypeError):
@@ -1798,15 +1806,17 @@ class AdditionalInputs(QDialog):
         self._load_stiffener_member_data(new_member_id)
         self._last_stiffener_member_id = new_member_id
 
-        w = self.findChild(QComboBox, KEY_MP_STIFFENER_INTERMEDIATE)
-        if w:
-            self._on_intermediate_stiffener_changed(w.currentText(), restore_default = False)
-        w = self.findChild(QComboBox, KEY_MP_STIFFENER_LONGITUDINAL)
-        if w:
-            self._on_longitudinal_stiffener_changed(w.currentText())
-        w = self.findChild(QComboBox, KEY_MP_STIFFENER_NO_BEARING_STIFFENERS)
-        if w:
-            self._on_bearing_stiffener_count_changed(w.currentText())
+        is_optimized = str(self.working_input_dict.get(KEY_DESIGN_MODE, "Optimized")).strip() == "Optimized"
+        if not is_optimized:
+            w = self.findChild(QComboBox, KEY_MP_STIFFENER_INTERMEDIATE)
+            if w:
+                self._on_intermediate_stiffener_changed(w.currentText(), restore_default=False)
+            w = self.findChild(QComboBox, KEY_MP_STIFFENER_LONGITUDINAL)
+            if w:
+                self._on_longitudinal_stiffener_changed(w.currentText())
+            w = self.findChild(QComboBox, KEY_MP_STIFFENER_NO_BEARING_STIFFENERS)
+            if w:
+                self._on_bearing_stiffener_count_changed(w.currentText())
 
         self._update_stiffener_cad()
 
@@ -1838,7 +1848,7 @@ class AdditionalInputs(QDialog):
                         if web_depth is not None:
                             try:
                                 spacing = 1.5 * float(web_depth)
-                                spacing_str = f"{spacing:.0f}"
+                                spacing_str = str(int((spacing // 5) * 5))
                                 if spacing_widget and isinstance(spacing_widget, QLineEdit):
                                     spacing_widget.setText(spacing_str)
                                 # Save to the correct working_input_dict key with suffix

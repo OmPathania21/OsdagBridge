@@ -524,7 +524,7 @@ class BridgeInputValidator:
             v         = self._to_float(inputs.get(key))
             if v is None: return 20, "Bearing stiffener spacing must be a numeric value."
             if v < 20:    return 20, "Bearing stiffener spacing must be at least 20 mm."
-            if v > 75:    return 75, "Bearing stiffener spacing must not exceed 75 mm."
+            if v > 150:   return 150, "Bearing stiffener spacing must not exceed 150 mm."
 
         elif key == KEY_MP_STIFFENER_BEARING_OUTSTAND:
             v       = self._to_float(inputs.get(key))
@@ -541,9 +541,9 @@ class BridgeInputValidator:
 
         elif key == KEY_MP_STIFFENER_INTERMEDIATE_SPACING:
             v = self._to_float(inputs.get(key))
-            if v is None: return 75,   "Intermediate stiffener spacing must be a numeric value."
-            if v < 75:    return 75,   "Intermediate stiffener spacing must be between 75 and 3000 mm."
-            if v > 3000:  return 3000, "Intermediate stiffener spacing must be between 75 and 3000 mm."
+            if v is None: return 150,   "Intermediate stiffener spacing must be a numeric value."
+            if v < 150:    return 150,   "Intermediate stiffener spacing must be between 150 and 3000 mm."
+            if v > 3000:  return 3000, "Intermediate stiffener spacing must be between 150 and 3000 mm."
 
         elif key == KEY_MP_STIFFENER_INTERMEDIATE_OUTSTAND:
             v       = self._to_float(inputs.get(key))

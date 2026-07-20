@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from math import sqrt
+from math import ceil, sqrt
 from typing import Optional, Tuple
 
 # Import constants from common.py for consistency
@@ -62,6 +62,13 @@ DEFAULT_DEPTH_SPAN_RATIO = 18  # D = Span / 18
 MIN_DEPTH_SPAN_RATIO = 25  # D_min = Span / 25 (shallower)
 MAX_DEPTH_SPAN_RATIO = 15  # D_max = Span / 15 (deeper)
 
+# Plate dimensions are ordered in 10 mm increments, so the empirical depth and
+# flange widths are rounded up to that grid before any property is derived.
+SIZE_INCREMENT_M = 0.010  # m
+
+def ceil_to_size_increment(value_m: float) -> float:
+    """Round a metre dimension up to the next 10 mm."""
+    return ceil(round(value_m / SIZE_INCREMENT_M, 6)) * SIZE_INCREMENT_M
 
 @dataclass
 class BridgeLayoutResult:
@@ -409,8 +416,8 @@ class BridgeConfigurationSolver:
         """
         if user_value is not None:
             return user_value
-        return span / DEFAULT_DEPTH_SPAN_RATIO
-    
+        return ceil_to_size_increment(span / DEFAULT_DEPTH_SPAN_RATIO)
+
     # =========================================================================
     # Section 3.2: Section Properties Based on D_empirical
     # =========================================================================
@@ -467,7 +474,7 @@ class BridgeConfigurationSolver:
             # SYMMETRIC SECTION: B_top = B_bot, t_f_top = t_f_bot
             # =========================================================
             # Default dimensions based on D_empirical formulas
-            b_f = B_top if B_top > 0 else 0.3 * D  # Eq. 3.2
+            b_f = B_top if B_top > 0 else ceil_to_size_increment(0.3 * D)  # Eq. 3.2
             t_f = t_f_top if t_f_top > 0 else b_f / 24.0  # Eq. 3.3
             d_web = D - 2 * t_f  # Eq. 3.4
             tw = t_w if t_w > 0 else d_web / 200.0  # Eq. 3.5
@@ -522,8 +529,8 @@ class BridgeConfigurationSolver:
             # =========================================================
             # UNSYMMETRIC SECTION: Different top/bottom flanges
             # =========================================================
-            bf_top = B_top if B_top > 0 else 0.3 * D
-            bf_bot = B_bot if B_bot > 0 else 0.35 * D
+            bf_top = B_top if B_top > 0 else ceil_to_size_increment(0.3 * D)
+            bf_bot = B_bot if B_bot > 0 else ceil_to_size_increment(0.35 * D)
             tf_top = t_f_top if t_f_top > 0 else bf_top / 24.0
             tf_bot = t_f_bot if t_f_bot > 0 else bf_bot / 24.0
             d_web = D - tf_top - tf_bot

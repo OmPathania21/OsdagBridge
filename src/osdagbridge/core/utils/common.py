@@ -1424,11 +1424,8 @@ VALUES_STIFFENER_DESIGN = ["Simple Post Critical", "Tension Field"]
 VALUES_BEARING_STIFFENER_COUNT = ["1", "2", "3", "4"]
 VALUES_LONGITUDINAL_STIFFENER = ["No", "Yes and 1 stiffener", "Yes and 2 stiffeners"]
 VALUES_CROSS_BRACING_TYPE = [
-    "K-bracing",
-    "K-bracing with top bracket",
-    "X-bracing",
-    "X-bracing with bottom bracket",
-    "X-bracing with top and bottom brackets",
+    "K-Bracing",
+    "X-Bracing",
 ]
 VALUES_END_DIAPHRAGM_TYPE = ["Cross Bracing", "Rolled Beam", "Welded Beam"]
 VALUES_WEARING_COAT_MATERIAL = ["Concrete", "Bituminous", "Custom"]
@@ -1448,17 +1445,17 @@ STIFFENER_DETAILS_DEFAULTS = {
     "combo_width": 190,
     "outstand_default_text": "NA",
     "min_bearing_spacing_mm": MIN_BEARING_STIFFENER_SPACING_MM,
-    "bearing_stiffeners_each_end": VALUES_BEARING_STIFFENER_COUNT[1],
-    "bearing_spacing_mm": "50",
+    "bearing_stiffeners_each_end": VALUES_BEARING_STIFFENER_COUNT[3],
+    "bearing_spacing_mm": "100",
     "bearing_thickness_mode": VALUES_PROFILE_SCOPE[0],
-    "bearing_thickness_value": SAIL_APPROVED_THICKNESS_VALUES[0],
+    "bearing_thickness_value": SAIL_APPROVED_THICKNESS_VALUES[1],
     "bearing_outstand_mm": "",
-    "intermediate_stiffener": VALUES_NO_YES[0],
-    "intermediate_spacing_mm": "NA",
+    "intermediate_stiffener": VALUES_NO_YES[1],
+    "intermediate_spacing_mm": "",
     "intermediate_outstand_mm": "",
     "longitudinal_stiffener": VALUES_LONGITUDINAL_STIFFENER[0],
     "intermediate_thickness_mode": VALUES_PROFILE_SCOPE[0],
-    "intermediate_thickness_value": SAIL_APPROVED_THICKNESS_VALUES[0],
+    "intermediate_thickness_value": SAIL_APPROVED_THICKNESS_VALUES[1],
     "longitudinal_thickness_mode": VALUES_PROFILE_SCOPE[0],
     "longitudinal_thickness_value": SAIL_APPROVED_THICKNESS_VALUES[0],
     "shear_buckling_method": VALUES_STIFFENER_DESIGN[0] if VALUES_STIFFENER_DESIGN else "",
@@ -1474,26 +1471,9 @@ MIN_FOOTPATH_WIDTH = 1.5
 MIN_RAILING_HEIGHT = 1.0
 MIN_SAFETY_KERB_WIDTH = 0.75
 DEFAULT_GIRDER_SPACING = 2.5
-DEFAULT_DECK_OVERHANG = 1.0
 DEFAULT_CRASH_BARRIER_WIDTH = 0.5
 DEFAULT_RAILING_WIDTH = 0.375
 DEFAULT_CROSS_BRACING_SPACING = 3.0
-
-CROSS_BRACING_DEFAULTS = {
-    "select_girders":               "",
-    "member_id":                    "",
-    "type":                         VALUES_CROSS_BRACING_TYPE[0],   # "K-bracing"
-    "bracing_connection":           "Bolted",
-    "bracing_section_type":         "",
-    "bracing_section_designation":  "",
-    "top_chord":                    VALUES_NO_YES[0],               # "No"
-    "top_chord_section_type":       "",
-    "top_chord_section_desig":      "",
-    "bottom_chord":                 VALUES_NO_YES[0],               # "No"
-    "bottom_chord_section_type":    "",
-    "bottom_chord_section_desig":   "",
-    "spacing":                      DEFAULT_CROSS_BRACING_SPACING,  # 3.0
-}
 
 # IRC helper option constants
 KEY_VEHICLE = ["Class70R(W)", "Class70R(T)", "ClassA", "ClassB"]

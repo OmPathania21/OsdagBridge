@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-
+from math import ceil
 
 from osdagbridge.core.utils.codes.irc5_2015 import IRC5_2015
 from osdagbridge.core.utils.codes.keyfile import (
@@ -15,6 +15,7 @@ from osdagbridge.core.utils.codes.keyfile import (
     KEY_RIGID_CRASH_BARRIER_TYPE,
 )
 from osdagbridge.core.utils.common import (
+    DEFAULT_GIRDER_SPACING,
     DEFAULT_RAILING_WIDTH,
     KEY_TS_GIRDER_SPACING, KEY_TS_NO_OF_GIRDERS, KEY_TS_DECK_OVERHANG, KEY_TS_OVERALL_WIDTH,
     KEY_TS_NO_OF_FOOTPATHS, KEY_TS_DECK_THICKNESS, KEY_TS_FOOTPATH_WIDTH, KEY_TS_FOOTPATH_THICKNESS,
@@ -65,7 +66,6 @@ from osdagbridge.core.utils.common import (
     KEY_MP_CB_BOTTOM_CHORD_SECTION_TYPE,
     KEY_MP_CB_BOTTOM_CHORD_SECTION_DESIG,
     KEY_MP_CB_SPACING,
-    CROSS_BRACING_DEFAULTS,
     DEFAULT_CROSS_BRACING_SPACING,
 
     KEY_MP_ED_SELECT_GIRDERS,
@@ -100,6 +100,8 @@ from osdagbridge.core.utils.common import (
     KEY_MP_ED_PLASTIC_MODULUS_ZUZ,
     KEY_MP_ED_PLASTIC_MODULUS_ZUY,
     VALUES_END_DIAPHRAGM_TYPE,
+    VALUES_NO_YES,
+    VALUES_CROSS_BRACING_TYPE,
     get_angle_section_properties, get_is_section_list,
 
     KEY_DO_GAMMA_C_BASIC, KEY_DO_GAMMA_C_ACCIDENTAL, KEY_DO_GAMMA_M0, KEY_DO_GAMMA_M1, KEY_DO_GAMMA_S,
@@ -180,7 +182,7 @@ def _update_typical_section_defaults(input_dict: dict) -> None:
         input_dict.update({key: value})
 
     # --- Deck Detail sub-tab ---
-    _update(KEY_TS_DECK_THICKNESS,     200.0)                        # mm
+    _update(KEY_TS_DECK_THICKNESS,     250.0)                        # mm
     _update(KEY_TS_FOOTPATH_WIDTH,     IS_DEFAULT_FOOTPATH_WIDTH_M)  # m
     _update(KEY_TS_FOOTPATH_THICKNESS, 100.0)                        # mm
 
@@ -347,9 +349,9 @@ def _update_design_options_defaults(input_dict: dict) -> None:
     _update(KEY_DS_TOP_CLEAR_COVER,         "50")
     _update(KEY_DS_BOTTOM_CLEAR_COVER,      "50")
     _update(KEY_DS_SIDE_CLEAR_COVER,        "50")
-    _update(KEY_DS_STUD_YIELD_STRENGTH,     "400")
-    _update(KEY_DS_STUD_ULTIMATE_STRENGTH,  "400")
-    _update(KEY_DS_STUD_DIAMETER,           "16")
+    _update(KEY_DS_STUD_YIELD_STRENGTH,     "385")
+    _update(KEY_DS_STUD_ULTIMATE_STRENGTH,  "495")
+    _update(KEY_DS_STUD_DIAMETER,           "20")
     _update(KEY_DS_STUD_HEIGHT,             "100")
     _update(KEY_DS_STUD_COUNT,              "2")
     _update(KEY_DS_STUD_TRANSVERSE_SPACING, "100")
@@ -438,7 +440,7 @@ def extend_cb_dynamic_keys(working_input_dict: dict, girder_count: int, no_of_br
                 elif section_defaults and defaults_key in section_defaults:
                     working_input_dict[full_key] = section_defaults[defaults_key]
                 else:
-                    working_input_dict[full_key] = CROSS_BRACING_DEFAULTS[defaults_key]
+                    working_input_dict[full_key] = _CB_DEFAULTS[defaults_key]
 
 
 def _extend_member_field_keys(working_input_dict: dict, girder_id: str, member_field_keys: list) -> None:
@@ -601,10 +603,10 @@ def _on_no_of_girders_changed(working_input_dict: dict) -> None:
     if section_props is not None:
         MP_GIRDER_PROPS = [
             (KEY_MP_GIRDER_SYMMETRY,                section_props['symmetry']),
-            (KEY_MP_GIRDER_DEPTH,                   math.ceil(section_props['D'] * 1e3)),
-            (KEY_MP_GIRDER_WEB_DEPTH,               math.ceil(section_props['d_web'] * 1e3)),
-            (KEY_MP_GIRDER_TOP_FLANGE_WIDTH,        math.ceil(section_props['B_top'] * 1e3)),
-            (KEY_MP_GIRDER_BOTTOM_FLANGE_WIDTH,     math.ceil(section_props['B_bot'] * 1e3)),
+            (KEY_MP_GIRDER_DEPTH,                   round(section_props['D'] * 1e3)),
+            (KEY_MP_GIRDER_WEB_DEPTH,               math.ceil(round(section_props['d_web'] * 1e3, 6))),
+            (KEY_MP_GIRDER_TOP_FLANGE_WIDTH,        round(section_props['B_top'] * 1e3)),
+            (KEY_MP_GIRDER_BOTTOM_FLANGE_WIDTH,     round(section_props['B_bot'] * 1e3)),
             (KEY_MP_GIRDER_SECTIONAL_AREA,          section_props['Area']),
             (KEY_MP_GIRDER_MASS,                    section_props['Mass']),
             (KEY_MP_GIRDER_SECTIONAL_IZ,            section_props['I_z']),
@@ -687,16 +689,22 @@ def _on_no_of_girders_changed(working_input_dict: dict) -> None:
                             tw_mm = float(tw_val)
                         except (TypeError, ValueError):
                             tw_mm = float(section_props['t_w'] * 1e3) if section_props else 0.0
-
                         if b_top > 0.0 and b_bot > 0.0:
                             max_os = max(0.0, (min(b_top, b_bot) - tw_mm) / 2.0)
-                            val_str = str(int(max_os)) if max_os.is_integer() else f"{max_os:.1f}"
-                            working_input_dict[key] = val_str
+                            # Floor to 5 mm — rounding up would push the outstand past the flange edge.
+                            working_input_dict[key] = str(int(math.floor(max_os / 5.0) * 5))
                         else:
                             working_input_dict[key] = STIFFENER_DETAILS_DEFAULTS[defaults_key]
+                    elif base_key == KEY_MP_STIFFENER_INTERMEDIATE_SPACING:
+                        # Calculate default spacing: (1.5 * web_depth)
+                        dw_val = float(working_input_dict.get(f"{KEY_MP_GIRDER_WEB_DEPTH}.G{girder_idx}.M{member_id}") or 0.0)
+                        working_input_dict[key] = str(int(math.floor(dw_val * 1.5/5.0) * 5))
                     else:
-                        if key not in working_input_dict:
-                            working_input_dict[key] = STIFFENER_DETAILS_DEFAULTS[defaults_key]
+                        working_input_dict[key] = STIFFENER_DETAILS_DEFAULTS[defaults_key]
+                
+                # ── Sync base key from G1.M1 dynamic key ──────────────────
+                if girder_idx == 1 and member_id == 1:
+                    working_input_dict[base_key] = working_input_dict[key]
 
     # ── Cross bracing ─────────────────────────────────────────────────────────
     # --- Remove all stale dynamic cross bracing keys ---
@@ -720,14 +728,25 @@ def _on_no_of_girders_changed(working_input_dict: dict) -> None:
     # Default bracing is an angle (same convention as the End Diaphragm below).
     _CB_DEFAULT_ANGLE = "IS 100 x 100 x 10"
     _CB_DEFAULT_SECTION_TYPE = "Double Angle (Long Leg)"
-    _CB_SECTION_DEFAULTS = {
-        "bracing_section_type":        _CB_DEFAULT_SECTION_TYPE,
-        "bracing_section_designation": _CB_DEFAULT_ANGLE,
+    _CB_DEFAULTS = {
+        "select_girders":               "",
+        "member_id":                    "",
+        "type":                         VALUES_CROSS_BRACING_TYPE[1],   # "X-bracing"
+        "bracing_connection":           "Bolted",
+        "bracing_section_type":         _CB_DEFAULT_SECTION_TYPE,
+        "bracing_section_designation":  _CB_DEFAULT_ANGLE,
+        "top_chord":                    VALUES_NO_YES[1],               # "Yes"
+        "top_chord_section_type":       _CB_DEFAULT_SECTION_TYPE,
+        "top_chord_section_desig":      _CB_DEFAULT_ANGLE,
+        "bottom_chord":                 VALUES_NO_YES[1],               # "Yes"
+        "bottom_chord_section_type":    _CB_DEFAULT_SECTION_TYPE,
+        "bottom_chord_section_desig":   _CB_DEFAULT_ANGLE,
+        "spacing":                      DEFAULT_CROSS_BRACING_SPACING,  # 3.0
     }
 
     working_input_dict.setdefault(KEY_MP_CB_NO_OF_CROSS_BRACINGS, 1)
     no_of_bracings = max(1, int(float(str(working_input_dict.get(KEY_MP_CB_NO_OF_CROSS_BRACINGS) or 1))))
-    extend_cb_dynamic_keys(working_input_dict, count, no_of_bracings, _CB_SECTION_DEFAULTS)
+    extend_cb_dynamic_keys(working_input_dict, count, no_of_bracings, _CB_DEFAULTS)
 
     # ── End diaphragm ─────────────────────────────────────────────────────────
     
@@ -751,16 +770,16 @@ def _on_no_of_girders_changed(working_input_dict: dict) -> None:
         "select_girders":               "",
         "member_id":                    "",
         "type":                         VALUES_END_DIAPHRAGM_TYPE[0],   # "Cross Bracing"
-        "bracing_type":                 "K",
+        "bracing_type":                 "X-Bracing",
         "bracing_connection":           "Bolted",
         "bracing_section":              _ED_DEFAULT_SECTION_TYPE,
         "bracing_section_designation":  _ED_DEFAULT_ANGLE,
-        "top_chord":                    "",
+        "top_chord":                    VALUES_NO_YES[1],               # "Yes"
         "top_chord_section_type":       _ED_DEFAULT_SECTION_TYPE,
-        "top_chord_section_desig":      "",
-        "bottom_chord":                 "",
+        "top_chord_section_desig":      _ED_DEFAULT_ANGLE,
+        "bottom_chord":                 VALUES_NO_YES[1],               # "Yes"
         "bottom_chord_section_type":    _ED_DEFAULT_SECTION_TYPE,
-        "bottom_chord_section_desig":   "",
+        "bottom_chord_section_desig":   _ED_DEFAULT_ANGLE,
         # Welded/rolled-only fields stay blank until that ED type is chosen.
         "symmetry":                     "",
         "total_depth":                  "",
@@ -835,6 +854,18 @@ def _on_no_of_girders_changed(working_input_dict: dict) -> None:
                         value = _ED_DEFAULTS[defaults_key]
                     working_input_dict[key] = value
 
+def seed_no_of_girders(overall_width: float) -> int:
+    """Girder count implied by the default spacing, for a deck of `overall_width` m.
+
+    The default layout keeps overhang = spacing / 2, so the width equation
+    (n - 1) * spacing + 2 * overhang = overall_width collapses to
+    n * spacing = overall_width. Rounding n up means the spacing that
+    _solve_layout(changed_field='girders') then derives from this count is at or
+    below the default, never above it.
+    """
+    if overall_width <= 0:
+        raise ValueError("Overall bridge width must be positive.")
+    return max(2, ceil(overall_width / DEFAULT_GIRDER_SPACING))
 
 def solve_extend_basic_input_dict(basic_input_dict: dict) -> None:
     """Parse basic inputs and solve bridge layout. Updates basic_input_dict in-place."""
@@ -872,7 +903,6 @@ def solve_extend_basic_input_dict(basic_input_dict: dict) -> None:
         railing_width  = _railing_width_m(basic_input_dict.get(KEY_RL_WIDTH))
 
     median_width  = basic_input_dict.get(KEY_MD_WIDTH) or 0.0
-    no_of_girders = int(basic_input_dict.get(KEY_TS_NO_OF_GIRDERS) or 4)
 
     solver = BridgeConfigurationSolver(
         carriageway_width=float(basic_input_dict.get(KEY_CARRIAGEWAY_WIDTH)),
@@ -881,6 +911,10 @@ def solve_extend_basic_input_dict(basic_input_dict: dict) -> None:
         railing_width=railing_width,
         median_width=float(median_width),
         n_footpaths=n_footpaths,
+    )
+    no_of_girders = int(
+        basic_input_dict.get(KEY_TS_NO_OF_GIRDERS)
+        or seed_no_of_girders(solver.calculate_overall_bridge_width())
     )
     sizing_result = solver._solve_layout(no_of_girders=no_of_girders, changed_field='girders')
 
