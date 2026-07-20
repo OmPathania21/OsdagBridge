@@ -1800,7 +1800,7 @@ class AdditionalInputs(QDialog):
 
         w = self.findChild(QComboBox, KEY_MP_STIFFENER_INTERMEDIATE)
         if w:
-            self._on_intermediate_stiffener_changed(w.currentText())
+            self._on_intermediate_stiffener_changed(w.currentText(), restore_default = False)
         w = self.findChild(QComboBox, KEY_MP_STIFFENER_LONGITUDINAL)
         if w:
             self._on_longitudinal_stiffener_changed(w.currentText())
@@ -1810,7 +1810,7 @@ class AdditionalInputs(QDialog):
 
         self._update_stiffener_cad()
 
-    def _on_intermediate_stiffener_changed(self, value: str) -> None:  # on_change: enables or disables intermediate stiffener sub-fields, auto-calculates spacing as 1.5 × web_depth when Yes
+    def _on_intermediate_stiffener_changed(self, value: str, restore_default: bool = True) -> None:  # on_change: enables or disables intermediate stiffener sub-fields, auto-calculates spacing as 1.5 × web_depth when Yes
         import re
         is_yes = str(value).strip() == "Yes"
         for key in [
@@ -1824,39 +1824,40 @@ class AdditionalInputs(QDialog):
             self._set_enabled(lbl, is_yes)
 
         spacing_widget = self.findChild(QWidget, KEY_MP_STIFFENER_INTERMEDIATE_SPACING)
-        if is_yes:
-            # Auto-calculate intermediate spacing = 1.5 × web_depth of active member
-            combo = self.findChild(QComboBox, KEY_MP_STIFFENER_SELECT_MEMBER_ID)
-            if combo:
-                member_id = combo.currentText().strip()
-                m = re.match(r"G(\d+)M(\d+)", member_id)
-                if m:
-                    suffix = f".G{m.group(1)}.M{m.group(2)}"
-                    web_depth_key = KEY_MP_GIRDER_WEB_DEPTH + suffix
-                    web_depth = self.working_input_dict.get(web_depth_key)
-                    if web_depth is not None:
-                        try:
-                            spacing = 1.5 * float(web_depth)
-                            spacing_str = f"{spacing:.0f}"
-                            if spacing_widget and isinstance(spacing_widget, QLineEdit):
-                                spacing_widget.setText(spacing_str)
-                            # Save to the correct working_input_dict key with suffix
-                            save_key = KEY_MP_STIFFENER_INTERMEDIATE_SPACING + suffix
-                            self.working_input_dict[save_key] = spacing_str
-                        except (ValueError, TypeError):
-                            pass
-        else:
-            # Reset spacing to "NA" when intermediate stiffener is turned off
-            if spacing_widget and isinstance(spacing_widget, QLineEdit):
-                spacing_widget.setText("NA")
-            # Save to working_input_dict
-            combo = self.findChild(QComboBox, KEY_MP_STIFFENER_SELECT_MEMBER_ID)
-            if combo:
-                member_id = combo.currentText().strip()
-                m = re.match(r"G(\d+)M(\d+)", member_id)
-                if m:
-                    suffix = f".G{m.group(1)}.M{m.group(2)}"
-                    self.working_input_dict[KEY_MP_STIFFENER_INTERMEDIATE_SPACING + suffix] = "NA"
+        if restore_default:
+            if is_yes:
+                # Auto-calculate intermediate spacing = 1.5 × web_depth of active member
+                combo = self.findChild(QComboBox, KEY_MP_STIFFENER_SELECT_MEMBER_ID)
+                if combo:
+                    member_id = combo.currentText().strip()
+                    m = re.match(r"G(\d+)M(\d+)", member_id)
+                    if m:
+                        suffix = f".G{m.group(1)}.M{m.group(2)}"
+                        web_depth_key = KEY_MP_GIRDER_WEB_DEPTH + suffix
+                        web_depth = self.working_input_dict.get(web_depth_key)
+                        if web_depth is not None:
+                            try:
+                                spacing = 1.5 * float(web_depth)
+                                spacing_str = f"{spacing:.0f}"
+                                if spacing_widget and isinstance(spacing_widget, QLineEdit):
+                                    spacing_widget.setText(spacing_str)
+                                # Save to the correct working_input_dict key with suffix
+                                save_key = KEY_MP_STIFFENER_INTERMEDIATE_SPACING + suffix
+                                self.working_input_dict[save_key] = spacing_str
+                            except (ValueError, TypeError):
+                                pass
+            else:
+                # Reset spacing to "NA" when intermediate stiffener is turned off
+                if spacing_widget and isinstance(spacing_widget, QLineEdit):
+                    spacing_widget.setText("NA")
+                # Save to working_input_dict
+                combo = self.findChild(QComboBox, KEY_MP_STIFFENER_SELECT_MEMBER_ID)
+                if combo:
+                    member_id = combo.currentText().strip()
+                    m = re.match(r"G(\d+)M(\d+)", member_id)
+                    if m:
+                        suffix = f".G{m.group(1)}.M{m.group(2)}"
+                        self.working_input_dict[KEY_MP_STIFFENER_INTERMEDIATE_SPACING + suffix] = "NA"
 
         self._update_stiffener_cad()
 
