@@ -4,7 +4,9 @@
 # =============================================================================
 
 from osdagbridge.core.utils.common import (
+    KEY_BL_IRC_CLASS_SV,
     KEY_CB_LOAD,
+    KEY_LL_ECCENTRICITY,
     KEY_LL_CUSTOM_VEHICLES,
     KEY_LL_FOOTPATH_PRESSURE_MODE,
     KEY_LL_FOOTPATH_PRESSURE_VALUE,
@@ -130,6 +132,41 @@ def ch3_loads(input_dict, output_dict=None):
             braking_force_str = "N/A"
     else:
         braking_force_str = "N/A"
+
+    # Vehicles contributing to the braking load: the same vehicles considered for
+    # the live load, except Class SV, which is governed by its own braking opt-in
+    # (KEY_BL_IRC_CLASS_SV) independent of the live-load Class SV selection.
+    brk_vehicles = []
+    if output_dict.get(KEY_LL_IRC_CLASS_A):
+        brk_vehicles.append("Class A")
+    if output_dict.get(KEY_LL_IRC_70R_WHEELED):
+        brk_vehicles.append("Class 70R (Wheeled)")
+    if output_dict.get(KEY_LL_IRC_70R_TRACKED):
+        brk_vehicles.append("Class 70R (Tracked)")
+    if output_dict.get(KEY_LL_IRC_AA_WHEELED):
+        brk_vehicles.append("Class AA (Wheeled)")
+    if output_dict.get(KEY_LL_IRC_AA_TRACKED):
+        brk_vehicles.append("Class AA (Tracked)")
+    if output_dict.get(KEY_BL_IRC_CLASS_SV):
+        brk_vehicles.append("Class SV")
+    if output_dict.get(KEY_LL_IRC_70R_BOGIE):
+        brk_vehicles.append("Class 70R (Bogie)")
+    if output_dict.get(KEY_LL_IRC_CLASS_FATIGUE):
+        brk_vehicles.append("Class Fatigue")
+
+    brk_custom = output_dict.get(KEY_LL_CUSTOM_VEHICLES)
+    if brk_custom and isinstance(brk_custom, list):
+        for c in brk_custom:
+            if isinstance(c, dict) and c.get('name'):
+                brk_vehicles.append(c['name'])
+            elif isinstance(c, str):
+                brk_vehicles.append(c)
+
+    brk_vehicles_str = ", ".join(brk_vehicles) if brk_vehicles else "None"
+
+    # Braking load eccentricity from top of deck (IRC 6: 1.2 m above deck surface).
+    _brk_ecc = output_dict.get(KEY_LL_ECCENTRICITY)
+    brk_ecc_str = f"{_brk_ecc} m" if _brk_ecc not in (None, "") else "N/A"
 
     fp_mode  = input_dict.get(KEY_LL_FOOTPATH_PRESSURE_MODE, "")
     fp_value = input_dict.get(KEY_LL_FOOTPATH_PRESSURE_VALUE, "")
@@ -321,9 +358,14 @@ This section summarizes all loads applied to the bridge and the load combination
 \hline
 \textnormal{Impact Factor (IRC 6)} & """ + _tex(impact_factor_str) + r""" \\[6pt]
 \hline
-\textnormal{Braking Load (IRC 6)} & """ + _tex(braking_force_str) + r""" \\[6pt]
-\hline
 \textnormal{Footpath Live Load (if applicable)} & """ + fp_str + r""" \\[6pt]
+\hline
+\textnormal{Braking Load (IRC 6):} & \\[6pt]
+\hspace{1em}\textnormal{Vehicles Considered} & """ + _tex(brk_vehicles_str) + r""" \\[6pt]
+\hline
+\hspace{1em}\textnormal{Braking Load Value} & """ + _tex(braking_force_str) + r""" \\[6pt]
+\hline
+\hspace{1em}\textnormal{Eccentricity} & """ + _tex(brk_ecc_str) + r""" \\[6pt]
 \hline
 \end{longtable}
 
