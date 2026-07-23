@@ -359,6 +359,14 @@ KEY_DD_STRESS_REINF_BOTTOM    = "deckdesign.stress.reinf.bottom"
 KEY_DD_STRESS_REINF_TOP       = "deckdesign.stress.reinf.top"
 KEY_DD_STRESS_REINF_ALLOWABLE = "deckdesign.stress.reinf.allowable"
 
+# ── Generate-Results Fatigue table keys ───────────────────────────────────────
+# Governing per-girder fatigue assessment supporting calculations (IRC 22 Cl.605).
+# Stored in design_results.
+KEY_SD_FATIGUE_STRESS_RANGE_MPA = "steeldesign.fatigue.stress_range_MPa"
+KEY_SD_FATIGUE_MU_R             = "steeldesign.fatigue.mu_r"
+KEY_SD_FATIGUE_FF_MPA           = "steeldesign.fatigue.f_f_MPa"
+KEY_SD_FATIGUE_FFD_MPA          = "steeldesign.fatigue.f_fd_MPa"
+
 # ── Generate-Results Shear Connector table keys ───────────────────────────────
 # All stored as flat keys in design_results after run_design_check.
 KEY_SD_SC_Qu_kN            = "steeldesign.shear_connector.qu_kN"

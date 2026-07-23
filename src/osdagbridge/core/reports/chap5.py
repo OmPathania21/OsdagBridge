@@ -76,6 +76,11 @@ from osdagbridge.core.utils.common import (
     KEY_SD_DEFL_LIVE,
     KEY_SD_DEFL_TOTAL,
     KEY_SD_EFFECTIVE_SLAB_WIDTH,
+    KEY_SD_FATIGUE_FFD_MPA,
+    KEY_SD_FATIGUE_FF_MPA,
+    KEY_DO_GAMMA_MF,
+    KEY_SD_FATIGUE_MU_R,
+    KEY_SD_FATIGUE_STRESS_RANGE_MPA,
     KEY_SD_FLANGE_CLASS_LIMIT,
     KEY_SD_FLANGE_SLENDERNESS,
     KEY_SD_HIGH_SHEAR,
@@ -505,7 +510,7 @@ def ch5_design_checks(checks_data, bridge) -> str:
         except (TypeError, ValueError):
             return "---"
 
-    _dr_511        = bridge.output_dict.get("design_results", {}) or {}
+    _dr_511        = bridge.output_dict.get("design_results", {})
     _steel_sigma   = _dr_511.get(KEY_SD_STRESS_STEEL)
     _steel_allow   = _dr_511.get(KEY_SD_STRESS_STEEL_ALLOWABLE)
     _steel_sig_str = _mpa(_steel_sigma)
@@ -548,6 +553,66 @@ def ch5_design_checks(checks_data, bridge) -> str:
 \hline"""
         )
     t512_content = "\n".join(t512_rows)
+    # ------------------------------------------------------------------
+    # Table 5.12 – Supporting Calculations
+    # ------------------------------------------------------------------
+
+    _fat_stress_range = _dr_511.get(KEY_SD_FATIGUE_STRESS_RANGE_MPA)
+    _fat_mu_r         = _dr_511.get(KEY_SD_FATIGUE_MU_R)
+    _fat_gamma_mft    = bridge.output_dict.get(KEY_DO_GAMMA_MF)
+    _fat_ff           = _dr_511.get(KEY_SD_FATIGUE_FF_MPA)
+    _fat_ffd          = _dr_511.get(KEY_SD_FATIGUE_FFD_MPA)
+
+    _fat_ur = (
+        (_fat_stress_range / _fat_ffd)
+        if (_fat_stress_range is not None and _fat_ffd)
+        else None
+    )
+
+    t512_calc_content = rf"""
+    \medskip
+    \noindent\textbf{{Supporting Calculations}}
+    \small
+    Illustrative fatigue calculation corresponding to the reported assessment.
+
+    \normalsize
+
+    \[
+    \Delta\sigma = {_dfmt(_fat_stress_range,2)}\ \mathrm{{MPa}}
+    \]
+
+    \[
+    f_f = {_dfmt(_fat_ff,2)}\ \mathrm{{MPa}}
+    \]
+
+    \[
+    \mu_r = {_dfmt(_fat_mu_r,2)}, \qquad
+    \gamma_{{mft}} = {_dfmt(_fat_gamma_mft,2)}
+    \]
+
+    \[
+    f_{{fd}}
+    =
+    \frac{{\mu_r\,f_f}}{{\gamma_{{mft}}}}
+    =
+    \frac{{{_dfmt(_fat_mu_r,2)}\times{_dfmt(_fat_ff,2)}}}
+        {{{_dfmt(_fat_gamma_mft,2)}}}
+    =
+    {_dfmt(_fat_ffd,2)}
+    \ \mathrm{{MPa}}
+    \]
+
+    \[
+    \mathrm{{UR}}
+    =
+    \frac{{\Delta\sigma}}{{f_{{fd}}}}
+    =
+    \frac{{{_dfmt(_fat_stress_range,2)}}}
+        {{{_dfmt(_fat_ffd,2)}}}
+    =
+    {_dfmt(_fat_ur,2)}
+    \]
+    """
 
     # Generate Table 5.13 rows — per-girder design summary, mirroring the Generate
     # Results dialog's resolve_design_results_summary: one row per girder showing
@@ -1321,7 +1386,8 @@ This section presents all structural design checks performed by OsdagBridge. For
 \hline
 """ + t512_content + r"""
 \end{longtable}
-\noindent\textit{Note: IRC 22 Cl. 605 --- governing of normal and shear fatigue (worst by DCR). Capacity reduction factor $\mu_r$ applied where plate thickness > 25 mm.}
+""" + t512_calc_content + r"""
+\noindent\textit{Note: IRC 22 Cl. 605 --- governing of normal and shear fatigue (worst by DCR). Capacity reduction factor $\mu_r$ applied where plate thickness $> 25$ mm.}
 
 \vspace{1em}
 \vspace{0.4em}

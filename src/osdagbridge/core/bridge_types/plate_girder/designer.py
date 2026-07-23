@@ -1309,6 +1309,8 @@ class IRC22CapacityCalculator:
         tau_fd = assessment["tau_fd_MPa"] 
 
         return {
+            "stress_range_MPa": stress_range_MPa,
+            "gamma_mft": mat.gamma_mft,
             "mu_r": mu_r,
             "f_f_MPa": strength["f_f_normal_MPa"],
             "tau_f_MPa": strength["tau_f_shear_MPa"],
@@ -3567,7 +3569,15 @@ def run_design_check(
         "y_top_comp_mm"             : capacity.y_top_comp_mm,
         "y_bot_comp_mm"             : capacity.y_bot_comp_mm,
         # -- fatigue --
+        "stress_range_MPa"          : capacity.details["fatigue"]["stress_range_MPa"],
+        "mu_r"                      : capacity.details["fatigue"]["mu_r"],
+        "f_f_MPa"                   : capacity.details["fatigue"]["f_f_MPa"],
         "f_fd_MPa"                  : capacity.f_fd_MPa,
+        # -- Generate-Results fatigue supporting-calculation table (Cl.605) --
+        KEY_SD_FATIGUE_STRESS_RANGE_MPA : capacity.details["fatigue"]["stress_range_MPa"],
+        KEY_SD_FATIGUE_MU_R             : capacity.details["fatigue"]["mu_r"],
+        KEY_SD_FATIGUE_FF_MPA           : capacity.details["fatigue"]["f_f_MPa"],
+        KEY_SD_FATIGUE_FFD_MPA          : capacity.f_fd_MPa,
         "tau_fd_MPa"                : capacity.tau_fd_MPa,
         "f_fd_eff_MPa"              : capacity.f_fd_eff_MPa,
         "tau_fd_eff_MPa"            : capacity.tau_fd_eff_MPa,
