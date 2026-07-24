@@ -199,7 +199,7 @@ def ch3_loads(input_dict, output_dict=None):
         except Exception:
             pass
     vz_str = f"{float(vz_val):.2f} m/s" if vz_val not in (None, "") else "N/A"
-    pz_str = f"{float(pz_val):.2f} N/m²" if pz_val not in (None, "") else "N/A"
+    pz_str = (f"{float(pz_val):.2f}" + r" N/m\textsuperscript{2}") if pz_val not in (None, "") else "N/A"
 
     # Table 3.5 — Seismic: prefer stored computed values; fall back to IRC6 cl_218_5_1
     sl_zone_factor = input_dict.get(KEY_SL_ZONE_FACTOR)
@@ -381,9 +381,9 @@ This section summarizes all loads applied to the bridge and the load combination
 \hline
 \textnormal{Average Exposed Height, H (m)} & """ + (_render_value(input_dict, KEY_WL_AVG_EXPOSED_HEIGHT, ' m')) + r""" \\[6pt]
 \hline
-\textnormal{Hourly Mean Wind Speed, Vz} & """ + (_render_value(input_dict, KEY_WL_HOURLY_MEAN_WIND, ' m/s')) + r""" \\[6pt]
+\textnormal{Hourly Mean Wind Speed, Vz} & """ + vz_str + r""" \\[6pt]
 \hline
-\textnormal{Hourly Wind Pressure, Pz} & """ + (_render_value(input_dict, KEY_WL_HOURLY_WIND_PRESSURE, ' N/m\\textsuperscript{2}')) + r""" \\[6pt]
+\textnormal{Hourly Wind Pressure, Pz} & """ + pz_str + r""" \\[6pt]
 \hline
 \textnormal{Transverse Wind Force} & """ + (_render_value(input_dict, KEY_WL_TRANSVERSE_WIND_FORCE, ' kN')) + r""" \\[6pt]
 \hline
