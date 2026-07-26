@@ -54,6 +54,9 @@ class AdditionalInputs(QDialog):
         # TO tract additional input is opened first time or not.
         # This is required for end connectors
         self.interacted_first = True
+ 
+        # Store all Compute functions to be called at Design
+        self._compute_functions = []
 
         self.setObjectName("AdditionalInputs")
         self.setMinimumSize(900, 520)
@@ -1028,7 +1031,7 @@ class AdditionalInputs(QDialog):
                 KEY_MD_LOAD:    f"{load:.2f}",
             }
 
-        elif "Metallic" in median_type:
+        elif "Metallic" in (median_type or ""):
             variant       = "Double" if "Double" in median_type else "Single"
             metallic_type = KEY_METALLIC_CRASH_BARRIER_TYPE[1 if variant == "Double" else 0]
             geom = IRC5_2015.cl_109_6_3_shapes(KEY_MEDIAN_TYPE[2], None, None, {}, metallic_type)
@@ -2917,6 +2920,10 @@ class AdditionalInputs(QDialog):
         soil_str = working_input_dict.get(KEY_SL_SOIL_TYPE, "")
         period   = working_input_dict.get(KEY_SL_TIME_PERIOD)
         damping  = working_input_dict.get(KEY_SL_DAMPING, "5")
+        
+        # Fallback to get data from Project Location
+        if not zone:
+            zone = working_input_dict.get("project.location", {}).get("weather_data", {}).get("zone", "")
 
         if not zone:
             return {}

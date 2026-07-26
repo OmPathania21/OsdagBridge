@@ -605,6 +605,25 @@ class CustomWindow(QWidget):
             if hasattr(self, 'input_dock') and self.input_dock is not None:
                 self.input_dock.setEnabled(True)
 
+    def _sync_compute_results_to_input_dict(self) -> None:
+        """
+        Runs all collected on_change_compute functions
+        Collected via UIBuilder to additional_inputs._compute_functions list
+        Help to update Compute values in input_dict before Design
+        Ex: To update KEY_SL_ZONE_FACTOR, KEY_SL_SPECTRAL_COEFF etc.
+        """
+        if self._additional_inputs_dialog is None:
+            return
+
+        for func in self._additional_inputs_dialog._compute_functions:
+            fn = getattr(self._additional_inputs_dialog, func)
+            if fn is None:
+                continue
+            result = fn(self.input_dict)
+            print(f"\n@@compute_function:{func} result:\n{result}")
+            if isinstance(result, dict):
+                self.input_dict.update(result)
+
     def common_design_func(self, trigger: str, target_tab: str = None):
         """
         Trigger belongs to one of ["Design", "Save", "Additional Inputs"]
@@ -617,6 +636,7 @@ class CustomWindow(QWidget):
         self.input_dock._prime_material_inputs()
         print("\n@@input_dictionary_before (common_design_func):\n")
         pprint(self.input_dict)
+
         # Check required fields
         required_widget_validated = self.validate_required_inputs()
         if not required_widget_validated:
@@ -630,6 +650,9 @@ class CustomWindow(QWidget):
 
         print("\n@@input_dictionary_after (common_design_func):\n")
         pprint(self.input_dict)
+
+        # Update Computed Values in input_dict before Design
+        self._sync_compute_results_to_input_dict()
 
         if trigger == "Design":
             import sys

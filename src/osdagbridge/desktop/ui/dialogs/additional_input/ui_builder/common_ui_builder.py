@@ -982,6 +982,10 @@ class UIBuilder(QWidget):
                 elif ftype == TYPE_TEXTBOX:
                     field.textChanged.connect(_trigger_compute)
 
+                # ── Register for batch call at design time ──
+                if func_name not in ai._compute_functions:
+                    ai._compute_functions.append(func_name)
+
         return field
 
     # ──────────────────────────────────────────────────────────────────────────
@@ -1255,6 +1259,10 @@ class UIBuilder(QWidget):
                 mode_combo.currentTextChanged.connect(_trigger_compute)
                 value_input.editingFinished.connect(lambda: _trigger_compute(None))
 
+                # ── Register for batch call at design time ──
+                if func_name not in ai._compute_functions:
+                    ai._compute_functions.append(func_name)
+
         h.addWidget(mode_combo, 1)
         h.addWidget(value_input, 1)
 
@@ -1367,8 +1375,13 @@ class UIBuilder(QWidget):
                         w = _root.findChild(QLineEdit, widget_id)
                         if w:
                             w.setText(str(value) if value is not None else "")
+
                 mode_combo.currentTextChanged.connect(_trigger_compute)
                 value_combo.currentTextChanged.connect(_trigger_compute)
+
+                # ── Register for batch call at design time ──
+                if func_name not in ai._compute_functions:
+                    ai._compute_functions.append(func_name)
 
         h.addWidget(mode_combo, 1)
         h.addWidget(value_combo, 1)
