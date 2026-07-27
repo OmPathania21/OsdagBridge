@@ -2378,7 +2378,7 @@ CROSS_BRACING_DETAILS_SCHEMA = {
                     "id":      KEY_MP_CB_TYPE,
                     "label":   "Type of Bracing:",
                     "type":    TYPE_COMBOBOX,
-                    "choices": ["K-Bracing", "X-Bracing"],
+                    "choices": VALUES_CROSS_BRACING_TYPE,
                 }]},
                 {"fields": [{
                     "id":      KEY_MP_CB_BRACING_CONNECTION,

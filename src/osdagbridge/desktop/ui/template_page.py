@@ -620,7 +620,7 @@ class CustomWindow(QWidget):
             if fn is None:
                 continue
             result = fn(self.input_dict)
-            print(f"\n@@compute_function:{func} result:\n{result}")
+            # print(f"\n@@compute_function:{func} result:\n{result}")
             if isinstance(result, dict):
                 self.input_dict.update(result)
 
@@ -1365,7 +1365,7 @@ class CustomWindow(QWidget):
                                 self._cad_gen,
                                 is_preview=self._is_preview,
                             )
-                        print(f"[REPORT-DEBUG] generate_design_report returned: {type(result).__name__}")
+                        print(f"[REPORT-DEBUG] generate_design_report returned: {result}\n\n{type(result).__name__}")
                     except Exception as exc:
                         import traceback as _tb
                         print(f"[REPORT-DEBUG] EXCEPTION in worker: {exc}")
