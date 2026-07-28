@@ -58,6 +58,9 @@ class AdditionalInputs(QDialog):
         # Store all Compute functions to be called at Design
         self._compute_functions = []
 
+        # Store all tab refresh entries to be applied at Design
+        self._refresh_entries = []
+
         self.setObjectName("AdditionalInputs")
         self.setMinimumSize(900, 520)
         

@@ -605,6 +605,27 @@ class CustomWindow(QWidget):
             if hasattr(self, 'input_dock') and self.input_dock is not None:
                 self.input_dock.setEnabled(True)
 
+    def _sync_refresh_entries_to_input_dict(self) -> None:
+        """
+        Runs all collected tab refresh entries
+        Collected via UIBuilder to additional_inputs._refresh_entries list
+        Help to sync refreshed values into input_dict before Design
+        """
+        if self._additional_inputs_dialog is None:
+            return
+
+        for entry in self._additional_inputs_dialog._refresh_entries:
+            widget_id = entry.get("widget_id")
+            path      = entry.get("path", [])
+            val = self.input_dict
+            for key in path:
+                val = val.get(key) if isinstance(val, dict) else None
+                if val is None:
+                    break
+            if val is None:
+                continue
+            self.input_dict[widget_id] = val
+
     def _sync_compute_results_to_input_dict(self) -> None:
         """
         Runs all collected on_change_compute functions
@@ -653,6 +674,8 @@ class CustomWindow(QWidget):
 
         # Update Computed Values in input_dict before Design
         self._sync_compute_results_to_input_dict()
+        # Update refreshed tab values in input_dict before Design
+        self._sync_refresh_entries_to_input_dict()
 
         if trigger == "Design":
             import sys

@@ -1485,6 +1485,13 @@ class UIBuilder(QWidget):
             if is_disbled:
                 tab_widget.setTabEnabled(tab_widget.count() - 1, False)
 
+            # Collect this tab's refresh entries once, same as _compute_functions.
+            ai = self.additional_input_instance
+            if ai is not None and hasattr(ai, "_refresh_entries"):
+                for entry in tab_def.get("refresh", []):
+                    if entry not in ai._refresh_entries:
+                        ai._refresh_entries.append(entry)
+
         def _refresh_tab(idx):
             if idx >= len(tabs_def):
                 return
