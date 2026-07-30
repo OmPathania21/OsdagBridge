@@ -3000,9 +3000,11 @@ class AdditionalInputs(QDialog):
         height_str = working_input_dict.get(KEY_WL_AVG_EXPOSED_HEIGHT)
         terrain_str = working_input_dict.get(KEY_WL_TERRAIN_TYPE)
 
+        if not basic_wind_speed_str:
+            basic_wind_speed_str = working_input_dict.get("project.location", {}).get("weather_data", {}).get("wind_speed", "")
+        
         if not basic_wind_speed_str or not height_str or not terrain_str:
             return {}
-
         try:
             height = float(height_str)
             basic_wind_speed = float(basic_wind_speed_str)
@@ -3026,6 +3028,12 @@ class AdditionalInputs(QDialog):
 
         max_str = working_input_dict.get(KEY_TL_HIGHEST_MAX_TEMP)
         min_str = working_input_dict.get(KEY_TL_LOWEST_MIN_TEMP)
+
+        if not max_str:
+            max_str = working_input_dict.get("project.location", {}).get("weather_data", {}).get("max_temp", "")
+        if not min_str:
+            min_str = working_input_dict.get("project.location", {}).get("weather_data", {}).get("min_temp", "")
+
         if not max_str or not min_str or max_str == "—" or min_str == "—":
             return {}
 
