@@ -910,8 +910,7 @@ def solve_extend_basic_input_dict(basic_input_dict: dict) -> None:
         n_footpaths=n_footpaths,
     )
     no_of_girders = int(
-        basic_input_dict.get(KEY_TS_NO_OF_GIRDERS)
-        or seed_no_of_girders(solver.calculate_overall_bridge_width())
+        seed_no_of_girders(solver.calculate_overall_bridge_width())
     )
     sizing_result = solver._solve_layout(no_of_girders=no_of_girders, changed_field='girders')
 
