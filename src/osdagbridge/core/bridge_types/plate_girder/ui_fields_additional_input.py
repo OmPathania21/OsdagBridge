@@ -3762,8 +3762,8 @@ GENERATE_RESULTS_DEFAULTS = {
                 "label": "Flexural Resistance Check",
                 "columns": [
                     "Girder",
-                    "Design Moment, Mᵈ (kNm)",
-                    "Moment Resistance, Mᵣ (kNm)",
+                    "Applied Moment, Mᵤ (kNm)",
+                    "Design Moment Capacity, Mᵈ (kNm)",
                     "Utilization Ratio",
                     "Status",
                 ],
@@ -3777,8 +3777,8 @@ GENERATE_RESULTS_DEFAULTS = {
                 "label": "Shear Resistance Check",
                 "columns": [
                     "Girder",
-                    "Design Shear, Vᵈ (kN)",
-                    "Shear Resistance, Vᵣ (kN)",
+                    "Applied Shear, Vᵤ (kN)",
+                    "Shear Resistance, Vᵈ (kN)",
                     "Utilization Ratio",
                     "Status",
                 ],
@@ -3792,7 +3792,7 @@ GENERATE_RESULTS_DEFAULTS = {
                 "label": "Bending-Shear Interaction Check",
                 "columns": [
                     "Girder",
-                    "Design Moment, Mᵈ (kNm)",
+                    "Applied Moment, Mᵤ (kNm)",
                     "Reduced Resistance, Mᵈᵥ (kNm)",
                     "Utilization Ratio",
                     "Status",
@@ -3807,7 +3807,7 @@ GENERATE_RESULTS_DEFAULTS = {
                 "label": "Lateral Torsional Buckling Check - Construction Stage",
                 "columns": [
                     "Girder",
-                    "Design Moment, Mᵈ (kNm)",
+                    "Applied Moment, Mᵤ (kNm)",
                     "LTB Resistance, Mᵦ (kNm)",
                     "Utilization Ratio",
                     "Status",

@@ -51,23 +51,23 @@ _FONTSIZE_FRAC   = 66
 # is_frac=True for equations containing \frac or complex \sqrt
 _EQ_LATEX: dict[str, tuple[tuple[str, int, bool], ...]] = {
     KEY_CHECK_FLEXURE: (
-        (r"$M_d \leq M_r = M_p$",                                   110, False),
+        (r"$M_u \leq M_d = M_p$",                                   110, False),
         (r"$\mathrm{(IRC\ 22\ Annex\ I,\ Table\ I.1)}$",            220, False),
     ),
     KEY_CHECK_SHEAR: (
-        (r"$V_d \leq V_r$",                                          80, False),
-        (r"$V_r = \frac{A_v \cdot f_y}{\sqrt{3} \cdot \gamma_{m0}}$", 140, True),
+        (r"$V_u \leq V_d$",                                          80, False),
+        (r"$V_d = \frac{A_v \cdot f_y}{\sqrt{3} \cdot \gamma_{m0}}$", 140, True),
     ),
     KEY_CHECK_INTERACTION: (
-        (r"$\frac{M_d}{\beta_b Z_p f_y/\gamma_{m0}} + \frac{V_d}{A_v f_y/(\sqrt{3}\,\gamma_{m0})} \leq 1.0$", 300, True),
+        (r"$\frac{M_u}{\beta_b Z_p f_y/\gamma_{m0}} + \frac{V_u}{A_v f_y/(\sqrt{3}\,\gamma_{m0})} \leq 1.0$", 300, True),
     ),
     KEY_CHECK_LTB: (
-        (r"$M_d \leq M_{cr}$", 80, False),
+        (r"$M_u \leq M_b$", 80, False),
         (r"$M_{cr}=\sqrt{\left(\frac{\pi^{2}EI_y}{L_{LT}^{2}}\right)\left(GI_t+\frac{\pi^{2}EI_w}{L_{LT}^{2}}\right)}$", 280, True),
     ),
     KEY_CHECK_SHEAR_LONG_TRANS: (
         (r"$V_L \leq n \cdot Q_u / s$", 100, False),
-        (r"$V_L = V_d \cdot A_{ec} \cdot Y / I_c$", 140, False),
+        (r"$V_L = V_u \cdot A_{ec} \cdot Y / I_c$", 140, False),
         (r"$Q_u=\min\left(\frac{0.8\,f_u\,A}{\gamma_v},\;\frac{0.29\,\alpha\,d^{2}\sqrt{f_{ck}E_{cm}}}{\gamma_v}\right)$", 400, True),
     ),
     KEY_CHECK_FATIGUE: (
@@ -75,7 +75,7 @@ _EQ_LATEX: dict[str, tuple[tuple[str, int, bool], ...]] = {
         (r"$\Delta\sigma_{allowable} = \Delta\sigma_C / \gamma_{mf}$", 180, False),
     ),
     KEY_CHECK_STRESS: (
-        (r"$\sigma = M_d / Z$",                                      80, False),
+        (r"$\sigma = M_u / Z$",                                      80, False),
         (r"$\sigma \leq f_y / \gamma_{m0}$",                        100, False),
     ),
     KEY_CHECK_DEFLECTION: (
@@ -90,19 +90,19 @@ def _get_shear_latex(governing_method: str):
 
     if governing_method == "post_critical":
         return (
-            (r"$V_d \leq V_{cr}$", 90, False),
+            (r"$V_u \leq V_{cr}$", 90, False),
             (r"$V_{cr}=A_v \cdot \tau_b$", 140, False),
         )
 
     elif governing_method == "tension_field":
         return (
-            (r"$V_d \leq V_{tf}$", 90, False),
+            (r"$V_u \leq V_{tf}$", 90, False),
             (r"$V_n=V_{tf}$", 120, False),
         )
 
     # Default → Plastic Shear Resistance
     return (
-        (r"$V_d \leq V_p$", 90, False),
+        (r"$V_u \leq V_p$", 90, False),
         (r"$V_p=\frac{A_v \cdot f_y}{\sqrt{3}\,\gamma_{m0}}$", 170, True),
     )
 
@@ -175,7 +175,7 @@ def _flexure_eq_lines(pna_location: str) -> tuple[tuple[str, int, bool], ...]:
     three rows, so it keeps the neutral placeholder rather than guessing an
     unpublished fourth formula.
     """
-    check_line = (r"$M_d \leq M_r = M_p$", 110, False)
+    check_line = (r"$M_u \leq M_d = M_p$", 110, False)
 
     if pna_location == "slab":
         lines = [check_line, (_EQ_FLEXURE_CASE1_SLAB, 260, True)]

@@ -62,6 +62,8 @@ from osdagbridge.core.utils.common import (
     KEY_DS_TOP_CLEAR_COVER,
     KEY_MATERIAL_DECK_FCK,
     KEY_MATERIAL_DECK_FCTM,
+    KEY_MATERIAL_GIRDER_E,
+    KEY_MATERIAL_GIRDER_G,
     KEY_MP_ED_TYPE,
     KEY_SD_BOTTOM_FLANGE_THICKNESS,
     KEY_SD_BOTTOM_FLANGE_WIDTH,
@@ -90,8 +92,10 @@ from osdagbridge.core.utils.common import (
     KEY_SD_IS_IYS_PROV,
     KEY_SD_LTB_CHI,
     KEY_SD_LTB_LAMBDA,
+    KEY_SD_LTB_LLT,
     KEY_SD_LTB_MB,
     KEY_SD_LTB_MCR,
+    KEY_SD_LTB_MP,
     KEY_SD_MDV,
     KEY_SD_MD_CAPACITY,
     KEY_SD_MN_AXIAL,
@@ -117,6 +121,9 @@ from osdagbridge.core.utils.common import (
     KEY_SD_SC_Vr_kN,
     KEY_SD_SECTION_CLASS,
     KEY_SD_SECTION_PROP_AREA,
+    KEY_SD_SECTION_PROP_IT,
+    KEY_SD_SECTION_PROP_IV,
+    KEY_SD_SECTION_PROP_IW,
     KEY_SD_SECTION_PROP_IZ,
     KEY_SD_SECTION_PROP_ZUZ,
     KEY_SD_SECTION_PROP_ZZ,
@@ -329,16 +336,41 @@ def ch5_design_checks(checks_data, bridge) -> str:
     except (TypeError, ValueError):
         _ltb_ur_str = ""
         _ltb_status = "---"
+
+    def _render_scaled(source_dict, key, scale, nd, unit=""):
+        v = source_dict.get(key)
+        if v in ("", None):
+            return ""
+        return f"{float(v) * scale:.{nd}f}" + unit
+
+    _iy_cm4_str = _render_scaled(bridge.output_dict, KEY_SD_SECTION_PROP_IV, 1e8, 1, " cm$^4$")
+    _it_cm4_str = _render_scaled(bridge.output_dict, KEY_SD_SECTION_PROP_IT, 1e8, 1, " cm$^4$")
+    _iw_cm6_str = _render_scaled(bridge.output_dict, KEY_SD_SECTION_PROP_IW, 1e12, 3, " cm$^6$")
+    _g_mpa_str  = _render_scaled(bridge.input_dict,  KEY_MATERIAL_GIRDER_G, 1000.0, 1, " MPa")
+    _e_mpa_str  = _render_scaled(bridge.input_dict,  KEY_MATERIAL_GIRDER_E, 1000.0, 1, " MPa, ")
+
     t56_rows = []
     for lbl, _ in girder_entries:
         t56_rows.append(
-            r"\multirow{5}{*}{\makecell{" + lbl + r"""}} & Elastic Critical Moment, $M_{cr}$ & IRC 22 Cl. 603.3.3.1 & """ + _render_value(bridge.output_dict, KEY_SD_LTB_MCR, " kN-m") + r""" & --- \\[6pt]
+            r"\multirow{11}{*}{\makecell{" + lbl + r"""}} & Effective Unbraced Length, $L_{LT}$ & $\min(s_{cb},\,L_{span})$ & """ + _render_value(bridge.output_dict, KEY_SD_LTB_LLT, " m") + r""" & --- \\[6pt]
+\cline{2-5}
+ & Minor-axis M.I., $I_y$ & $\sum t\,b^3/12$ & """ + _iy_cm4_str + r""" & --- \\[6pt]
+\cline{2-5}
+ & Torsional Constant, $J$ & $\sum b\,t^3/3$ & """ + _it_cm4_str + r""" & --- \\[6pt]
+\cline{2-5}
+ & Warping Constant, $I_w$ & $\dfrac{I_{y,tf}\,I_{y,bf}}{I_{y,tf}+I_{y,bf}}\,h_w^2$ & """ + _iw_cm6_str + r""" & --- \\[6pt]
+\cline{2-5}
+ & Elastic / Shear Modulus, $E$, $G$ & Material constants & """ + _e_mpa_str + _g_mpa_str + r""" & --- \\[6pt]
+\cline{2-5}
+ & Design Bending Strength, $M_p$ & IS 800 Cl. 8.2.1.2 & """ + _render_value(bridge.output_dict, KEY_SD_LTB_MP, " kN-m") + r""" & --- \\[6pt]
+\cline{2-5}
+ & Elastic Critical Moment, $M_{cr}$ & IRC 22 Cl. 603.3.3.1 & """ + _render_value(bridge.output_dict, KEY_SD_LTB_MCR, " kN-m") + r""" & --- \\[6pt]
 \cline{2-5}
  & Non-dim. Slenderness, $\bar{\lambda}_{LT}$ & $\sqrt{M_p / M_{cr}}$ & """ + _render_value(bridge.output_dict, KEY_SD_LTB_LAMBDA) + r""" & --- \\[6pt]
 \cline{2-5}
  & LTB Reduction Factor, $\chi_{LT}$ & IS 800 Cl. 8.2.2 & """ + _render_value(bridge.output_dict, KEY_SD_LTB_CHI) + r""" & --- \\[6pt]
 \cline{2-5}
- & LTB Resistance, $M_b$ & $\chi_{LT}\,M_p / \gamma_{m0}$ & """ + _render_value(bridge.output_dict, KEY_SD_LTB_MB, " kN-m") + r""" & --- \\[6pt]
+ & LTB Resistance, $M_b$ & $\chi_{LT}\,M_p$ & """ + _render_value(bridge.output_dict, KEY_SD_LTB_MB, " kN-m") + r""" & --- \\[6pt]
 \cline{2-5}
  & $M_u \leq M_b$ & $M_u / M_b$ & """ + _ltb_ur_str + r""" & """ + _ltb_status + r""" \\[6pt]
 \hline"""

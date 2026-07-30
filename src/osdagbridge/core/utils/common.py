@@ -582,6 +582,8 @@ KEY_SD_LTB_MCR          = "steeldesign.details.ltb.mcr"                     # on
 KEY_SD_LTB_LAMBDA       = "steeldesign.details.ltb.lambda_lt"              # only for report
 KEY_SD_LTB_CHI          = "steeldesign.details.ltb.chi_lt"                 # only for report
 KEY_SD_LTB_MB           = "steeldesign.details.ltb.mb"                      # only for report
+KEY_SD_LTB_LLT          = "steeldesign.details.ltb.llt"                     # only for report
+KEY_SD_LTB_MP           = "steeldesign.details.ltb.mp"                      # only for report
 KEY_SD_STIFF_METHOD     = "steeldesign.details.stiffener_summary.method"        # only for report
 KEY_SD_STIFF_INT_THICK  = "steeldesign.details.stiffener_summary.int_thickness"  # only for report
 KEY_SD_STIFF_INT_SPACING= "steeldesign.details.stiffener_summary.int_spacing"    # only for report
@@ -1283,30 +1285,30 @@ DESIGN_CHECK_UNITS = {
 # ---------------------------------------------------------------------------
 
 # -- Flexure (IRC 22 Cl. 603.3.1 / IS 800 Cl. 8.2.1) ----------------------
-EQ_FLEXURE_LINE_1 = r"M_d \leq M_r"
-EQ_FLEXURE_LINE_2 = r"M_r = \beta_b \cdot Z_p \cdot f_y \;/\; \gamma_{m0}"
+EQ_FLEXURE_LINE_1 = r"M_u \leq M_d"
+EQ_FLEXURE_LINE_2 = r"M_d = \beta_b \cdot Z_p \cdot f_y \;/\; \gamma_{m0}"
 EQ_FLEXURE_LINES  = (EQ_FLEXURE_LINE_1, EQ_FLEXURE_LINE_2)
 
 # -- Shear (IS 800 Cl. 8.4 / IRC 22 Cl. 603.3.3) --------------------------
-EQ_SHEAR_LINE_1 = r"V_d \leq V_r"
-EQ_SHEAR_LINE_2 = r"V_r = \frac{A_v \cdot f_y}{\sqrt{3} \cdot \gamma_{m0}}"
+EQ_SHEAR_LINE_1 = r"V_u \leq V_d"
+EQ_SHEAR_LINE_2 = r"V_d = \frac{A_v \cdot f_y}{\sqrt{3} \cdot \gamma_{m0}}"
 EQ_SHEAR_LINES  = (EQ_SHEAR_LINE_1, EQ_SHEAR_LINE_2)
 
 # -- Interaction (IS 800 Cl. 9.2.2) ----------------------------------------
 EQ_INTERACTION_LINE_1 = (
-    r"\frac{M_d}{\beta_b\,Z_p\,f_y/\gamma_{m0}}"
-    r"+ \frac{V_d}{A_v\,f_y/(\sqrt{3}\,\gamma_{m0})} \leq 1.0"
+    r"\frac{M_u}{\beta_b\,Z_p\,f_y/\gamma_{m0}}"
+    r"+ \frac{V_u}{A_v\,f_y/(\sqrt{3}\,\gamma_{m0})} \leq 1.0"
 )
 EQ_INTERACTION_LINES  = (EQ_INTERACTION_LINE_1,)
 
 # -- Lateral Torsional Buckling (IRC 22 Cl. 603.3.3.1 / IS 800 Cl. 8.2.2) -
-EQ_LTB_LINE_1 = r"M_d \leq M_{cr}"
+EQ_LTB_LINE_1 = r"M_u \leq M_b"
 EQ_LTB_LINE_2 = r"M_{cr} \approx \frac{\pi^2 E\,I_y}{L_{\mathrm{LTB}}^{\,2}}"
 EQ_LTB_LINES  = (EQ_LTB_LINE_1, EQ_LTB_LINE_2)
 
 # -- Longitudinal & Transverse Shear (IRC 22 Cl. 606.4.1) ------------------
 EQ_SHEAR_LONG_TRANS_LINE_1 = r"V_L \leq n \cdot Q_u \;/\; s"
-EQ_SHEAR_LONG_TRANS_LINE_2 = r"V_L = V_d \cdot A_{ec} \cdot \bar{y} \;/\; I_c"
+EQ_SHEAR_LONG_TRANS_LINE_2 = r"V_L = V_u \cdot A_{ec} \cdot \bar{y} \;/\; I_c"
 EQ_SHEAR_LONG_TRANS_LINE_3 = (
     r"Q_u = \min\!\left("
     r"0.8\,f_u\,A_s,\;"
@@ -1325,7 +1327,7 @@ EQ_FATIGUE_LINE_2 = r"\Delta\sigma_{\mathrm{allowable}} = \Delta\sigma_C \;/\; \
 EQ_FATIGUE_LINES  = (EQ_FATIGUE_LINE_1, EQ_FATIGUE_LINE_2)
 
 # -- Stress Limitation (IRC 22 Cl. 604.3.1) ---------------------------------
-EQ_STRESS_LINE_1 = r"\sigma = M_d \;/\; Z"
+EQ_STRESS_LINE_1 = r"\sigma = M_u \;/\; Z"
 EQ_STRESS_LINE_2 = r"\sigma \leq f_y \;/\; \gamma_{m0}"
 EQ_STRESS_LINES  = (EQ_STRESS_LINE_1, EQ_STRESS_LINE_2)
 
@@ -1415,18 +1417,18 @@ DESIGN_CHECK_EQ_HTML = {
 # Demand / capacity prefix labels  (HTML, for the value lines in each card)
 # ---------------------------------------------------------------------------
 DESIGN_CHECK_DEM_PFX = {
-    KEY_CHECK_FLEXURE:          "<i>M<sub>d</sub></i>",
-    KEY_CHECK_SHEAR:            "<i>V<sub>d</sub></i>",
-    KEY_CHECK_LTB:              "<i>M<sub>d</sub></i>",
+    KEY_CHECK_FLEXURE:          "<i>M<sub>u</sub></i>",
+    KEY_CHECK_SHEAR:            "<i>V<sub>u</sub></i>",
+    KEY_CHECK_LTB:              "<i>M<sub>u</sub></i>",
     KEY_CHECK_SHEAR_LONG_TRANS: "<i>V<sub>L</sub></i>",
     KEY_CHECK_FATIGUE:          "&Delta;<i>&sigma;</i>",
     KEY_CHECK_STRESS:           "<i>&sigma;</i>",
     KEY_CHECK_DEFLECTION:       "<i>&delta;</i>",
 }
 DESIGN_CHECK_CAP_PFX = {
-    KEY_CHECK_FLEXURE:          "<i>M<sub>r</sub></i>",
-    KEY_CHECK_SHEAR:            "<i>V<sub>r</sub></i>",
-    KEY_CHECK_LTB:              "<i>M<sub>cr</sub></i>",
+    KEY_CHECK_FLEXURE:          "<i>M<sub>d</sub></i>",
+    KEY_CHECK_SHEAR:            "<i>V<sub>d</sub></i>",
+    KEY_CHECK_LTB:              "<i>M<sub>b</sub></i>",
     KEY_CHECK_SHEAR_LONG_TRANS: "<i>nQ<sub>u</sub>/s</i>",
     KEY_CHECK_FATIGUE:          "&Delta;<i>&sigma;<sub>allowable</sub></i>",
     KEY_CHECK_STRESS:           "<i>f<sub>y</sub> / &gamma;<sub>m</sub></i>",

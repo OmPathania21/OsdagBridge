@@ -1029,7 +1029,11 @@ class IRC22CapacityCalculator:
         return {
             "It_mm4"   : round(It, 1),
             "Iy_mm4"   : round(Iy, 1),
+            "Iw_mm6"   : round(Iw, 1),
+            "E_MPa"    : mat.Es,
+            "G_MPa"    : mat.Gs,
             "LLT_mm"   : LLT_mm,
+            "Mpl_kNm"  : res["Mpl_kNm"],
             "Mcr_kNm"  : res["Mcr_kNm"],
             "lambda_LT": res["lambda_LT"],
             "alpha_LT" : res["alpha_LT"],
@@ -3527,6 +3531,9 @@ def run_design_check(
         "lambda_LT"                 : capacity.lambda_LT,
         "chi_LT"                    : capacity.chi_LT,
         "Mb_kNm"                    : capacity.Mb_kNm,
+        # -- capacities: LTB — Mcr calculation breakdown (Construction Stage / Stage 2) --
+        "ltb_LLT_mm"                : capacity.details["buckling_resistance"]["LLT_mm"],
+        "ltb_Mpl_kNm"               : capacity.details["buckling_resistance"]["Mpl_kNm"],
         # -- capacities: LTB Stage 1 (girder only, no cross-bracings) --
         "Mb_kNm_stage1"            : capacity.Mb_kNm_stage1,
         "lambda_LT_stage1"         : capacity.lambda_LT_stage1,

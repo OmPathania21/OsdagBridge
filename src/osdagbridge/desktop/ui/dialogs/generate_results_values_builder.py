@@ -1191,8 +1191,8 @@ def resolve_flexural_resistance_check(output_dict: dict) -> dict | None:
         "label": "Flexural Resistance Check",
         "columns": [
             "Girder",
-            "Design Moment, Mᵈ (kNm)",
-            "Moment Resistance, Mᵣ (kNm)",
+            "Applied Moment, Mᵤ (kNm)",
+            "Design Moment Capacity, Mᵈ (kNm)",
             "Utilization Ratio",
             "Status",
         ],
@@ -1209,8 +1209,8 @@ def resolve_shear_resistance_check(output_dict: dict) -> dict | None:
         "label": "Shear Resistance Check",
         "columns": [
             "Girder",
-            "Design Shear, Vᵈ (kN)",
-            "Shear Resistance, Vᵣ (kN)",
+            "Applied Shear, Vᵤ (kN)",
+            "Shear Resistance, Vᵈ (kN)",
             "Utilization Ratio",
             "Status",
         ],
@@ -1227,7 +1227,7 @@ def resolve_bending_shear_interaction_check(output_dict: dict) -> dict | None:
         "label": "Bending-Shear Interaction Check",
         "columns": [
             "Girder",
-            "Design Moment, Mᵈ (kNm)",
+            "Applied Moment, Mᵤ (kNm)",
             "Reduced Resistance, Mᵈᵥ (kNm)",
             "Utilization Ratio",
             "Status",
@@ -1245,7 +1245,7 @@ def resolve_lateral_torsional_buckling_check(output_dict: dict) -> dict | None:
         "label": "Lateral Torsional Buckling Check - Construction Stage",
         "columns": [
             "Girder",
-            "Design Moment, Mᵈ (kNm)",
+            "Applied Moment, Mᵤ (kNm)",
             "LTB Resistance, Mᵦ (kNm)",
             "Utilization Ratio",
             "Status",

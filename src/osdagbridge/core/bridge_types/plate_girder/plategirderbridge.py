@@ -191,6 +191,8 @@ from osdagbridge.core.utils.common import (
     KEY_SD_LTB_LAMBDA,
     KEY_SD_LTB_CHI,
     KEY_SD_LTB_MB,
+    KEY_SD_LTB_LLT,
+    KEY_SD_LTB_MP,
     KEY_SD_STIFF_METHOD,
     KEY_SD_STIFF_INT_THICK,
     KEY_SD_STIFF_INT_SPACING,
@@ -3514,15 +3516,15 @@ class PlateGirderBridge:
         out[KEY_SD_SECTION_PROP_MASS]  = inp.get(KEY_MP_GIRDER_MASS,               0.0)          # kg/m (unchanged)
         out[KEY_SD_SECTION_PROP_AREA]  = round(dr["A_steel_mm2"]   / 1e2,  2)                    # mm²  → cm²
         out[KEY_SD_SECTION_PROP_IZ]    = round(dr["Iz_steel_mm4"]  / 1e4,  2)                    # mm⁴  → cm⁴
-        out[KEY_SD_SECTION_PROP_IV]    = inp.get(KEY_MP_GIRDER_SECTIONAL_IY,       0.0)          # m⁴  (unused in report)
+        out[KEY_SD_SECTION_PROP_IV]    = inp.get(KEY_MP_GIRDER_SECTIONAL_IY,       0.0)          # m⁴  (used by Table 5.6 LTB breakdown, cm⁴ via KEY_SD_SECTION_PROP_IV * 1e8)
         out[KEY_SD_SECTION_PROP_RZ]    = inp.get(KEY_MP_GIRDER_RADIUS_GYRATION_Z,  0.0)          # m   (unused in report)
         out[KEY_SD_SECTION_PROP_RV]    = inp.get(KEY_MP_GIRDER_RADIUS_GYRATION_Y,  0.0)          # m   (unused in report)
         out[KEY_SD_SECTION_PROP_ZZ]    = round(dr["Ze_steel_mm3"]  / 1e3,  2)                    # mm³  → cm³
         out[KEY_SD_SECTION_PROP_ZV]    = inp.get(KEY_MP_GIRDER_ELASTIC_MODULUS_ZY, 0.0)          # m³  (unused in report)
         out[KEY_SD_SECTION_PROP_ZUZ]   = round(dr["Zp_steel_mm3"]  / 1e3,  2)                    # mm³  → cm³
         out[KEY_SD_SECTION_PROP_ZUV]   = inp.get(KEY_MP_GIRDER_PLASTIC_MODULUS_ZUY,0.0)          # m³  (unused in report)
-        out[KEY_SD_SECTION_PROP_IT]    = inp.get(KEY_MP_GIRDER_TORSION_CONSTANT_IT,0.0)          # m³  (unused in report)
-        out[KEY_SD_SECTION_PROP_IW]    = inp.get(KEY_MP_GIRDER_WARPING_CONSTANT_IW,0.0)          # m⁶  (unused in report)
+        out[KEY_SD_SECTION_PROP_IT]    = inp.get(KEY_MP_GIRDER_TORSION_CONSTANT_IT,0.0)          # m⁴  (used by Table 5.6 LTB breakdown, cm⁴ via KEY_SD_SECTION_PROP_IT * 1e8)
+        out[KEY_SD_SECTION_PROP_IW]    = inp.get(KEY_MP_GIRDER_WARPING_CONSTANT_IW,0.0)          # m⁶  (used by Table 5.6 LTB breakdown, cm⁶ via KEY_SD_SECTION_PROP_IW * 1e12)
         out[KEY_SD_COMPOSITE_IZ]       = round(dr["I_comp_short_mm4"] / 1e4, 2)                  # mm⁴  → cm⁴
         out[KEY_SD_PNA_DEPTH]          = round(dr["xu_mm"], 1)                                    # mm
 
@@ -3562,6 +3564,8 @@ class PlateGirderBridge:
         out[KEY_SD_LTB_LAMBDA]         = round(dr["lambda_LT"], 3)
         out[KEY_SD_LTB_CHI]            = round(dr["chi_LT"], 3)
         out[KEY_SD_LTB_MB]             = round(dr["Mb_kNm"], 2)                                   # kN·m
+        out[KEY_SD_LTB_LLT]            = round(dr["ltb_LLT_mm"] / 1000.0, 3)                       # m
+        out[KEY_SD_LTB_MP]             = round(dr["ltb_Mpl_kNm"], 2)                                # kN·m — Cl.8.2.1.2 steel-only strength (not the composite Md)
 
         # ── 4g. Stiffener design summary (Table 5.7) ────────────────────────────
         # Custom design → user-provided values; Optimized → designer-computed.
