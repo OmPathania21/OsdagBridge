@@ -75,6 +75,15 @@ def ch4_analysis(asum, fig_paths, bridge: "ReportDataBridge"):
     _allow_total_str = f"L/600 = {_allow_total_mm:.1f} mm"
     _live_status     = ("PASS" if _live_mm  <= _allow_live_mm  else r"\textcolor{red}{FAIL}") if _live_mm  is not None else "---"
     _total_status    = ("PASS" if _total_mm <= _allow_total_mm else r"\textcolor{red}{FAIL}") if _total_mm is not None else "---"
+
+    # Table 4.2 rows — reactions per load case, taken straight from rxn_summary.
+    rxn_body = ("\n\\hline\n").join(
+        _tex(lc) + r" & "
+        + _tex((rxn_summary.get(lc) or {}).get('left_kN', '')) + r" & "
+        + _tex((rxn_summary.get(lc) or {}).get('right_kN', '')) + r" \\[6pt]"
+        for lc in rxn_summary
+    )
+
     return r"""
 \chapter{Analysis Results}
 
@@ -146,11 +155,7 @@ A grillage model was used for structural analysis. The deck is idealized as a gr
 \hline
 \textbf{Load Case} & \textbf{Left Support (kN)} & \textbf{Right Support (kN)} \\[6pt]
 \hline
- & """ + '' + r""" & """ + '' + r""" \\[6pt]
-\hline
- & """ + '' + r""" & """ + '' + r""" \\[6pt]
-\hline
- & """ + '' + r""" & """ + '' + r""" \\[6pt]
+""" + rxn_body + r"""
 \hline
 \end{longtable}
 
