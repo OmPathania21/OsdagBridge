@@ -528,6 +528,67 @@ def ch5_design_checks(checks_data, bridge) -> str:
         )
     t511_content = "\n".join(t511_rows)
 
+    # Supporting calculation for Table 5.11 — the "Actual Stress" above is NOT
+    # a plain Md/Z bending stress; it is the Cl.604.3.1 equivalent stress
+    # fe = sqrt(fbc^2 + 3*tau_b^2) on the short-term composite section under
+    # the SLS envelope moment. Expose that breakdown so the reported value can
+    # be independently recomputed. Source: the controlling girder's own
+    # sls_fibre_stresses dict (design_results["per_girder"][controlling_girder]
+    # ["sls_fibre_stresses"]), already written by compute_sls_stresses() in
+    # designer.py — read-only here, no calculation is added or changed.
+    _ctrl_girder = _dr_511.get("controlling_girder")
+    _per_girder  = _dr_511.get("per_girder", {}) or {}
+    _girder_data = _per_girder.get(_ctrl_girder, {}) or {}
+    _sls_fibre   = _girder_data.get("sls_fibre_stresses", {}) or {}
+
+    def _num3(v):
+        s = _dfmt(v, nd=3)
+        return s if s else "---"
+
+    _sls_vsls = _num3(_sls_fibre.get("V_sls_kN"))
+    _sls_aw   = _num3(_sls_fibre.get("Aw_mm2"))
+    _sls_fbc    = _num3(_sls_fibre.get("fbc_MPa"))
+    _sls_fbt    = _num3(_sls_fibre.get("fbt_MPa"))
+    _sls_taub   = _num3(_sls_fibre.get("tau_b_MPa"))
+    _sls_fecomp = _num3(_sls_fibre.get("fe_comp_MPa"))
+    _sls_fetens = _num3(_sls_fibre.get("fe_tens_MPa"))
+
+    # Equation-by-equation derivation of the governing stress: bending stress,
+    # shear stress, equivalent stress (both fibres), then the governing
+    # (max) equivalent stress that Table 5.11 reports as "Actual Stress".
+    t511_calc_content = rf"""
+        \[
+        f_{{bc}} = {_sls_fbc}\ \mathrm{{MPa}}, \qquad
+        f_{{bt}} = {_sls_fbt}\ \mathrm{{MPa}}
+        \]
+
+        \[
+        \tau_b=\frac{{V_{{sls}}}}{{A_w}}=\frac{{{_sls_vsls}\times1000}}{{{_sls_aw}}}={_sls_taub}\ \mathrm{{MPa}}
+        \qquad \text{{(average web shear stress --- Cl. 604.3.1)}}
+        \]
+
+        \[
+        f_{{e,comp}} = \sqrt{{f_{{bc}}^2 + 3\tau_b^2}}
+        = \sqrt{{{_sls_fbc}^2 + 3\times{_sls_taub}^2}}
+        = {_sls_fecomp}\ \mathrm{{MPa}}
+        \]
+
+        \[
+        f_{{e,tens}} = \sqrt{{f_{{bt}}^2 + 3\tau_b^2}}
+        = \sqrt{{{_sls_fbt}^2 + 3\times{_sls_taub}^2}}
+        = {_sls_fetens}\ \mathrm{{MPa}}
+        \]
+
+        \[
+        f_e = \max\left(f_{{e,comp}},\,f_{{e,tens}}\right) = {_steel_sig_str}
+        \qquad (\text{{Actual Stress, Table 5.10}})
+        \]
+        \smallskip
+        \hrule
+        \smallskip
+        """
+
+
     # Generate Table 5.12 rows — per-girder fatigue assessment (IRC 22 Cl. 605),
     # mirroring the Generate Results dialog: one row per girder showing the
     # GOVERNING fatigue check (worst of normal/shear by DCR). Source is the nested
@@ -1377,6 +1438,8 @@ This section presents all structural design checks performed by OsdagBridge. For
 \hline
 """ + t511_content + r"""
 \end{longtable}
+\noindent\textit{Note: The Actual Stress above is the equivalent stress fe(IRC 22 Cl. 604.3.1) for the short-term composite section under the SLS envelope, not the bare-steel Md/Z bending stress. Since fp=0, the simplified equations below are used.}
+""" + t511_calc_content + r"""
 
 \vspace{1em}
 \begin{longtable}{|C{2.5cm}|C{3.5cm}|C{3.5cm}|>{\centering\arraybackslash}p{3.5cm}|C{2.5cm}|}

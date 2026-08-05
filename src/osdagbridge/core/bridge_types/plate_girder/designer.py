@@ -1191,6 +1191,7 @@ class IRC22CapacityCalculator:
         return {
             "M_sls_kNm"          : M_sls_kNm,
             "V_sls_kN"           : V_sls_kN,
+            "Aw_mm2"             : round(sec.Aw, 2),
             KEY_COMP_I           : round(I_comp, 0),
             KEY_COMP_Y_TOP       : round(y_top, 2),
             KEY_COMP_Y_BOT       : round(y_bot, 2),
