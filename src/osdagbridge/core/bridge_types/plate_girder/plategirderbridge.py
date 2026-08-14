@@ -75,6 +75,7 @@ from osdagbridge.core.utils.common import (
     KEY_SL_DEAD_LOAD_MODE, KEY_SL_DEAD_LOAD_VALUE,
     KEY_SL_LIVE_LOAD_MODE, KEY_SL_LIVE_LOAD_VALUE,
     KEY_SL_HORIZONTAL_COEFF, KEY_SL_VERTICAL_COEFF,
+    KEY_SL_FORCE_LONGITUDINAL, KEY_SL_FORCE_TRANSVERSE,
     KEY_MD_WIDTH,
     KEY_RL_WIDTH,
     KEY_TS_DECK_OVERHANG,
@@ -1998,7 +1999,7 @@ class PlateGirderBridge:
         dead_load_kN = _custom_load(KEY_SL_DEAD_LOAD_MODE, KEY_SL_DEAD_LOAD_VALUE)
         live_load_kN = _custom_load(KEY_SL_LIVE_LOAD_MODE, KEY_SL_LIVE_LOAD_VALUE)
 
-        self.grillage_model.create_seismic_load_cases(
+        eq_result = self.grillage_model.create_seismic_load_cases(
             z_value=z_value,
             soil_type=soil_type,
             importance_factor=importance_factor,
@@ -2011,6 +2012,11 @@ class PlateGirderBridge:
             live_load_kN=live_load_kN,
             partial_safety_factor=1.5,  # IRC:6-2017 Table B.2 seismic ULS
         )
+
+        # Persist the horizontal seismic forces for the report (Table 3.5).
+        if eq_result:
+            self.output_dict[KEY_SL_FORCE_LONGITUDINAL] = round(eq_result["Feq_X_kN"], 3)
+            self.output_dict[KEY_SL_FORCE_TRANSVERSE]   = round(eq_result["Feq_Z_kN"], 3)
 
     def vehicle_lane_coordinates(self) -> list:
         """
