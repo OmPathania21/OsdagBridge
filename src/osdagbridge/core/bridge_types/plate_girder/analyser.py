@@ -1533,7 +1533,12 @@ class BridgeGrillageModel:
         model.add_load_case(WL, load_factor=partial_safety_factor)
         self.wind_load_case = WL
 
-        return {"WL_T": WL_T, "WL_L": WL_L, "WL_V": WL_V, "WL": WL}
+        return {
+            "WL_T": WL_T, "WL_L": WL_L, "WL_V": WL_V, "WL": WL,
+            "FT_kN": FT_total / 1000.0,                 # transverse total force
+            "FL_kN": (FL_per_m2 * deck_area) / 1000.0,  # longitudinal total force
+            "FV_kN": (FV_per_m2 * deck_area) / 1000.0,  # vertical total force
+        }
 
     # ============================================================
     #   Dead Load Combination

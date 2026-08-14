@@ -78,6 +78,7 @@ from osdagbridge.core.utils.common import (
     KEY_SL_LIVE_LOAD_MODE, KEY_SL_LIVE_LOAD_VALUE,
     KEY_SL_HORIZONTAL_COEFF, KEY_SL_VERTICAL_COEFF,
     KEY_SL_FORCE_LONGITUDINAL, KEY_SL_FORCE_TRANSVERSE,
+    KEY_WL_TRANSVERSE_WIND_FORCE, KEY_WL_LONGITUDINAL_WIND_FORCE, KEY_WL_VERTICAL_WIND_FORCE,
     KEY_MD_WIDTH,
     KEY_RL_WIDTH,
     KEY_TS_DECK_OVERHANG,
@@ -1443,7 +1444,7 @@ class PlateGirderBridge:
         )
         c_spacing = inp[KEY_TS_GIRDER_SPACING]
 
-        self.grillage_model.create_wind_load(
+        wind_result = self.grillage_model.create_wind_load(
             railing_height=railing_height,
             crash_barrier_height=crash_barrier_height,
             deck_thickness=deck_t_m,
@@ -1456,6 +1457,12 @@ class PlateGirderBridge:
             d_depth=d_depth,
             partial_safety_factor=1.0,
         )
+
+        # Persist the wind forces for the report (Table 3.4).
+        if wind_result:
+            self.output_dict[KEY_WL_TRANSVERSE_WIND_FORCE]   = round(wind_result["FT_kN"], 3)
+            self.output_dict[KEY_WL_LONGITUDINAL_WIND_FORCE] = round(wind_result["FL_kN"], 3)
+            self.output_dict[KEY_WL_VERTICAL_WIND_FORCE]     = round(wind_result["FV_kN"], 3)
 
     # ============================================================
     #   Temperature Load Analysis  IRC:6-2017 Cl.215
