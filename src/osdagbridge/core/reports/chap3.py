@@ -25,6 +25,8 @@ from osdagbridge.core.utils.common import (
     KEY_SL_DAMPING,
     KEY_SL_DEAD_LOAD_MODE,
     KEY_SL_DEAD_LOAD_VALUE,
+    KEY_SL_FORCE_LONGITUDINAL,
+    KEY_SL_FORCE_TRANSVERSE,
     KEY_SL_HORIZONTAL_COEFF,
     KEY_SL_IMPORTANCE_FACTOR,
     KEY_SL_LIVE_LOAD_MODE,
@@ -413,9 +415,9 @@ This section summarizes all loads applied to the bridge and the load combination
 \hline
 \textnormal{Vertical Seismic Coefficient, Av} & """ + (_render_value(input_dict, KEY_SL_VERTICAL_COEFF)) + r""" \\[6pt]
 \hline
-\textnormal{Horizontal Seismic Force (longitudinal)} & """ + '' + r""" kN \\[6pt]
+\textnormal{Horizontal Seismic Force (longitudinal)} & """ + (_render_value(output_dict, KEY_SL_FORCE_LONGITUDINAL, ' kN')) + r""" \\[6pt]
 \hline
-\textnormal{Horizontal Seismic Force (transverse)} & """ + '' + r""" kN \\[6pt]
+\textnormal{Horizontal Seismic Force (transverse)} & """ + (_render_value(output_dict, KEY_SL_FORCE_TRANSVERSE, ' kN')) + r""" \\[6pt]
 \hline
 \end{longtable}
 
