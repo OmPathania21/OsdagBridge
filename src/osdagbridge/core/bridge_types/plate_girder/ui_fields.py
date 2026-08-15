@@ -99,6 +99,10 @@ class FrontendData:
         steel_properties = connectdb("Steel_Grade_Properties")
         concrete_properies = connectdb("Concrete_Grade_Properties")
 
+        # Remove some concrete grades for deck slab
+        for grade in ["M15", "M20", "M25", "M30", "M35"]:
+            concrete_properies.remove(grade)
+
         return [
             # ── Module marker ─────────────────────────────────────────────────
             (KEY_MODULE_PLATE_GIRDER, None, TYPE_MODULE, None, True, "No Validator", {}),
