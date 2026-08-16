@@ -138,23 +138,20 @@ def ch3_loads(input_dict, output_dict=None):
     # Vehicles contributing to the braking load: the same vehicles considered for
     # the live load, except Class SV, which is governed by its own braking opt-in
     # (KEY_BL_IRC_CLASS_SV) independent of the live-load Class SV selection.
-    brk_vehicles = []
-    if output_dict.get(KEY_LL_IRC_CLASS_A):
-        brk_vehicles.append("Class A")
-    if output_dict.get(KEY_LL_IRC_70R_WHEELED):
-        brk_vehicles.append("Class 70R (Wheeled)")
-    if output_dict.get(KEY_LL_IRC_70R_TRACKED):
-        brk_vehicles.append("Class 70R (Tracked)")
-    if output_dict.get(KEY_LL_IRC_AA_WHEELED):
-        brk_vehicles.append("Class AA (Wheeled)")
-    if output_dict.get(KEY_LL_IRC_AA_TRACKED):
-        brk_vehicles.append("Class AA (Tracked)")
-    if output_dict.get(KEY_BL_IRC_CLASS_SV):
-        brk_vehicles.append("Class SV")
-    if output_dict.get(KEY_LL_IRC_70R_BOGIE):
-        brk_vehicles.append("Class 70R (Bogie)")
-    if output_dict.get(KEY_LL_IRC_CLASS_FATIGUE):
-        brk_vehicles.append("Class Fatigue")
+    brk_vehicles = [
+        vehicle
+        for key, vehicle in (
+            (KEY_LL_IRC_CLASS_A, "Class A"),
+            (KEY_LL_IRC_70R_WHEELED, "Class 70R (Wheeled)"),
+            (KEY_LL_IRC_70R_TRACKED, "Class 70R (Tracked)"),
+            (KEY_LL_IRC_AA_WHEELED, "Class AA (Wheeled)"),
+            (KEY_LL_IRC_AA_TRACKED, "Class AA (Tracked)"),
+            (KEY_BL_IRC_CLASS_SV, "Class SV"),
+            (KEY_LL_IRC_70R_BOGIE, "Class 70R (Bogie)"),
+            (KEY_LL_IRC_CLASS_FATIGUE, "Class Fatigue"),
+        )
+        if output_dict.get(key)
+    ]
 
     brk_custom = output_dict.get(KEY_LL_CUSTOM_VEHICLES)
     if brk_custom and isinstance(brk_custom, list):
