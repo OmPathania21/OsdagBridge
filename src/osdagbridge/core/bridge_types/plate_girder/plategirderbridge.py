@@ -816,13 +816,13 @@ class PlateGirderBridge:
             self._run_stage("8", self._stage_cad_generation)
 
             # Combined girder + deck verdict — last thing before completion
-            bridge_logger.final_verdict(self.output_dict)
+            is_safe = bridge_logger.final_verdict(self.output_dict)
 
             # Freeze output_dict — no further writes allowed after this point
             self.output_dict = types.MappingProxyType(self.output_dict)
             # Log memory after the design completes so growth per iteration is visible.
             log_memory("design: COMPLETE")
-            bridge_logger.analysis_complete()
+            bridge_logger.design_completed(is_safe)
 
         except Exception as e:
             bridge_logger.analysis_failed(str(e))

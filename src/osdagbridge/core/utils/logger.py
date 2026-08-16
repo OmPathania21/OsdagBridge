@@ -7,7 +7,7 @@ from typing import Callable, Optional, List
 from osdagbridge.core.utils.common import KEY_SD_VERDICT, KEY_DD_VERDICT
 
 log = logging.getLogger("osdagbridge")
-_SEP = "-" * 45
+_SEP = "-" * 25
 
 class BridgeLogger:
     """
@@ -207,7 +207,7 @@ class BridgeLogger:
             ("Deck",   out.get(KEY_DD_VERDICT) or {}, self._DECK_VERDICT_CHECKS),
         )
         if not any(verdict for _, verdict, _ in sections):
-            return                       # neither design ran — nothing to report
+            return True                      # neither design ran — nothing to report
 
         failures = []                    # (section, label, ur, remedy)
         failed_sections = []
@@ -231,7 +231,7 @@ class BridgeLogger:
                        "success")
             self._emit(f"[{self._ts()}]     All girder and deck design checks are satisfied.",
                        "success")
-            return
+            return True
 
         self._emit(f"[{self._ts()}]   FINAL VERDICT : FAIL  (max UR = {max_ur:.3f})", "error")
         for name, label, ur, remedy in failures:
@@ -243,6 +243,8 @@ class BridgeLogger:
             self._emit(f"[{self._ts()}]     {' and '.join(failed_sections)} design reported "
                        f"FAIL with no failing check listed.", "error")
 
+        return False
+
     def get_success_log(self) -> List[str]:
         """Return the green (success) log lines captured during the last run."""
         return list(self._success_log)
@@ -252,23 +254,39 @@ class BridgeLogger:
         self._start_time = time.time()
         self._success_log = []  # start a fresh design log for this run
         self._blank()
-        self._emit(f"[{self._ts()}] {_SEP} S T A R T I N G   A N A L Y S I S", "info")
+        self._emit(f"[{self._ts()}] {_SEP} STARTING ANALYSIS {_SEP}", "info")
         self._blank()
 
-    def analysis_complete(self) -> None:
+    def design_completed(self, safe: bool) -> None:
+        """Print the final completion banner.
+
+        Reached only when the pipeline ran to completion — distinct from
+        analysis_failed(), which is reserved for unexpected exceptions
+        (bad input, solver crash, etc.). safe comes from final_verdict()'s
+        return value.
+        """
         elapsed = time.time() - self._start_time
         self._blank()
-        self._emit(f"[{self._ts()}] {_SEP} A N A L Y S I S   C O M P L E T E", "success")
-        self._emit(f"[{self._ts()}]   TOTAL SOLUTION TIME .. : {elapsed:.2f} [SEC]", "success")
-        self._emit(f"[{self._ts()}] {'=' * 60}", "success")
+        if safe:
+            self._emit(f"[{self._ts()}] {_SEP} DESIGN COMPLETED SUCCESSFULLY {_SEP}", "success")
+            self._emit(f"[{self._ts()}]   TOTAL SOLUTION TIME .. : {elapsed:.2f} [SEC]", "success")
+            self._emit(f"[{self._ts()}]   OsdagBridge [SUCCESS] :============== End Of Design ==============", "success")
+            self._emit(f"[{self._ts()}] {'=' * 67}", "success")
+        else:
+            self._emit(f"[{self._ts()}] {_SEP} UNSAFE DESIGN {_SEP}", "error")
+            self._emit(f"[{self._ts()}]   TOTAL SOLUTION TIME .. : {elapsed:.2f} [SEC]", "error")
+            self._emit(f"[{self._ts()}]   OsdagBridge [UNSAFE] :============== End Of Design ==============", "error")
+            self._emit(f"[{self._ts()}] {'=' * 67}", "error")
         self._blank()
 
     def analysis_failed(self, reason: str) -> None:
         elapsed = time.time() - self._start_time
         self._blank()
-        self._emit(f"[{self._ts()}] {_SEP} A N A L Y S I S   F A I L E D", "error")
+        self._emit(f"[{self._ts()}] {_SEP} ANALYSIS FAILED {_SEP}", "error")
         self._emit(f"[{self._ts()}]   REASON  .. : {reason}", "error")
         self._emit(f"[{self._ts()}]   ELAPSED .. : {elapsed:.2f} [SEC]", "error")
+        self._emit(f"[{self._ts()}]   OsdagBridge [ERROR] :============== End Of Design ==============", "error")
+        self._emit(f"[{self._ts()}] {'=' * 65}", "error")
         self._blank()
 
     def stage_start(self, stage: str) -> None:
