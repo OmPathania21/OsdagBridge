@@ -247,44 +247,42 @@ class FrontendData:
 
     def output_values(self, flag=None):
         return [
-            # ── Analysis Results ──────────────────────────────────────────────
-            (KEY_SECTION_OUTPUT_ANALYSIS, "Girder Analysis Results",
-                TYPE_TITLE, None, True, "No Validator",
-                {"kind": "analysis"}),
-
-            (KEY_ANALYSIS_MEMBER, "Member",
-                TYPE_COMBOBOX, ["All"], True, "No Validator", {}),
-
-            (KEY_ANALYSIS_LOAD_COMBINATION, "Load Case /\nCombination",
-                TYPE_COMBOBOX, ["-"], True, "No Validator", {}),
-
-            (KEY_ANALYSIS_FORCES, None,           # None = no label
-                TYPE_RADIO_GRID,
-                [["F<sub>x</sub>","V<sub>y</sub>","V<sub>z</sub>"], 
-                 ["T<sub>x</sub>","M<sub>y</sub>","M<sub>z</sub>"], 
-                 ["D<sub>x</sub>","D<sub>y</sub>","D<sub>z</sub>"]],
-                True, "No Validator", {}),
-
-            (KEY_ANALYSIS_DISPLAY_OPTIONS, None,  # label goes on the groupbox title instead
-                TYPE_CHECKBOX_ROW, ["Max", "Min"],
-                True, "No Validator",
-                {"exclusive": False, "group_title": "Display Values"}),
-
-            (KEY_ANALYSIS_DISPLAY_OPTIONS, None,  # label goes on the groupbox title instead
-                TYPE_CHECKBOX_ROW, ["All   ", "Summary"],
-                True, "No Validator",
-                {"exclusive": False}),
-
-            # (KEY_ANALYSIS_UTILIZATION, "Utilization Ratio",
-            #     TYPE_CHECKBOX, None, True, "No Validator",
-            #     {"group_end": True}),             # closes the Display Options box
-
             # ── Superstructure ────────────────────────────────────────────────
             (KEY_SECTION_OUTPUT_SUPERSTRUCTURE, "Superstructure",
                 TYPE_TITLE, None, True, "No Validator",
                 {"kind": "design"}),
 
-            # ─── Percentage Bars ─────────────────────────────────────────────────────────
+            # ─── Girder Analysis Results (contains Display Values) ─────────
+
+            (KEY_ANALYSIS_MEMBER, "Member",
+                TYPE_COMBOBOX, ["All"], True, "No Validator",
+                {"group_title": "Girder Analysis Results"}),
+
+            (KEY_ANALYSIS_LOAD_COMBINATION, "Load Case /\nCombination",
+                TYPE_COMBOBOX, ["-"], True, "No Validator", {}),
+
+            (KEY_ANALYSIS_FORCES, None,
+                TYPE_RADIO_GRID,
+                [["F<sub>x</sub>","V<sub>y</sub>","V<sub>z</sub>"],
+                 ["T<sub>x</sub>","M<sub>y</sub>","M<sub>z</sub>"],
+                 ["D<sub>x</sub>","D<sub>y</sub>","D<sub>z</sub>"]],
+                True, "No Validator", {}),
+
+            (KEY_ANALYSIS_DISPLAY_OPTIONS, None,
+                TYPE_CHECKBOX_ROW, ["Max", "Min"],
+                True, "No Validator",
+                {"exclusive": False, "group_title": "Display Values"}),
+
+            (KEY_ANALYSIS_DISPLAY_OPTIONS, None,
+                TYPE_CHECKBOX_ROW, ["All   ", "Summary"],
+                True, "No Validator",
+                {"exclusive": False, "group_end": 2}),
+
+            # (KEY_ANALYSIS_UTILIZATION, "Utilization Ratio",
+            #     TYPE_CHECKBOX, None, True, "No Validator",
+            #     {"group_end": 2}),             # closes the Display Options box
+
+            # ─── Percentage Bars ─────────────────────────────────────────────
 
             (KEY_OUTPUT_DOCK_MEMBER_ID, "Member",
                 TYPE_COMBOBOX, ["-"], True, "No Validator",
@@ -323,8 +321,8 @@ class FrontendData:
                     "action": "open_steel_design",
                     "group_end": True
                 }),
-            
-            # ─── Transverse Design ─────────────────────────────────────────────────────────
+
+            # ─── Transverse Design ─────────────────────────────────────────
 
             (KEY_BTN_TRANSVERSE_DESIGN, "Design Summary",
                 TYPE_ONLY_BUTTON, None, True, "No Validator",
@@ -334,7 +332,7 @@ class FrontendData:
                     "group_end": True
                 }),
 
-            # ─── Deck Design ─────────────────────────────────────────────────────────
+            # ─── Deck Design ─────────────────────────────────────────────
 
             (KEY_BTN_DECK_DESIGN, "Design Summary",
                 TYPE_ONLY_BUTTON, None, True, "No Validator",

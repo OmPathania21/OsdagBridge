@@ -200,15 +200,18 @@ class OutputDock(QWidget):
         return btn_layout
 
     # ── Main build loop ───────────────────────────────────────────────────────
-
+    
     def _build_field_loop(self, root_layout: QVBoxLayout):
         """
         Single flat loop — mirrors InputDock._build_field_loop exactly.
         TYPE_TITLE opens a group (analysis or design).
         Every field after it belongs to that group until the next TYPE_TITLE.
 
-        Inside analysis groups, group_title opens a nested bordered subgroup;
-        group_end closes it after that field.
+        Inside a group, group_title opens a nested bordered subgroup relative
+        to whichever subgroup is currently innermost (or the section itself
+        if none is open) — subgroups can nest to any depth. group_end closes
+        the innermost open subgroup; pass an int to close multiple levels
+        at once (e.g. group_end: 2).
         """
         field_list = []
         if self.backend and hasattr(self.backend, "output_values"):
@@ -217,20 +220,17 @@ class OutputDock(QWidget):
             except Exception:
                 pass
 
-        track        = False
-        group        = None
-        glayout      = None
-        # nested subgroup state
-        subgroup     = None
-        sub_layout   = None
+        track          = False
+        group          = None
+        glayout        = None
+        subgroup_stack: list[tuple[QGroupBox, QVBoxLayout]] = []
 
         def close_group():
-            nonlocal track, group, glayout, subgroup, sub_layout
+            nonlocal track, group, glayout
             if track and group:
                 group.setLayout(glayout)
                 track = False
-            subgroup   = None
-            sub_layout = None
+            subgroup_stack.clear()
 
         for defn in field_list:
             if len(defn) < 7:
@@ -253,18 +253,21 @@ class OutputDock(QWidget):
             if not track:
                 continue
 
-            # ── Open nested subgroup if group_title declared ───────────────
+            # ── Open a nested subgroup if group_title declared ─────────────
             if meta.get("group_title"):
-                subgroup   = QGroupBox(meta["group_title"])
-                subgroup.setStyleSheet(SUBGROUP_STYLE)
-                sub_layout = QVBoxLayout()
-                sub_layout.setContentsMargins(8, 8, 8, 8)
-                sub_layout.setSpacing(6)
-                subgroup.setLayout(sub_layout)
-                glayout.addWidget(subgroup)
+                new_group = QGroupBox(meta["group_title"])
+                new_group.setStyleSheet(SUBGROUP_STYLE)
+                new_layout = QVBoxLayout()
+                new_layout.setContentsMargins(8, 8, 8, 8)
+                new_layout.setSpacing(6)
+                new_group.setLayout(new_layout)
 
-            # Route to subgroup if open, otherwise to section layout
-            target = sub_layout if subgroup is not None else glayout
+                parent_layout = subgroup_stack[-1][1] if subgroup_stack else glayout
+                parent_layout.addWidget(new_group)
+                subgroup_stack.append((new_group, new_layout))
+
+            # Route to the innermost open subgroup, else the section layout
+            target = subgroup_stack[-1][1] if subgroup_stack else glayout
 
             # ── Field dispatch ─────────────────────────────────────────────
             if ftype == TYPE_BUTTON:
@@ -286,19 +289,21 @@ class OutputDock(QWidget):
                 cb = QCheckBox(label or "")
                 cb.setObjectName(key)
                 target.addWidget(cb)
-            
+
             elif ftype == TYPE_PERCENT_BAR:
                 bar = PercentBarWidget(label=label or "", value=0.0)
                 bar.setObjectName(key)
                 target.addWidget(bar)
-            
+
             elif ftype == TYPE_ONLY_BUTTON:
                 target.addLayout(self._make_only_button_row(label, meta))
 
-            # ── Close nested subgroup if group_end declared ────────────────
+            # ── Close nested subgroup(s) if group_end declared ──────────────
             if meta.get("group_end"):
-                subgroup   = None
-                sub_layout = None
+                levels = meta["group_end"] if isinstance(meta["group_end"], int) else 1
+                for _ in range(levels):
+                    if subgroup_stack:
+                        subgroup_stack.pop()
 
         close_group()
 
