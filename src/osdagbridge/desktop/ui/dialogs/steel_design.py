@@ -83,7 +83,7 @@ class SteelDesign(QDialog):
         main_layout.setSpacing(0)
 
         self.title_bar = CustomTitleBar()
-        self.title_bar.setTitle("Girder Analysis and Design Results Summary")
+        self.title_bar.setTitle("Girder Analysis and Design Summary")
         main_layout.addWidget(self.title_bar)
 
         self.content_widget = QWidget(self)
@@ -539,8 +539,6 @@ class SteelDesign(QDialog):
             # Pre-populate Design Check tab with the default girder's DCR values
             # so results are visible without switching tabs first.
             self._run_design_checks()
-
-
 
     def _reload_details_tab(self, *args):
         """Repopulate the Details tab for the girder chosen in the selection bar.

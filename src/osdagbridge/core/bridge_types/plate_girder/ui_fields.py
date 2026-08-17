@@ -315,7 +315,7 @@ class FrontendData:
             (KEY_UTIL_DEFLECTION_CRACK, "Deflection",
                 TYPE_PERCENT_BAR, 0.0, True, "No Validator", {}),
 
-            (KEY_BTN_STEEL_DESIGN, "Analysis and Design Results Summary",
+            (KEY_BTN_STEEL_DESIGN, "Analysis and Design Summary",
                 TYPE_ONLY_BUTTON, None, True, "No Validator",
                 {
                     "action": "open_steel_design",
