@@ -1,8 +1,22 @@
 from osdagbridge.core.utils.common import (
     KEY_MP_GD_MEMBER_ID,
+    KEY_MP_GD_SELECT_GIRDER,
     KEY_MP_GIRDER_DEPTH,
     KEY_TS_NO_OF_GIRDERS
 )
+
+_GROUPED_TABLE_PROBE = False
+_GROUPED_TABLE_BREAKS = set()
+
+
+def configure_grouped_table_breaks(probe=False, breaks=None):
+    global _GROUPED_TABLE_PROBE, _GROUPED_TABLE_BREAKS
+    _GROUPED_TABLE_PROBE = probe
+    _GROUPED_TABLE_BREAKS = set(breaks or [])
+
+
+def grouped_table_key(caption):
+    return "".join(ch.lower() if ch.isalnum() else "_" for ch in str(caption)).strip("_")[:80]
 
 
 def _tex(value):
@@ -118,6 +132,139 @@ def render_parameter_value_table(caption, rows, longtable=False):
         caption, rows, headers=["parameter", "value"], widths=[6.4, 8.6],
         align=["L", "L"], longtable=longtable, escape=False)
 
+
+def render_grouped_report_table(caption, groups, headers=None, widths=None, align=None, escape=True,
+                                longtable_min_rows=19, first_page_rows=19, next_page_rows=24):
+    headers = headers or []
+    groups = [(label, [list(row) for row in group_rows]) for label, group_rows in groups]
+    rows = [[label] + row for label, group_rows in groups for row in group_rows]
+    ncols = max(1, len(headers) or max((len(row) for row in rows), default=1))
+    max_content_width = 15.5 - (0.43 * ncols) - (0.02 * (ncols + 1))
+    if widths is None:
+        def _score(cell):
+            text = str(cell or "").replace("\\allowbreak{}", "")
+            for ch in "\\{}$_^":
+                text = text.replace(ch, "")
+            longest = max((len(part) for part in text.split()), default=0)
+            return max(1.0, min(18.0, longest * 0.65 + len(text) * 0.12))
+        widths = [
+            max(_score(headers[i] if i < len(headers) else ""),
+                max((_score(row[i]) for row in rows if i < len(row)), default=1.0))
+            for i in range(ncols)
+        ]
+        min_width = min(2.0, max(1.2, max_content_width / ncols * 0.65))
+        remaining = max_content_width - (min_width * ncols)
+        widths = ([min_width + remaining * w / sum(widths) for w in widths]
+                  if remaining > 0 and sum(widths) > 0 else [max_content_width / ncols] * ncols)
+    else:
+        widths = list(widths)
+        if len(widths) < ncols:
+            widths.extend([widths[-1] if widths else round(14.0 / ncols, 2)] * (ncols - len(widths)))
+        widths = widths[:ncols]
+    scale = max_content_width / sum(widths) if sum(widths) > 0 else 1
+    widths = [round(w * scale, 2) for w in widths]
+    align = align or ["L"] * ncols
+
+    def _header(cell):
+        text = str(cell or "")
+        text = text[:1].upper() + text[1:] if text else text
+        return r"\textbf{" + (_tex(text) if escape else text) + "}"
+    fmt = _tex if escape else str
+    colspec = "|" + "|".join(f"{a}{{{w}cm}}" for a, w in zip(align, widths)) + "|"
+    header = "\\hline\n" + " & ".join(_header(h) for h in headers) + r" \\" + "\n\\hline\n"
+
+    table_key = grouped_table_key(caption)
+
+    def _row_marker(group_idx, row_idx, edge):
+        return r"\noalign{\label{osdaggrp:" + table_key + ":" + str(group_idx) + ":" + str(row_idx) + ":" + edge + r"}}"
+
+    def _group_tex(label, group_rows, group_idx=0, row_offset=0):
+        out = []
+        for idx, row in enumerate(group_rows):
+            if _GROUPED_TABLE_PROBE:
+                out.append(_row_marker(group_idx, row_offset + idx, "s"))
+                first = fmt(label)
+                line_end = r" \\"
+            else:
+                first = (r"\multirow{" + str(len(group_rows)) + "}{" + str(widths[0])
+                         + r"cm}{\centering " + fmt(label) + "}") if idx == 0 else ""
+                line_end = r" \\" if idx == len(group_rows) - 1 else r" \\*"
+            line = " & ".join([first] + [fmt(cell) for cell in row]) + line_end
+            out.append(line)
+            if _GROUPED_TABLE_PROBE:
+                out.append(_row_marker(group_idx, row_offset + idx, "e"))
+            out.append(r"\hline" if _GROUPED_TABLE_PROBE or idx == len(group_rows) - 1 else f"\\cline{{2-{ncols}}}")
+        return "\n".join(out)
+
+    def _break_indexes(table_key, group_idx, group_rows):
+        prefix = table_key + ":" + str(group_idx) + ":"
+        indexes = sorted(
+            int(marker[len(prefix):]) for marker in _GROUPED_TABLE_BREAKS
+            if marker.startswith(prefix) and marker[len(prefix):].isdigit()
+        )
+        return [idx for idx in indexes if 0 < idx < len(group_rows)]
+
+    def _visual_rows(cells):
+        row_height = 1
+        for cell, width in zip(cells, widths):
+            text = str(cell or "").replace("\\allowbreak{}", "")
+            for ch in "\\{}$_^":
+                text = text.replace(ch, "")
+            chars_per_line = max(8, int(width * 4.5))
+            row_height = max(row_height, (len(text) + chars_per_line - 1) // chars_per_line)
+        return row_height
+
+    def _group_cost(label, group_rows):
+        return sum(_visual_rows([label] + row) for row in group_rows)
+
+    estimated_rows = sum(
+        _visual_rows([label] + row) for label, group_rows in groups for row in group_rows
+    )
+    body_parts = []
+    for group_idx, (label, group_rows) in enumerate(groups):
+        breaks = _break_indexes(table_key, group_idx, group_rows)
+        starts = [0] + breaks
+        ends = breaks + [len(group_rows)]
+        for chunk_idx, (start, end) in enumerate(zip(starts, ends)):
+            chunk_rows = group_rows[start:end]
+            if not _GROUPED_TABLE_PROBE:
+                if chunk_idx > 0:
+                    body_parts.append(r"\noalign{\penalty -10000}")
+                else:
+                    need = max(4, min(30, _group_cost(label, chunk_rows) + 2))
+                    body_parts.append(r"\noalign{\needspace{" + str(need) + r"\baselineskip}}")
+            body_parts.append(_group_tex(label, chunk_rows, group_idx, start))
+    body = "\n".join(body_parts)
+    caption_setup = r"\captionsetup{justification=centering,font={small,it}}"
+    total_rows = sum(len(group_rows) for _, group_rows in groups)
+    if total_rows < longtable_min_rows and estimated_rows < longtable_min_rows:
+        need = max(6, min(34, estimated_rows + 5))
+        return (r"\Needspace{" + str(need) + r"\baselineskip}" + "\n"
+                + r"\begin{table}[H]" + "\n"
+                + r"\centering" + "\n"
+                + caption_setup + "\n" + r"\caption{" + _tex(caption) + "}\n"
+                + r"\begin{tabular}{" + colspec + "}\n"
+                + header + body + "\n"
+                + r"\end{tabular}" + "\n"
+                + r"\end{table}")
+
+    first_head = caption_setup + "\n" + r"\caption{" + _tex(caption) + r"}\\" + "\n" + header
+    cont_head = (r"\multicolumn{" + str(ncols) + r"}{l}{\small\itshape Continued from previous page}\\"
+                 + "\n" + header)
+    cont_foot = (r"\multicolumn{" + str(ncols)
+                 + r"}{r}{\small\itshape Continued on next page...}\\" + "\n")
+    first_chunk_need = max(8, min(32, (_group_cost(groups[0][0], groups[0][1]) if groups else 1) + 5))
+    return (r"\Needspace{" + str(first_chunk_need) + r"\baselineskip}" + "\n"
+            + r"\begin{longtable}{" + colspec + "}\n"
+            + first_head + r"\endfirsthead" + "\n"
+            + cont_head + r"\endhead" + "\n"
+            + cont_foot + r"\endfoot" + "\n"
+            + r"\hline" + "\n"
+            + r"\endlastfoot" + "\n"
+            + body + "\n"
+            + r"\end{longtable}")
+
+
 def get_girder_entries(input_dict):
     """
     Retrieve all girder labels and member IDs from backend keys.
@@ -149,9 +296,10 @@ def get_girder_entries(input_dict):
     entries = []
 
     for i in range(1, n + 1):
+        label = input_dict.get(f"{KEY_MP_GD_SELECT_GIRDER}.G{i}") or f"G{i}"
         entries.append(
             (
-                f"G{i}",
+                label,
                 input_dict.get(f"{KEY_MP_GD_MEMBER_ID}.G{i}.M1", ""),
             )
         )
