@@ -900,6 +900,7 @@ def generate_report(payload, request):
 
             # ── Assemble LaTeX document (fig_paths now has tmp_dir paths) ──
             bridge = ReportDataBridge(payload.output_dict, payload.inputs, payload)
+            ur_chart_paths = ReportChartGenerator(tmp_assets).generate_utilization_ratio_charts(bridge)
 
             def _build_full_tex():
                 doc_parts = []
@@ -923,7 +924,7 @@ def generate_report(payload, request):
                 if 'analysis' in secs:
                     doc_parts.append(ch4_analysis(payload.analysis_summary, fig_paths, bridge))
                 if 'design_checks' in secs:
-                    doc_parts.append(ch5_design_checks(payload.design_checks, bridge))
+                    doc_parts.append(ch5_design_checks(payload.design_checks, bridge, ur_chart_paths))
                 if 'drawings' in secs and payload.options.include_figures:
                     doc_parts.append(ch6_drawings(fig_paths))
 

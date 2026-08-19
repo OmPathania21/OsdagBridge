@@ -164,12 +164,12 @@ from osdagbridge.core.utils.common import (
 
 from osdagbridge.core.reports.report_utils import (
     _tex, _render_value, get_girder_entries,
-    render_report_table, render_grouped_report_table
+    render_report_table, render_grouped_report_table, _fig_embed
 )
 
 if TYPE_CHECKING:
     pass
-def ch5_design_checks(checks_data, bridge) -> str:
+def ch5_design_checks(checks_data, bridge, chart_paths=None) -> str:
     """Chapter 5 — Design Checks.
 
     Parameters
@@ -1058,6 +1058,10 @@ def ch5_design_checks(checks_data, bridge) -> str:
     #  (2) Deck slab: URs from deck_design_results (Demand/Capacity not stored).
     #  (3) Cross bracing: existing get_cb_* helpers (worst pair/member by UR).
     #      End diaphragm has no report helpers yet → "---" for now.
+    chart_paths = chart_paths or {}
+    ur_chart = (_fig_embed(chart_paths.get("ur_summary"),
+                           "Utilization Ratio Summary", width=r"0.82\textwidth")
+                if chart_paths.get("ur_summary") else "")
     _pg_522 = (bridge.output_dict.get("design_results", {}) or {}).get("per_girder", {}) or {}
     _dd_522 = bridge.output_dict.get("deck_design_results", {}) or {}
 
@@ -1667,6 +1671,8 @@ End diaphragms at the supports transfer transverse loads to the bearings, restra
 """ + t522_content + r"""
 \end{longtable}
 \noindent\textit{Note: UR = Demand / Capacity. All values $\leq 1.0$ indicate passing checks. The governing check for each component is highlighted in the individual design check sections above.}
+
+""" + ur_chart + r"""
 
 """
 

@@ -399,6 +399,93 @@ class ReportChartGenerator:
         plt.close(fig)
         return (self.latex_dir.rstrip("/\\") + "/" + filename).replace("\\", "/")
 
+    def _save_ur_chart(self, filename, labels, values):
+        import os
+        os.makedirs(self.output_dir, exist_ok=True)
+        os.environ.setdefault("MPLCONFIGDIR", os.path.join(self.output_dir, "mplconfig"))
+        os.makedirs(os.environ["MPLCONFIGDIR"], exist_ok=True)
+        import matplotlib
+        matplotlib.use("Agg", force=True)
+        matplotlib.rcParams["pdf.fonttype"] = 42
+        matplotlib.rcParams["ps.fonttype"] = 42
+        import matplotlib.pyplot as plt
+
+        plot_values = [v if v is not None else 0.0 for v in values]
+        colors = ["#b55353" if (v is not None and v > 1.0) else "#6aa84f" if v is not None else "#9e9e9e" for v in values]
+        fig, ax = plt.subplots(figsize=(7.2, 3.8), dpi=220)
+        bars = ax.bar(labels, plot_values, color=colors, width=0.55)
+        ax.axhline(1.0, color="#c00000", linestyle="--", linewidth=1.3, label="UR = 1.0")
+        ax.set_title("Utilization Ratio Summary", fontsize=12, fontweight="bold", pad=10)
+        ax.set_xlabel("Primary Element", fontsize=10)
+        ax.set_ylabel("Utilization Ratio (Demand / Capacity)", fontsize=10)
+        ax.grid(axis="y", linestyle="--", linewidth=0.6, alpha=0.35)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.legend(loc="upper right", frameon=False, fontsize=9)
+        ax.set_ylim(0, max(plot_values + [1.0]) * 1.22)
+        for bar, value in zip(bars, values):
+            label = "N/A" if value is None else f"{value:.2f}"
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
+                    label, ha="center", va="bottom", fontsize=9)
+        fig.tight_layout()
+        path = os.path.join(self.output_dir, filename)
+        fig.savefig(path, format="pdf", bbox_inches="tight")
+        plt.close(fig)
+        return (self.latex_dir.rstrip("/\\") + "/" + filename).replace("\\", "/")
+
+    def _max_dcr(self, data):
+        best = None
+        if isinstance(data, dict):
+            for key, value in data.items():
+                if str(key).lower() in {"dcr", "ur", "efficiency", "utilization", "utilization_ratio"}:
+                    n = self._number(value)
+                    if n > 0:
+                        best = n if best is None else max(best, n)
+                child = self._max_dcr(value)
+                if child is not None:
+                    best = child if best is None else max(best, child)
+        elif isinstance(data, (list, tuple)):
+            for item in data:
+                child = self._max_dcr(item)
+                if child is not None:
+                    best = child if best is None else max(best, child)
+        return best
+
+    def generate_utilization_ratio_charts(self, bridge):
+        try:
+            output = bridge.output_dict or {}
+            steel = self._max_dcr((output.get("design_results", {}) or {}).get("per_girder", {}))
+            deck_rpt = output.get("deck_report_values", {}) or {}
+            deck_values = []
+            for demand_key, capacity_key in (
+                ("deck.report.m_uls_sag", "deck.report.mu_bot"),
+                ("deck.report.m_uls_hog", "deck.report.mu_top"),
+                ("deck.report.punch_ved", "deck.report.vrd_c_mpa"),
+                ("deck.report.shear_ved", "deck.report.shear_vrdc"),
+                ("deck.report.wk_bot", "deck.report.wk_limit"),
+                ("deck.report.wk_top", "deck.report.wk_limit"),
+            ):
+                demand = self._number(deck_rpt.get(demand_key))
+                capacity = self._number(deck_rpt.get(capacity_key))
+                if capacity > 0:
+                    deck_values.append(demand / capacity)
+            deck = max(deck_values) if deck_values else self._max_dcr(output.get("deck_design_results", {}))
+            cb_values = []
+            for pair in bridge.get_cb_pairs():
+                for member in ("diagonal", "chord"):
+                    for force_type in ("compression", "tension"):
+                        n = self._number(bridge.get_cb_efficiency(pair, member, force_type))
+                        if n > 0:
+                            cb_values.append(n)
+            cross_bracing = max(cb_values) if cb_values else self._max_dcr(output.get("crossbracing_design_results", {}))
+            end_diaphragm = self._max_dcr(output.get("end_diaphragm_design_results", {}))
+            return {"ur_summary": self._save_ur_chart(
+                "utilization_ratio_summary.pdf",
+                ["Steel Plate\nGirders", "Concrete\nDeck Slab", "Cross\nBracing", "End\nDiaphragms"],
+                [steel, deck, cross_bracing, end_diaphragm])}
+        except Exception:
+            return {}
+
     def generate_material_quantity_charts(self, quantities):
         try:
             bracing = sum(self._number(quantities.get(key)) for key in (
