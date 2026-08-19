@@ -107,7 +107,7 @@ import os, shutil, logging, datetime, tempfile, subprocess
 from dataclasses import dataclass, field
 from typing import Optional, List, Literal
 
-from osdagbridge.core.reports.report_utils import _tex
+from osdagbridge.core.reports.report_utils import _tex, ReportChartGenerator
 from .executive_summary import executive_summary
 from .chap1 import ch1_project_info
 from .chap2 import ch2_input_parameters
@@ -873,6 +873,7 @@ def generate_report(payload, request):
             # Compute and inject quantities for Chapter 7
             quantities = calculate_material_quantities(payload.inputs, payload.output_dict)
             payload.inputs.update(quantities)
+            quantity_chart_paths = ReportChartGenerator(tmp_assets).generate_material_quantity_charts(payload.inputs)
 
             # ── Assemble LaTeX document (fig_paths now has tmp_dir paths) ──
             bridge = ReportDataBridge(payload.output_dict, payload.inputs, payload)
@@ -902,7 +903,7 @@ def generate_report(payload, request):
             if 'drawings' in secs and payload.options.include_figures:
                 doc_parts.append(ch6_drawings(fig_paths))
 
-            doc_parts.append(ch7_quantities(payload.inputs))
+            doc_parts.append(ch7_quantities(payload.inputs, quantity_chart_paths))
 
             doc_parts.append(ch8_design_log(payload.log_entries, payload.inputs))
 

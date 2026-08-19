@@ -347,3 +347,84 @@ def _fig_embed(path, caption, width=r'\textwidth', height=None):
             r'}}')
 
 
+class ReportChartGenerator:
+    """Generate temporary vector charts for report figures."""
+
+    def __init__(self, output_dir, latex_dir="assets"):
+        self.output_dir = output_dir
+        self.latex_dir = latex_dir
+
+    def _number(self, value):
+        import re
+        text = str(value or "").strip()
+        if not text or text.upper() in {"N.A.", "NA", "N/A", "---"}:
+            return 0.0
+        match = re.search(r"-?\d+(?:\.\d+)?", text.replace(",", ""))
+        return float(match.group(0)) if match else 0.0
+
+    def _first_number(self, quantities, keys):
+        for key in keys:
+            value = self._number(quantities.get(key))
+            if value:
+                return value
+        return 0.0
+
+    def _save_bar_chart(self, filename, labels, values, xlabel, ylabel, title, colors):
+        import os
+        os.makedirs(self.output_dir, exist_ok=True)
+        os.environ.setdefault("MPLCONFIGDIR", os.path.join(self.output_dir, "mplconfig"))
+        os.makedirs(os.environ["MPLCONFIGDIR"], exist_ok=True)
+        import matplotlib
+        matplotlib.use("Agg", force=True)
+        matplotlib.rcParams["pdf.fonttype"] = 42
+        matplotlib.rcParams["ps.fonttype"] = 42
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplots(figsize=(7.0, 3.8), dpi=220)
+        bars = ax.bar(labels, values, color=colors, width=0.55)
+        ax.set_title(title, fontsize=12, fontweight="bold", pad=10)
+        ax.set_xlabel(xlabel, fontsize=10)
+        ax.set_ylabel(ylabel, fontsize=10)
+        ax.grid(axis="y", linestyle="--", linewidth=0.6, alpha=0.35)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ymax = max(values) if values else 0.0
+        ax.set_ylim(0, ymax * 1.18 if ymax > 0 else 1)
+        for bar, value in zip(bars, values):
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
+                    f"{value:.2f}", ha="center", va="bottom", fontsize=9)
+        fig.tight_layout()
+        path = os.path.join(self.output_dir, filename)
+        fig.savefig(path, format="pdf", bbox_inches="tight")
+        plt.close(fig)
+        return (self.latex_dir.rstrip("/\\") + "/" + filename).replace("\\", "/")
+
+    def generate_material_quantity_charts(self, quantities):
+        try:
+            bracing = sum(self._number(quantities.get(key)) for key in (
+                "bracing_top_wt_total", "bracing_bot_wt_total", "bracing_diag_wt_total"
+            ))
+            diaphragm = self._first_number(quantities, (
+                "end_diaphragm_wt_total", "end_diaphragms_wt_total",
+                "steel_end_diaphragm_wt_total", "steel_end_diaphragms_wt_total",
+                "diaphragm_wt_total", "diaphragms_wt_total",
+            ))
+            return {
+                "steel": self._save_bar_chart(
+                    "material_steel_quantities.pdf",
+                    ["Girders", "Cross Bracing", "End Diaphragms"],
+                    [self._number(quantities.get("steel_girders_wt_total")), bracing, diaphragm],
+                    "Structural Steel Component", "Weight (MT)", "Structural Steel Tonnage",
+                    ["#3b6ea8", "#6aa84f", "#c27c3a"]),
+                "concrete_rebar": self._save_bar_chart(
+                    "material_concrete_rebar_quantities.pdf",
+                    ["Concrete Volume", "Reinforcement Steel"],
+                    [self._number(quantities.get("concrete_deck_vol_total")),
+                     self._number(quantities.get("rebar_deck_wt_total"))],
+                    "Material Quantity Type", "Quantity (m3 / MT)", "Concrete Volume and Reinforcement Steel",
+                    ["#7a9cc6", "#b55353"]),
+            }
+        except Exception:
+            return {}
+
+
