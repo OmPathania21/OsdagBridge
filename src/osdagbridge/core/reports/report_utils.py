@@ -33,7 +33,7 @@ def _render_value(source_dict, key, unit=""):
     return _tex(val) + unit
 
 
-def render_report_table(caption, rows, headers=None, widths=None, align=None, longtable=False, escape=True):
+def render_report_table(caption, rows, headers=None, widths=None, align=None, longtable=False, escape=True, header_rows=None, header_clines=None):
     headers = headers or []
     ncols = max(1, len(headers) or max((len(row) for row in rows), default=1))
     max_content_width = 15.5 - (0.43 * ncols) - (0.02 * (ncols + 1))
@@ -68,14 +68,29 @@ def render_report_table(caption, rows, headers=None, widths=None, align=None, lo
         return r"\textbf{" + (_tex(text) if escape else text) + "}"
     colspec = "|" + "|".join(f"{a}{{{w}cm}}" for a, w in zip(align, widths)) + "|"
     header = ""
-    if headers:
+    if header_rows:
+        rendered = []
+        header_clines = header_clines or {}
+        for row_idx, row in enumerate(header_rows):
+            cells = []
+            for cell in row:
+                if isinstance(cell, tuple):
+                    text, span = cell
+                    cells.append(r"\multicolumn{" + str(span) + r"}{c|}{\textbf{" + (_tex(text) if escape else text) + "}}")
+                else:
+                    cells.append(_header(cell) if cell else "")
+            rendered.append(" & ".join(cells) + r" \\")
+            if row_idx in header_clines:
+                rendered.append(r"\cline{" + header_clines[row_idx] + "}")
+        header = "\\hline\n" + "\n".join(rendered) + "\n\\hline\n"
+    elif headers:
         header_row = " & ".join(_header(h) for h in headers) + r" \\"
         header = "\\hline\n" + header_row + "\n\\hline\n"
     fmt = _tex if escape else str
     body = "\n".join(" & ".join(fmt(cell) for cell in row) + r" \\" + "\n\\hline" for row in rows)
 
     if longtable:
-        repeat = (header + "\\endfirsthead\n" + header + "\\endhead\n") if headers and len(rows) > 12 else (header or "\\hline\n")
+        repeat = (header + "\\endfirsthead\n" + header + "\\endhead\n") if header and len(rows) > 12 else (header or "\\hline\n")
         return ("\\begin{longtable}{" + colspec + "}\n" + repeat + body
                 + "\n\\captionsetup{justification=centering,font={small,it}}\n\\caption{"
                 + _tex(caption) + "}\\\\\n\\end{longtable}")
@@ -85,6 +100,23 @@ def render_report_table(caption, rows, headers=None, widths=None, align=None, lo
             + "\n\\end{tabular}\n\\captionsetup{justification=centering,font={small,it}}\n\\caption{"
             + _tex(caption) + "}\n\\end{table}")
 
+
+def render_vehicle_live_load_table(rows):
+    return render_report_table(
+        "Vehicle Live Loads (LL)", rows,
+        header_rows=[
+            ["Vehicle", "Total Load (kN)", "Impact Factor", ("Braking Load", 3)],
+            ["", "", "", "Considered?", "Value", "Eccentricity"],
+        ],
+        header_clines={0: "4-6"},
+        widths=[2.7, 2.0, 1.9, 2.3, 1.7, 2.2],
+        align=["L", "C", "C", "C", "C", "C"], longtable=True, escape=False)
+
+
+def render_parameter_value_table(caption, rows, longtable=False):
+    return render_report_table(
+        caption, rows, headers=["parameter", "value"], widths=[6.4, 8.6],
+        align=["L", "L"], longtable=longtable, escape=False)
 
 def get_girder_entries(input_dict):
     """
