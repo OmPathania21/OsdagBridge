@@ -1,8 +1,8 @@
-# ═══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 # EXECUTIVE SUMMARY
-# ═══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 
-from osdagbridge.core.reports.report_utils import _fig_or_placeholder, _render_value, _tex, get_girder_entries
+from osdagbridge.core.reports.report_utils import _fig_or_placeholder, _render_value, _tex, get_girder_entries, render_report_table
 from osdagbridge.core.utils.common import (
     KEY_CARRIAGEWAY_WIDTH,
     KEY_SD_SECTION_DESIGNATION,
@@ -121,15 +121,15 @@ def executive_summary(input_dict, output_dict, fig_paths) -> str:
     # in output_dict (not input_dict).
     sec = _render_value(output_dict, KEY_SD_SECTION_DESIGNATION)
 
-    # ── Pull the stored result dicts once, then work off these locals ─────────
-    # (no value is recomputed here — the pipeline already filled these in).
+    # Pull the stored result dicts once, then work off these locals.
+    # No value is recomputed here; the pipeline already filled these in.
     design_results = output_dict.get("design_results", {}) or {}
     per_girder     = design_results.get("per_girder", {}) or {}
     deck_results   = output_dict.get("deck_design_results", {}) or {}
     cb_results     = output_dict.get("crossbracing_design_results", {}) or {}
     ed_results     = output_dict.get("end_diaphragm_design_results", {}) or {}
 
-    # Overall Design Status — girder checks only: Pass if every check passes,
+    # Overall Design Status: girder checks only; Pass if every check passes,
     # otherwise Fail with the names of the failing checks. Each check carries a
     # pre-computed {name, dcr, status}.
     failing = []                        # failing check names (order-preserving, deduped)
@@ -164,7 +164,7 @@ def executive_summary(input_dict, output_dict, fig_paths) -> str:
     else:
         overall_design_status = "Pass"
 
-    # Overall Utilization Ratio — the maximum UR across all bridge components,
+    # Overall Utilization Ratio: maximum UR across all bridge components,
     # tagged with the governing component (e.g. "1.05 (Deck slab)").
     component_urs = []                  # (ur_value, component_label)
     if girder_max_ur is not None:
@@ -182,8 +182,11 @@ def executive_summary(input_dict, output_dict, fig_paths) -> str:
     else:
         overall_utilization_ratio = ""
 
-    gov = _tex(gov_name) if gov_name not in (None, '', 'None') else ''
+    gov_raw = str(gov_name).strip() if gov_name not in (None, '', 'None') else ''
+    gov = _tex(gov_raw) if gov_raw else ''
     ur = _tex(overall_utilization_ratio) if overall_utilization_ratio else ''
+    gov_table = (r"\makecell[c]{" + r"\\".join(_tex(p) for p in gov_raw.replace(".", ". ").replace(":", ": ").split()) + "}"
+                 if gov_raw else '')
 
     # --- Dynamic Table 1: fetch backend-populated labels via exact suffix pattern ---
     # defaults.py populates: KEY_MP_GD_SELECT_GIRDER + '.G{i}' = 'G{i}'
@@ -195,7 +198,7 @@ def executive_summary(input_dict, output_dict, fig_paths) -> str:
 
     # Column widths: row-label column fixed at 2.8cm; girder columns share remainder
     label_col_cm = 2.8
-    # Available width ≈ 15.0cm for A4 with 1in margins; each girder col gets equal share
+    # Available width is about 15.0cm for A4 with 1in margins; each girder col gets equal share
     girder_col_cm = round(max(1.5, (15.0 - label_col_cm) / n_cols), 1)
     col_spec = '|C{' + str(label_col_cm) + 'cm}|' + '|'.join(['C{' + str(girder_col_cm) + 'cm}'] * n_cols) + '|'
 
@@ -231,6 +234,17 @@ def executive_summary(input_dict, output_dict, fig_paths) -> str:
               + urs + '\n'
               r'\hline' + '\n'
               r'\end{tabular}')
+    table1 = render_report_table(
+        "Final Bridge Geometry (after optimization)",
+        [["Member ID"] + [mid for _, mid in labels],
+         ["Section Designation"] + [sec] * n_cols,
+         [r"Govern-\linebreak{}ing\linebreak{}Check"] + [gov_table] * n_cols,
+         [r"Utiliza-\linebreak{}tion Ratio"] + [ur] * n_cols],
+        headers=[""] + [lbl for lbl, _ in labels],
+        widths=[1.6] + [1.25] * n_cols,
+        align=["L"] + ["C"] * n_cols,
+        escape=False)
+    table1 = r"{\footnotesize" + "\n" + table1 + "\n}"
 
     # Key Design Outcomes rows: controlling check, its UR, and pass/fail per component.
     def _outcome_row(component, check, ur, is_fail):
@@ -299,8 +313,8 @@ This section provides a concise summary of the bridge design, key inputs, govern
 
 """ + cs_fig + '\n\n' + geom_fig + '\n\n' + table1 + r"""
 
-\vspace{0.4em}
-\noindent\textit{Note: Utilization ratio (UR) = demand / capacity. A value $< 1.0$ indicates a passing check.}
+\vspace{0.25em}\nopagebreak
+\noindent\parbox{\linewidth}{\textit{Note: UR = demand / capacity; UR $< 1.0$ indicates a passing check.}}
 
 \vspace{1em}
 
