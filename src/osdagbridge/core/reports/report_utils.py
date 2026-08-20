@@ -232,7 +232,10 @@ def render_grouped_report_table(caption, groups, headers=None, widths=None, alig
                 if chunk_idx > 0:
                     body_parts.append(r"\noalign{\penalty -10000}")
                 else:
-                    need = max(4, min(30, _group_cost(label, chunk_rows) + 2))
+                    if group_idx == 0 and chunk_rows:
+                        need = max(4, min(8, _visual_rows([label] + chunk_rows[0]) + 3))
+                    else:
+                        need = max(4, min(30, _group_cost(label, chunk_rows) + 2))
                     body_parts.append(r"\noalign{\needspace{" + str(need) + r"\baselineskip}}")
             body_parts.append(_group_tex(label, chunk_rows, group_idx, start))
     body = "\n".join(body_parts)
@@ -249,13 +252,17 @@ def render_grouped_report_table(caption, groups, headers=None, widths=None, alig
                 + r"\end{tabular}" + "\n"
                 + r"\end{table}")
 
-    first_head = caption_setup + "\n" + r"\caption{" + _tex(caption) + r"}\\" + "\n" + header
+    start_label = (r"\label{osdaggrpstart:" + table_key + r"}" if _GROUPED_TABLE_PROBE else "")
+    first_head = caption_setup + "\n" + r"\caption{" + _tex(caption) + r"}" + start_label + r"\\" + "\n" + header
     cont_head = (r"\multicolumn{" + str(ncols) + r"}{l}{\small\itshape Continued from previous page}\\"
                  + "\n" + header)
     cont_foot = (r"\multicolumn{" + str(ncols)
                  + r"}{r}{\small\itshape Continued on next page...}\\" + "\n")
-    first_chunk_need = max(8, min(32, (_group_cost(groups[0][0], groups[0][1]) if groups else 1) + 5))
-    return (r"\Needspace{" + str(first_chunk_need) + r"\baselineskip}" + "\n"
+    first_row_need = (_visual_rows([groups[0][0]] + groups[0][1][0]) if groups and groups[0][1] else 1)
+    first_chunk_need = max(4, min(8, first_row_need + 3))
+    start_guard = (r"\newpage" if (table_key + ":__start__") in _GROUPED_TABLE_BREAKS
+                   else r"\Needspace{" + str(first_chunk_need) + r"\baselineskip}")
+    return (start_guard + "\n"
             + r"\begin{longtable}{" + colspec + "}\n"
             + first_head + r"\endfirsthead" + "\n"
             + cont_head + r"\endhead" + "\n"

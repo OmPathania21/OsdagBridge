@@ -204,7 +204,7 @@ def preamble(project_name, job_number, report_date, report_version='Rev 0'):
 % Prevent tables from overflowing past the page bottom:
 % if fewer than 5 baseline-skips remain, break to the next page first.
 \BeforeBeginEnvironment{table}{\needspace{5\baselineskip}}
-\BeforeBeginEnvironment{longtable}{\needspace{5\baselineskip}}
+\BeforeBeginEnvironment{longtable}{\Needspace{5\baselineskip}}
 
 \definecolor{osdagGreen}{HTML}{91B014}
 
@@ -984,12 +984,20 @@ def generate_report(payload, request):
                 with open(aux_path, 'r', encoding='utf-8', errors='ignore') as fh:
                     aux = fh.read()
                 row_pages = {}
+                start_pages = {}
+                start_pattern = r"\\newlabel\{osdaggrpstart:([^}]+)\}\{\{.*?\}\{(\d+)\}"
+                for table_key, page in re.findall(start_pattern, aux):
+                    start_pages[table_key] = int(page)
                 pattern = r"\\newlabel\{osdaggrp:([^:}]+):(\d+):(\d+):([se])\}\{\{.*?\}\{(\d+)\}"
                 for table_key, group_idx, row_idx, edge, page in re.findall(pattern, aux):
                     key = (table_key, group_idx)
                     row_pages.setdefault(key, {}).setdefault(int(row_idx), {})[edge] = int(page)
 
                 breaks = set()
+                for table_key, start_page in start_pages.items():
+                    first_row_page = row_pages.get((table_key, '0'), {}).get(0, {}).get('s')
+                    if first_row_page is not None and first_row_page != start_page:
+                        breaks.add(f"{table_key}:__start__")
                 for (table_key, group_idx), rows in row_pages.items():
                     current_page = None
                     for row_idx in sorted(rows):
