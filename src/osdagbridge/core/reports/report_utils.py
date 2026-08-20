@@ -47,7 +47,7 @@ def _render_value(source_dict, key, unit=""):
     return _tex(val) + unit
 
 
-def render_report_table(caption, rows, headers=None, widths=None, align=None, longtable=False, escape=True, header_rows=None, header_clines=None):
+def render_report_table(caption, rows, headers=None, widths=None, align=None, longtable=False, escape=True, header_rows=None, header_clines=None, body_latex=None):
     headers = headers or []
     ncols = max(1, len(headers) or max((len(row) for row in rows), default=1))
     max_content_width = 15.5 - (0.43 * ncols) - (0.02 * (ncols + 1))
@@ -101,7 +101,7 @@ def render_report_table(caption, rows, headers=None, widths=None, align=None, lo
         header_row = " & ".join(_header(h) for h in headers) + r" \\"
         header = "\\hline\n" + header_row + "\n\\hline\n"
     fmt = _tex if escape else str
-    body = "\n".join(" & ".join(fmt(cell) for cell in row) + r" \\" + "\n\\hline" for row in rows)
+    body = body_latex if body_latex is not None else "\n".join(" & ".join(fmt(cell) for cell in row) + r" \\" + "\n\\hline" for row in rows)
 
     if longtable:
         repeat = (header + "\\endfirsthead\n" + header + "\\endhead\n") if header else "\\hline\n"
@@ -166,13 +166,15 @@ def render_grouped_report_table(caption, groups, headers=None, widths=None, alig
     widths = [round(w * scale, 2) for w in widths]
     align = align or ["L"] * ncols
 
-    def _header(cell):
+    def _header(cell, width):
         text = str(cell or "")
         text = text[:1].upper() + text[1:] if text else text
-        return r"\textbf{" + (_tex(text) if escape else text) + "}"
+        text = _tex(text) if escape else text
+        return (r"\parbox[c][2.8\baselineskip][c]{" + str(width)
+                + r"cm}{\centering\textbf{" + text + "}}")
     fmt = _tex if escape else str
     colspec = "|" + "|".join(f"{a}{{{w}cm}}" for a, w in zip(align, widths)) + "|"
-    header = "\\hline\n" + " & ".join(_header(h) for h in headers) + r" \\" + "\n\\hline\n"
+    header = "\\hline\n" + " & ".join(_header(h, w) for h, w in zip(headers, widths)) + r" \\" + "\n\\hline\n"
 
     table_key = grouped_table_key(caption)
 
