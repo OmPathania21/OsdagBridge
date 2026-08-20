@@ -1356,6 +1356,7 @@ This section presents all structural design checks performed by OsdagBridge. For
 """ + render_report_table(
     "Girder Design Summary (DCR / Utilization Ratio)", g_summary_rows,
     headers=["girder", "controlling LC / combination", "controlling check", "demand", "capacity", "UR", "status"],
+    widths=[1.25, 2.2, 2.25, 1.55, 1.55, 0.95, 1.45],
     align=["C", "C", "C", "C", "C", "C", "C"], longtable=True, escape=False) + r"""
 \noindent\textit{Note: UR = Demand / Capacity. A value $\leq 1.0$ indicates a passing check. The controlling check is the criterion with the highest UR for each girder, with the real load case/combination that drives it.}
 
