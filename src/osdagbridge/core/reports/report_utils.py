@@ -105,14 +105,15 @@ def render_report_table(caption, rows, headers=None, widths=None, align=None, lo
 
     if longtable:
         repeat = (header + "\\endfirsthead\n" + header + "\\endhead\n") if header and len(rows) > 12 else (header or "\\hline\n")
-        return ("\\begin{longtable}{" + colspec + "}\n" + repeat + body
-                + "\n\\captionsetup{justification=centering,font={small,it}}\n\\caption{"
-                + _tex(caption) + "}\\\\\n\\end{longtable}")
+        return ("\\begin{longtable}{" + colspec + "}\n"
+                + "\\captionsetup{justification=centering,font={small,it}}\n\\caption{"
+                + _tex(caption) + "}\\\\\n" + repeat + body
+                + "\n\\end{longtable}")
 
-    return ("\\begin{table}[H]\n\\centering\n\\begin{tabular}{" + colspec
+    return ("\\begin{table}[H]\n\\centering\n\\captionsetup{justification=centering,font={small,it}}\n\\caption{"
+            + _tex(caption) + "}\n\\begin{tabular}{" + colspec
             + "}\n" + (header or "\\hline\n") + body
-            + "\n\\end{tabular}\n\\captionsetup{justification=centering,font={small,it}}\n\\caption{"
-            + _tex(caption) + "}\n\\end{table}")
+            + "\n\\end{tabular}\n\\end{table}")
 
 
 def render_vehicle_live_load_table(rows):
