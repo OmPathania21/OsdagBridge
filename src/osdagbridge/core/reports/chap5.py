@@ -1034,7 +1034,7 @@ def ch5_design_checks(checks_data, bridge, chart_paths=None) -> str:
     #      End diaphragm has no report helpers yet → "---" for now.
     chart_paths = chart_paths or {}
     ur_chart = (_fig_embed(chart_paths.get("ur_summary"),
-                           "Utilization Ratio Summary", width=r"0.82\textwidth")
+                           "Utilization Ratio Summary", width=r"0.82\textwidth", numbered=True)
                 if chart_paths.get("ur_summary") else "")
     _pg_522 = (bridge.output_dict.get("design_results", {}) or {}).get("per_girder", {}) or {}
     _dd_522 = bridge.output_dict.get("deck_design_results", {}) or {}

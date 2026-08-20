@@ -138,11 +138,11 @@ def ch7_quantities(input_dict, chart_paths=None):
             "\n\\vspace{1em}\n"
             + _fig_embed(chart_paths.get("steel"),
                          "Structural Steel Tonnage Summary",
-                         width=r"0.82\textwidth")
+                         width=r"0.82\textwidth", numbered=True)
             + "\n\\vspace{0.5em}\n"
             + _fig_embed(chart_paths.get("concrete_rebar"),
                          "Concrete Volume and Reinforcement Steel Summary",
-                         width=r"0.82\textwidth")
+                         width=r"0.82\textwidth", numbered=True)
         )
     return r"""
 \chapter{Bill of Materials}

@@ -336,19 +336,20 @@ def _fig_or_placeholder(path, caption, width=r'0.9\textwidth'):
             r'\caption*{' + caption + '}\n'
             r'\end{figure}')
 
-def _fig_embed(path, caption, width=r'\textwidth', height=None):
+def _fig_embed(path, caption, width=r'\textwidth', height=None, numbered=False):
     """Embed a real figure when path is provided (already copied); otherwise use an fbox placeholder."""
     if path:
         p = path.replace('\\', '/')
         opts = 'width=' + width
         if height:
             opts += ',height=' + height + ',keepaspectratio'
+        cap_cmd = r'\caption' if numbered else r'\caption*'
         return (r'\begin{figure}[H]' + '\n'
                 r'\vspace{-0.5em}' + '\n'
                 r'\centering' + '\n'
                 r'\includegraphics[' + opts + ']{' + p + '}\n'
                 r'\vspace{0.5em}' + '\n'
-                r'\caption*{\small ' + caption + '}\n'
+                + cap_cmd + r'{\small ' + caption + '}\n'
                 r'\vspace{-0.5em}' + '\n'
                 r'\end{figure}')
     # fbox placeholder — matches template exactly
