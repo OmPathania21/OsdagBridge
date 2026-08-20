@@ -104,7 +104,7 @@ def render_report_table(caption, rows, headers=None, widths=None, align=None, lo
     body = "\n".join(" & ".join(fmt(cell) for cell in row) + r" \\" + "\n\\hline" for row in rows)
 
     if longtable:
-        repeat = (header + "\\endfirsthead\n" + header + "\\endhead\n") if header and len(rows) > 12 else (header or "\\hline\n")
+        repeat = (header + "\\endfirsthead\n" + header + "\\endhead\n") if header else "\\hline\n"
         return ("\\begin{longtable}{" + colspec + "}\n"
                 + "\\captionsetup{justification=centering,font={small,it}}\n\\caption{"
                 + _tex(caption) + "}\\\\\n" + repeat + body
