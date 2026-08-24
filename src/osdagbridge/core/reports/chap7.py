@@ -148,7 +148,7 @@ def ch7_quantities(input_dict, chart_paths=None):
 \chapter{Bill of Materials}
 \label{ch:material-takeoff}
 
-\noindent\textbf{Table 7.1  Bill of Superstructure (Steel, Concrete, and Reinforcement Quantities)}
+\noindent\textbf{Table 7.1  Bill of Superstructure}
 
 \begingroup
 \setlength{\tabcolsep}{3.5pt}
