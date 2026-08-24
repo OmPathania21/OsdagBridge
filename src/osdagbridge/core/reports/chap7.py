@@ -166,7 +166,7 @@ def ch7_quantities(input_dict, chart_paths=None):
 \chapter{Bill of Materials}
 \label{ch:material-takeoff}
 """ + render_report_table(
-        "Bill of Superstructure", rows,
+        "Bill of Materials for Superstructure", rows,
         headers=["S.N.", "Item Description", "Volume", "Quantity", "Total Volume", "Weight (T)", "Total Weight (T)"],
         widths=[1.0, 3.8, 2.5, 2.1, 1.8, 1.7, 1.8],
         align=["C", "L", "C", "C", "C", "C", "C"],
