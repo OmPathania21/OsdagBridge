@@ -512,14 +512,14 @@ class ReportChartGenerator:
                     "material_steel_quantities.pdf",
                     ["Girders", "Cross Bracing", "End Diaphragms"],
                     [self._number(quantities.get("steel_girders_wt_total")), bracing, diaphragm],
-                    "Structural Steel Component", "Weight (MT)", "Structural Steel Tonnage",
+                    "Structural Steel Component", "Weight (T)", "Structural Steel Tonnage",
                     ["#3b6ea8", "#6aa84f", "#c27c3a"]),
                 "concrete_rebar": self._save_bar_chart(
                     "material_concrete_rebar_quantities.pdf",
                     ["Concrete Volume", "Reinforcement Steel"],
                     [self._number(quantities.get("concrete_deck_vol_total")),
                      self._number(quantities.get("rebar_deck_wt_total"))],
-                    "Material Quantity Type", "Quantity (m3 / MT)", "Concrete Volume and Reinforcement Steel",
+                    "Material Quantity Type", "Quantity (m3 / T)", "Concrete Volume and Reinforcement Steel",
                     ["#7a9cc6", "#b55353"]),
             }
         except Exception:
