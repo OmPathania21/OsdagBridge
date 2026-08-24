@@ -1,6 +1,6 @@
 import math
 
-from osdagbridge.core.reports.report_utils import _fig_embed
+from osdagbridge.core.reports.report_utils import _fig_embed, render_report_table
 from osdagbridge.core.utils.common import (
     KEY_MP_CB_BOTTOM_CHORD,
     KEY_MP_CB_BOTTOM_CHORD_SECTION_DESIG,
@@ -46,6 +46,12 @@ def _num(value, default=0.0):
 
 def _yes(value):
     return str(value).strip().lower() in {"yes", "true", "1"}
+
+
+def _wrap_multiply(value):
+    text = str(value)
+    times = r"\allowbreak{}\times\allowbreak{}" if "$" in text else r"\allowbreak{}$\times$\allowbreak{}"
+    return text.replace(r"\times", r"\allowbreak{}\times\allowbreak{}").replace("×", times).replace(" x ", f" {times} ")
 
 
 def _angle_area_m2(input_dict, base_key):
@@ -144,39 +150,26 @@ def ch7_quantities(input_dict, chart_paths=None):
                          "Concrete Volume and Reinforcement Steel Summary",
                          width=r"0.82\textwidth", numbered=True)
         )
+    rows = [
+        ["1", "Structural Steel (IS 2062) for Girders", _wrap_multiply(input_dict.get("steel_girders_vol_formula", "N.A.")), input_dict.get("steel_girders_qty", "N.A."), input_dict.get("steel_girders_vol_total", "N.A."), input_dict.get("steel_girders_wt_single", "N.A."), input_dict.get("steel_girders_wt_total", "N.A.")],
+        ["2(a)", "Cross Bracing - Top Chord", _wrap_multiply(input_dict.get("bracing_top_vol_formula", "N.A.")), input_dict.get("bracing_top_qty", "N.A."), input_dict.get("bracing_top_vol_total", "N.A."), input_dict.get("bracing_top_wt_single", "N.A."), input_dict.get("bracing_top_wt_total", "N.A.")],
+        ["2(b)", "Cross Bracing - Bottom Chord", _wrap_multiply(input_dict.get("bracing_bot_vol_formula", "N.A.")), input_dict.get("bracing_bot_qty", "N.A."), input_dict.get("bracing_bot_vol_total", "N.A."), input_dict.get("bracing_bot_wt_single", "N.A."), input_dict.get("bracing_bot_wt_total", "N.A.")],
+        ["2(c)", "Cross Bracing - Diagonal Chord", _wrap_multiply(input_dict.get("bracing_diag_vol_formula", "N.A.")), input_dict.get("bracing_diag_qty", "N.A."), input_dict.get("bracing_diag_vol_total", "N.A."), input_dict.get("bracing_diag_wt_single", "N.A."), input_dict.get("bracing_diag_wt_total", "N.A.")],
+        ["3", "Stiffeners", _wrap_multiply(input_dict.get("stiffeners_vol_formula", "N.A.")), input_dict.get("stiffeners_qty", "N.A."), input_dict.get("stiffeners_vol_total", "N.A."), input_dict.get("stiffeners_wt_single", "N.A."), input_dict.get("stiffeners_wt_total", "N.A.")],
+        ["4", "Connections", _wrap_multiply(input_dict.get("connections_vol_formula", "N.A.")), input_dict.get("connections_qty", "N.A."), input_dict.get("connections_vol_total", "N.A."), input_dict.get("connections_wt_single", "N.A."), input_dict.get("connections_wt_total", "N.A.")],
+        ["5", "Concrete (M40) for Deck Slab", _wrap_multiply(input_dict.get("concrete_deck_vol_formula", "N.A.")), input_dict.get("concrete_deck_qty", "N.A."), input_dict.get("concrete_deck_vol_total", "N.A."), input_dict.get("concrete_deck_wt_single", "N.A."), input_dict.get("concrete_deck_wt_total", "N.A.")],
+        ["6", "Reinforcement Steel (Fe 500)", _wrap_multiply(input_dict.get("rebar_deck_vol_formula", "N.A.")), input_dict.get("rebar_deck_qty", "N.A."), input_dict.get("rebar_deck_vol_total", "N.A."), input_dict.get("rebar_deck_wt_single", "N.A."), input_dict.get("rebar_deck_wt_total", "N.A.")],
+        ["7", "Shear Stud Connectors", _wrap_multiply(input_dict.get("shear_studs_vol_formula", "N.A.")), input_dict.get("shear_studs_qty", "N.A."), input_dict.get("shear_studs_vol_total", "N.A."), input_dict.get("shear_studs_wt_single", "N.A."), input_dict.get("shear_studs_wt_total", "N.A.")],
+        ["8", "Crash Barrier", _wrap_multiply(input_dict.get("crash_barrier_vol_formula", "N.A.")), input_dict.get("crash_barrier_qty", "N.A."), input_dict.get("crash_barrier_vol_total", "N.A."), input_dict.get("crash_barrier_wt_single", "N.A."), input_dict.get("crash_barrier_wt_total", "N.A.")],
+    ]
     return r"""
 \chapter{Bill of Materials}
 \label{ch:material-takeoff}
-
-\noindent\textbf{Table 7.1  Bill of Superstructure}
-
-\begingroup
-\setlength{\tabcolsep}{3.5pt}
-\begin{longtable}{|C{1.0cm}|L{3.8cm}|C{2.6cm}|C{1.8cm}|C{1.8cm}|C{1.8cm}|C{1.8cm}|}
-\hline
-\textbf{S.N.} & \textbf{Item Description} & \textbf{Volume} & \textbf{Quantity} & \textbf{Total Volume} & \textbf{Weight (T)} & \textbf{Total Weight (T)} \\
-\hline
-1 & Structural Steel (IS 2062) for Girders & """ + str(input_dict.get("steel_girders_vol_formula", "N.A.")) + r""" & """ + str(input_dict.get("steel_girders_qty", "N.A.")) + r""" & """ + str(input_dict.get("steel_girders_vol_total", "N.A.")) + r""" & """ + str(input_dict.get("steel_girders_wt_single", "N.A.")) + r""" & """ + str(input_dict.get("steel_girders_wt_total", "N.A.")) + r""" \\
-\hline
-2(a) & Cross Bracing - Top Chord & """ + str(input_dict.get("bracing_top_vol_formula", "N.A.")) + r""" & """ + str(input_dict.get("bracing_top_qty", "N.A.")) + r""" & """ + str(input_dict.get("bracing_top_vol_total", "N.A.")) + r""" & """ + str(input_dict.get("bracing_top_wt_single", "N.A.")) + r""" & """ + str(input_dict.get("bracing_top_wt_total", "N.A.")) + r""" \\
-\hline
-2(b) & Cross Bracing - Bottom Chord & """ + str(input_dict.get("bracing_bot_vol_formula", "N.A.")) + r""" & """ + str(input_dict.get("bracing_bot_qty", "N.A.")) + r""" & """ + str(input_dict.get("bracing_bot_vol_total", "N.A.")) + r""" & """ + str(input_dict.get("bracing_bot_wt_single", "N.A.")) + r""" & """ + str(input_dict.get("bracing_bot_wt_total", "N.A.")) + r""" \\
-\hline
-2(c) & Cross Bracing - Diagonal Chord & """ + str(input_dict.get("bracing_diag_vol_formula", "N.A.")) + r""" & """ + str(input_dict.get("bracing_diag_qty", "N.A.")) + r""" & """ + str(input_dict.get("bracing_diag_vol_total", "N.A.")) + r""" & """ + str(input_dict.get("bracing_diag_wt_single", "N.A.")) + r""" & """ + str(input_dict.get("bracing_diag_wt_total", "N.A.")) + r""" \\
-\hline
-3 & Stiffeners & """ + str(input_dict.get("stiffeners_vol_formula", "N.A.")) + r""" & """ + str(input_dict.get("stiffeners_qty", "N.A.")) + r""" & """ + str(input_dict.get("stiffeners_vol_total", "N.A.")) + r""" & """ + str(input_dict.get("stiffeners_wt_single", "N.A.")) + r""" & """ + str(input_dict.get("stiffeners_wt_total", "N.A.")) + r""" \\
-\hline
-4 & Connections & """ + str(input_dict.get("connections_vol_formula", "N.A.")) + r""" & """ + str(input_dict.get("connections_qty", "N.A.")) + r""" & """ + str(input_dict.get("connections_vol_total", "N.A.")) + r""" & """ + str(input_dict.get("connections_wt_single", "N.A.")) + r""" & """ + str(input_dict.get("connections_wt_total", "N.A.")) + r""" \\
-\hline
-5 & Concrete (M40) for Deck Slab & """ + str(input_dict.get("concrete_deck_vol_formula", "N.A.")) + r""" & """ + str(input_dict.get("concrete_deck_qty", "N.A.")) + r""" & """ + str(input_dict.get("concrete_deck_vol_total", "N.A.")) + r""" & """ + str(input_dict.get("concrete_deck_wt_single", "N.A.")) + r""" & """ + str(input_dict.get("concrete_deck_wt_total", "N.A.")) + r""" \\
-\hline
-6 & Reinforcement Steel (Fe 500) & """ + str(input_dict.get("rebar_deck_vol_formula", "N.A.")) + r""" & """ + str(input_dict.get("rebar_deck_qty", "N.A.")) + r""" & """ + str(input_dict.get("rebar_deck_vol_total", "N.A.")) + r""" & """ + str(input_dict.get("rebar_deck_wt_single", "N.A.")) + r""" & """ + str(input_dict.get("rebar_deck_wt_total", "N.A.")) + r""" \\
-\hline
-7 & Shear Stud Connectors & """ + str(input_dict.get("shear_studs_vol_formula", "N.A.")) + r""" & """ + str(input_dict.get("shear_studs_qty", "N.A.")) + r""" & """ + str(input_dict.get("shear_studs_vol_total", "N.A.")) + r""" & """ + str(input_dict.get("shear_studs_wt_single", "N.A.")) + r""" & """ + str(input_dict.get("shear_studs_wt_total", "N.A.")) + r""" \\
-\hline
-8 & Crash Barrier & """ + str(input_dict.get("crash_barrier_vol_formula", "N.A.")) + r""" & """ + str(input_dict.get("crash_barrier_qty", "N.A.")) + r""" & """ + str(input_dict.get("crash_barrier_vol_total", "N.A.")) + r""" & """ + str(input_dict.get("crash_barrier_wt_single", "N.A.")) + r""" & """ + str(input_dict.get("crash_barrier_wt_total", "N.A.")) + r""" \\
-\hline
-\end{longtable}
-""" + chart_figures
+""" + render_report_table(
+        "Bill of Superstructure", rows,
+        headers=["S.N.", "Item Description", "Volume", "Quantity", "Total Volume", "Weight (T)", "Total Weight (T)"],
+        widths=[1.0, 3.8, 2.5, 2.1, 1.8, 1.7, 1.8],
+        align=["C", "L", "C", "C", "C", "C", "C"],
+        longtable=True, escape=False) + chart_figures
 
 
