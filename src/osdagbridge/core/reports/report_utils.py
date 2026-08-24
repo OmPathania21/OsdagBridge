@@ -519,7 +519,7 @@ class ReportChartGenerator:
                     ["Concrete Volume", "Reinforcement Steel"],
                     [self._number(quantities.get("concrete_deck_vol_total")),
                      self._number(quantities.get("rebar_deck_wt_total"))],
-                    "Material Quantity Type", "Quantity (m3 / T)", "Concrete Volume and Reinforcement Steel",
+                    "Material Quantity Type", r"Quantity (m$^3$ / T)", "Concrete Volume and Reinforcement Steel",
                     ["#7a9cc6", "#b55353"]),
             }
         except Exception:
