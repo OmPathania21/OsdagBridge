@@ -247,33 +247,52 @@ def executive_summary(input_dict, output_dict, fig_paths) -> str:
     table1 = r"{\footnotesize" + "\n" + table1 + "\n}"
 
     # Key Design Outcomes rows: controlling check, its UR, and pass/fail per component.
-    def _outcome_row(component, check, ur, is_fail):
+    def _outcome_cells(component, check, ur, is_fail):
         chk_cell = _tex(check) if check else "---"
         if ur is None:
             ur_cell, status_cell = "---", "---"
         else:
             ur_cell = f"{ur:.2f}"
             status_cell = r"\textcolor{red}{Fail}" if is_fail else "Pass"
-        return (component + r" & " + chk_cell + r" & " + ur_cell + r" & "
-                + status_cell + r" \\" + "\n\\hline")
+        return [component, chk_cell, ur_cell, status_cell]
 
     _cb_ur, _cb_check = _governing_member(cb_results)
     _ed_ur, _ed_check = _governing_member(ed_results)
     _dk_ur, _dk_check = _deck_governing(deck_results)
 
-    outcome_rows = "\n".join([
-        _outcome_row("Girder Design", gov_name, girder_max_ur, bool(failing)) if per_girder
-            else _outcome_row("Girder Design", "", None, False),
-        _outcome_row("Cross Bracing Design", _cb_check, _cb_ur, _cb_ur is not None and _cb_ur > 1.0),
-        _outcome_row("End Diaphragm Design", _ed_check, _ed_ur, _ed_ur is not None and _ed_ur > 1.0),
-        _outcome_row("Deck Design", _dk_check, _dk_ur, _dk_ur is not None and _dk_ur > 1.0),
-    ])
+    overview_table = render_report_table(
+        "Project Overview",
+        [[r"\textbf{Bridge Type}", _render_value(input_dict, KEY_STRUCTURE_TYPE)],
+         [r"\textbf{Design Standard}", "IRC 5, IRC 6, IRC 22, IRC 24, IS 800"],
+         [r"\textbf{Span}", _render_value(input_dict, KEY_SPAN, ' m')],
+         [r"\textbf{Carriageway Width}", _render_value(input_dict, KEY_CARRIAGEWAY_WIDTH, ' m')],
+         [r"\textbf{No. of Girders}", _render_value(input_dict, KEY_TS_NO_OF_GIRDERS)],
+         [r"\textbf{Girder Spacing}", _render_value(input_dict, KEY_TS_GIRDER_SPACING)],
+         [r"\textbf{Deck Thickness}", _render_value(input_dict, KEY_TS_DECK_THICKNESS)],
+         [r"\textbf{Overall Design Status}", _tex(overall_design_status)],
+         [r"\textbf{Governing Check}", gov],
+         [r"\textbf{Overall Utilization Ratio (max)}", ur]],
+        widths=[5.5, 8.5], align=["L", "L"], escape=False)
+
+    outcome_rows = [
+        _outcome_cells("Girder Design", gov_name, girder_max_ur, bool(failing)) if per_girder
+            else _outcome_cells("Girder Design", "", None, False),
+        _outcome_cells("Cross Bracing Design", _cb_check, _cb_ur, _cb_ur is not None and _cb_ur > 1.0),
+        _outcome_cells("End Diaphragm Design", _ed_check, _ed_ur, _ed_ur is not None and _ed_ur > 1.0),
+        _outcome_cells("Deck Design", _dk_check, _dk_ur, _dk_ur is not None and _dk_ur > 1.0),
+    ]
+    outcome_table = render_report_table(
+        "Design Outcome Summary", outcome_rows,
+        headers=["component", "controlling check", "utilization ratio", "status"],
+        widths=[4.0, 5.5, 2.8, 1.8], align=["L", "L", "C", "C"], escape=False)
 
     return r"""
 \newpage
 {\centering\Large\bfseries Executive Summary\par}
 \addcontentsline{toc}{chapter}{Executive Summary}
 \vspace{0.8em}
+\setcounter{table}{0}
+\renewcommand{\thetable}{E.\arabic{table}}
 
 This section provides a concise summary of the bridge design, key inputs, governing loads, and final design outcomes.
 
@@ -281,33 +300,7 @@ This section provides a concise summary of the bridge design, key inputs, govern
 \addcontentsline{toc}{section}{Project Overview}
 \label{sec:project-overview}
 
-
-\begin{tabular}{|L{5.5cm}|L{8.5cm}|}
-\hline
-\textbf{Bridge Type} & """ + (_render_value(input_dict, KEY_STRUCTURE_TYPE)) + r""" \\
-\hline
-\textbf{Design Standard} & IRC 5, IRC 6, IRC 22, IRC 24, IS 800 \\
-\hline
-\textbf{Span} & """ + (_render_value(input_dict, KEY_SPAN, ' m')) + r""" \\
-\hline
-\textbf{Carriageway Width} & """ + (_render_value(input_dict, KEY_CARRIAGEWAY_WIDTH, ' m')) + r""" \\
-\hline
-\textbf{No. of Girders} & """ + (_render_value(input_dict, KEY_TS_NO_OF_GIRDERS)) + r""" \\
-\hline
-\textbf{Girder Spacing} & """ + (_render_value(input_dict, KEY_TS_GIRDER_SPACING)) + r""" \\
-\hline
-\textbf{Deck Thickness} & """ + (_render_value(input_dict, KEY_TS_DECK_THICKNESS)) + r""" \\
-\hline
-\textbf{Overall Design Status} & """ + (_tex(overall_design_status)) + r""" \\
-\hline
-\textbf{Governing Check} & """ + gov + r""" \\
-\hline
-\textbf{Overall Utilization Ratio (max)} & """ + ur + r""" \\
-\hline
-\end{tabular}
-
-
-""" + plan_fig + r"""
+""" + overview_table + "\n\n" + plan_fig + r"""
 
 \newpage
 
@@ -322,12 +315,7 @@ This section provides a concise summary of the bridge design, key inputs, govern
 \addcontentsline{toc}{section}{Key Design Outcomes Summary}
 \label{sec:key-outcomes}
 
-\begin{tabular}{|L{4.0cm}|L{5.5cm}|C{2.8cm}|C{1.8cm}|}
-\hline
-\textbf{Component} & \textbf{Controlling Check} & \textbf{Utilization Ratio} & \textbf{Status} \\
-\hline
-""" + outcome_rows + r"""
-\end{tabular}
+""" + outcome_table + r"""
 
 \section*{Design Assumptions and Limitations}
 \addcontentsline{toc}{section}{Design Assumptions and Limitations}
@@ -341,6 +329,7 @@ This section provides a concise summary of the bridge design, key inputs, govern
 \end{itemize}
 
 % Restore numbered chapter format
+\renewcommand{\thetable}{\thechapter.\arabic{table}}
 \titleformat{\chapter}[block]{\normalfont\Large\bfseries\centering}{\thechapter}{1em}{}
 \titlespacing*{\chapter}{0pt}{-30pt}{10pt}
 """
