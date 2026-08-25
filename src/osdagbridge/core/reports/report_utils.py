@@ -128,6 +128,51 @@ def render_vehicle_live_load_table(rows):
         align=["L", "C", "C", "C", "C", "C"], longtable=True, escape=False)
 
 
+def render_analysis_demands_table(body_latex):
+    header = r"""\hline
+\multirow{2}{*}{\makecell{\textbf{Load}\\\textbf{Case/}\\\textbf{Comb.}}}
+& \multicolumn{3}{c|}{\textbf{Bending Moment}}
+& \multicolumn{3}{c|}{\textbf{Shear Force}}
+& \multicolumn{2}{c|}{\textbf{Reaction at Supports}}\\
+\cline{2-9}
+& \makecell{\textbf{Max}\\\textbf{(kNm)}}
+& \textbf{Girder}
+& \makecell{\textbf{Loc.}\\\textbf{(m)}}
+& \makecell{\textbf{Max}\\\textbf{(kN)}}
+& \textbf{Girder}
+& \makecell{\textbf{Loc.}\\\textbf{(m)}}
+& \makecell{\textbf{Left}}
+& \makecell{\textbf{Right}}\\
+\hline
+"""
+    return (r"""\vspace{1em}
+\begingroup
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.25}
+\setlength{\LTleft}{\dimexpr(\textwidth-17.8cm)/2\relax}
+\setlength{\LTright}{\dimexpr(\textwidth-17.8cm)/2\relax}
+\begin{longtable}{|
+>{\centering\arraybackslash}p{3.1cm}|
+>{\centering\arraybackslash}p{1.7cm}|
+>{\centering\arraybackslash}p{1.2cm}|
+>{\centering\arraybackslash}p{1.3cm}|
+>{\centering\arraybackslash}p{1.7cm}|
+>{\centering\arraybackslash}p{1.2cm}|
+>{\centering\arraybackslash}p{1.3cm}|
+>{\centering\arraybackslash}p{1.6cm}|
+>{\centering\arraybackslash}p{1.6cm}|}
+\captionsetup{justification=centering,font={small,it}}
+\caption{Summary of Maximum Demands}\\
+""" + header + r"""\endfirsthead
+""" + header + r"""\endhead
+""" + body_latex + r"""
+\hline
+\end{longtable}
+\endgroup
+""")
+
+
 def render_parameter_value_table(caption, rows, longtable=False):
     return render_report_table(
         caption, rows, headers=["parameter", "value"], widths=[6.4, 8.6],
