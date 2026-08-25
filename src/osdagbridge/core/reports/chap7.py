@@ -1,14 +1,5 @@
-import math
-
 from osdagbridge.core.reports.report_utils import _fig_embed, render_report_table
 from osdagbridge.core.utils.common import (
-    KEY_MP_CB_BOTTOM_CHORD,
-    KEY_MP_CB_BOTTOM_CHORD_SECTION_DESIG,
-    KEY_MP_CB_BRACING_SECTION_DESIGNATION,
-    KEY_MP_CB_NO_OF_CROSS_BRACINGS,
-    KEY_MP_CB_SPACING,
-    KEY_MP_CB_TOP_CHORD,
-    KEY_MP_CB_TOP_CHORD_SECTION_DESIG,
     KEY_MP_GIRDER_DEPTH,
     KEY_MP_STIFFENER_BEARING_OUTSTAND,
     KEY_MP_STIFFENER_BEARING_THICKNESS,
@@ -18,34 +9,148 @@ from osdagbridge.core.utils.common import (
     KEY_MP_STIFFENER_INTERMEDIATE_THICKNESS,
     KEY_MP_STIFFENER_NO_BEARING_STIFFENERS,
     KEY_SPAN,
-    KEY_TS_GIRDER_SPACING,
+    KEY_TD_CB_BOTTOM_CHORD_PROP_A,
+    KEY_TD_CB_PROP_A,
+    KEY_TD_CB_TOP_CHORD_PROP_A,
     KEY_TS_NO_OF_GIRDERS,
-    get_angle_section_properties,
 )
+
+
+_STEEL_DENSITY_T_PER_M3 = 7.85
 
 
 def _is_blank(value):
     return value in ("", None, "N.A.", "NA", "None", "---")
 
 
-def _first_value(input_dict, base_key):
-    for key in [base_key] + sorted(k for k in input_dict if k.startswith(base_key + ".")):
+def _num(value):
+    if _is_blank(value):
+        return None
+    try:
+        return float(str(value).strip())
+    except Exception:
+        return None
+
+
+def _truth(value):
+    if isinstance(value, bool):
+        return value
+    if _is_blank(value):
+        return None
+    text = str(value).strip().lower()
+    if text in {"yes", "true", "1"}:
+        return True
+    if text in {"no", "false", "0"}:
+        return False
+    return None
+
+
+def _girder_value(input_dict, base_key, girder_index):
+    for key in (f"{base_key}.G{girder_index}.M1", base_key, f"{base_key}.G1.M1"):
         value = input_dict.get(key)
         if not _is_blank(value):
             return value
     return None
 
 
-def _num(value, default=0.0):
-    try:
-        text = str(value).strip()
-        return default if _is_blank(text) else float(text)
-    except Exception:
-        return default
+def _fmt_qty(prefix, single_vol, qty, total_vol):
+    wt_single = single_vol * _STEEL_DENSITY_T_PER_M3
+    wt_total = total_vol * _STEEL_DENSITY_T_PER_M3
+    return {
+        f"{prefix}_vol_formula": f"${single_vol:.6f}\\text{{ m}}^3 \\times {qty} = {total_vol:.5f}\\text{{ m}}^3$",
+        f"{prefix}_qty": str(qty),
+        f"{prefix}_vol_total": f"{total_vol:.2f}",
+        f"{prefix}_wt_single": f"{wt_single:.4f}",
+        f"{prefix}_wt_total": f"{wt_total:.2f}",
+    }
 
 
-def _yes(value):
-    return str(value).strip().lower() in {"yes", "true", "1"}
+def _fmt_bracing(prefix, area, length, qty, total_vol):
+    wt_single = area * length * _STEEL_DENSITY_T_PER_M3
+    wt_total = total_vol * _STEEL_DENSITY_T_PER_M3
+    return {
+        f"{prefix}_vol_formula": f"${area:.5f}\\text{{ m}}^2 \\times {length:.2f}\\text{{ m}} = {area * length:.5f}\\text{{ m}}^3$",
+        f"{prefix}_qty": str(qty),
+        f"{prefix}_vol_total": f"{total_vol:.2f}",
+        f"{prefix}_wt_single": f"{wt_single:.4f}",
+        f"{prefix}_wt_total": f"{wt_total:.2f}",
+    }
+
+
+def _derive_cross_bracing_quantities(output_dict):
+    cb_forces = (output_dict or {}).get("crossbracing_forces_dict", {}) or {}
+    geometry = cb_forces.get("geometry", {}) or {}
+    pairs = list((cb_forces.get("pairs", {}) or {}).keys())
+    if not pairs:
+        return {}
+
+    def _member(prefix, area_key, length_key, enabled_map=None, qty_factor=1):
+        total_qty = 0
+        total_vol = 0.0
+        first_area = first_length = None
+        for pair in pairs:
+            enabled = True if enabled_map is None else _truth((enabled_map or {}).get(pair))
+            if enabled is None:
+                return {}
+            if not enabled:
+                continue
+            pair_id = pair.replace("-", "")
+            area_cm2 = _num(output_dict.get(f"{area_key}.{pair_id}"))
+            geom = geometry.get(pair, {}) or {}
+            length = _num(geom.get(length_key))
+            panels = _num(geom.get("no_of_cross_bracings"))
+            if area_cm2 is None or length is None or panels is None:
+                return {}
+            area = area_cm2 / 10000.0
+            qty = int(panels) * qty_factor
+            total_qty += qty
+            total_vol += area * length * qty
+            first_area = area if first_area is None else first_area
+            first_length = length if first_length is None else first_length
+        return _fmt_bracing(prefix, first_area, first_length, total_qty, total_vol) if total_qty else {}
+
+    values = {}
+    values.update(_member("bracing_top", KEY_TD_CB_TOP_CHORD_PROP_A, "girder_spacing_m", cb_forces.get("top_chord")))
+    values.update(_member("bracing_bot", KEY_TD_CB_BOTTOM_CHORD_PROP_A, "girder_spacing_m", cb_forces.get("bottom_chord")))
+    values.update(_member("bracing_diag", KEY_TD_CB_PROP_A, "diagonal_length_m", qty_factor=2))
+    return values
+
+
+def _derive_stiffener_quantities(input_dict):
+    span = _num(input_dict.get(KEY_SPAN))
+    n_girders = _num(input_dict.get(KEY_TS_NO_OF_GIRDERS))
+    if span is None or n_girders is None:
+        return {}
+
+    total_qty = 0
+    total_vol = 0.0
+    for gi in range(1, int(n_girders) + 1):
+        depth = _num(_girder_value(input_dict, KEY_MP_GIRDER_DEPTH, gi))
+        bearing_count = _num(_girder_value(input_dict, KEY_MP_STIFFENER_NO_BEARING_STIFFENERS, gi))
+        bearing_t = _num(_girder_value(input_dict, KEY_MP_STIFFENER_BEARING_THICKNESS, gi))
+        bearing_w = _num(_girder_value(input_dict, KEY_MP_STIFFENER_BEARING_OUTSTAND, gi))
+        if depth is not None and bearing_count is not None and bearing_t is not None and bearing_w is not None:
+            qty = int(bearing_count) * 2
+            total_qty += qty
+            total_vol += qty * depth * bearing_t * bearing_w / 1e9
+
+        if _truth(_girder_value(input_dict, KEY_MP_STIFFENER_INTERMEDIATE, gi)):
+            spacing = _num(_girder_value(input_dict, KEY_MP_STIFFENER_INTERMEDIATE_SPACING, gi))
+            int_t = _num(_girder_value(input_dict, KEY_MP_STIFFENER_INTERMEDIATE_THICKNESS, gi))
+            int_w = _num(_girder_value(input_dict, KEY_MP_STIFFENER_INTERMEDIATE_OUTSTAND, gi))
+            if depth is None or spacing is None or int_t is None or int_w is None:
+                return {}
+            qty = max(0, int((span * 1000.0) / spacing) - 1) * 2
+            total_qty += qty
+            total_vol += qty * depth * int_t * int_w / 1e9
+    return _fmt_qty("stiffeners", total_vol / total_qty, total_qty, total_vol) if total_qty and total_vol else {}
+
+
+def ch7_derived_quantities(input_dict, output_dict):
+    values = {}
+    values.update(_derive_cross_bracing_quantities(output_dict or {}))
+    values.update(_derive_stiffener_quantities(input_dict or {}))
+    return values
 
 
 def _wrap_multiply(value):
@@ -58,89 +163,11 @@ def _qty_header(text):
     return r"\parbox[t][1.75cm][c]{\linewidth}{\centering " + text + "}"
 
 
-def _angle_area_m2(input_dict, base_key):
-    designation = _first_value(input_dict, base_key)
-    if not designation:
-        return 0.0
-    try:
-        return _num(get_angle_section_properties(str(designation)).get("Area")) / 10000.0
-    except Exception:
-        return 0.0
-
-
-def _ch7_quantity_fallbacks(input_dict):
-    span = _num(input_dict.get(KEY_SPAN))
-    n_girders = int(_num(input_dict.get(KEY_TS_NO_OF_GIRDERS)))
-    girder_spacing = _num(input_dict.get(KEY_TS_GIRDER_SPACING))
-    if span <= 0 or n_girders <= 0:
-        return {}
-
-    values = {}
-    n_panels = int(_num(_first_value(input_dict, KEY_MP_CB_NO_OF_CROSS_BRACINGS)))
-    cb_spacing = _num(_first_value(input_dict, KEY_MP_CB_SPACING))
-    if cb_spacing <= 0 and n_panels > 0:
-        cb_spacing = span / (n_panels + 1)
-    if n_panels <= 0 and cb_spacing > 0:
-        n_panels = max(1, round(span / cb_spacing) - 1)
-
-    diag_area = _angle_area_m2(input_dict, KEY_MP_CB_BRACING_SECTION_DESIGNATION)
-    top_area = _angle_area_m2(input_dict, KEY_MP_CB_TOP_CHORD_SECTION_DESIG) or diag_area
-    bot_area = _angle_area_m2(input_dict, KEY_MP_CB_BOTTOM_CHORD_SECTION_DESIG) or top_area
-    diag_len = math.hypot(cb_spacing, girder_spacing) if cb_spacing > 0 and girder_spacing > 0 else 0.0
-
-    def _steel(prefix, area, length, qty):
-        if area <= 0 or length <= 0 or qty <= 0:
-            return
-        vol_single = area * length
-        vol_total = vol_single * qty
-        wt_single = vol_single * 7.85
-        wt_total = vol_total * 7.85
-        values[f"{prefix}_vol_formula"] = f"${area:.5f}\\text{{ m}}^2 \\times {length:.2f}\\text{{ m}} = {vol_single:.5f}\\text{{ m}}^3$"
-        values[f"{prefix}_qty"] = str(qty)
-        values[f"{prefix}_vol_total"] = f"{vol_total:.2f}"
-        values[f"{prefix}_wt_single"] = f"{wt_single:.4f}"
-        values[f"{prefix}_wt_total"] = f"{wt_total:.2f}"
-
-    if n_panels > 0:
-        if _yes(_first_value(input_dict, KEY_MP_CB_TOP_CHORD) or "Yes"):
-            _steel("bracing_top", top_area, girder_spacing, (n_girders - 1) * n_panels)
-        if _yes(_first_value(input_dict, KEY_MP_CB_BOTTOM_CHORD) or "Yes"):
-            _steel("bracing_bot", bot_area, girder_spacing, (n_girders - 1) * n_panels)
-        _steel("bracing_diag", diag_area, diag_len, (n_girders - 1) * n_panels * 2)
-
-    depth = _num(_first_value(input_dict, KEY_MP_GIRDER_DEPTH))
-    stiff_vol = 0.0
-    stiff_qty = 0
-    bearing_t = _num(_first_value(input_dict, KEY_MP_STIFFENER_BEARING_THICKNESS))
-    bearing_w = _num(_first_value(input_dict, KEY_MP_STIFFENER_BEARING_OUTSTAND))
-    bearing_count = int(_num(_first_value(input_dict, KEY_MP_STIFFENER_NO_BEARING_STIFFENERS)))
-    if depth > 0 and bearing_t > 0 and bearing_w > 0 and bearing_count > 0:
-        qty = n_girders * 2 * bearing_count
-        stiff_qty += qty
-        stiff_vol += qty * depth * bearing_t * bearing_w / 1e9
-
-    if _yes(_first_value(input_dict, KEY_MP_STIFFENER_INTERMEDIATE) or "No"):
-        int_t = _num(_first_value(input_dict, KEY_MP_STIFFENER_INTERMEDIATE_THICKNESS))
-        int_w = _num(_first_value(input_dict, KEY_MP_STIFFENER_INTERMEDIATE_OUTSTAND))
-        int_spacing = _num(_first_value(input_dict, KEY_MP_STIFFENER_INTERMEDIATE_SPACING))
-        if depth > 0 and int_t > 0 and int_w > 0 and int_spacing > 0:
-            qty = n_girders * max(0, int((span * 1000.0) / int_spacing) - 1) * 2
-            stiff_qty += qty
-            stiff_vol += qty * depth * int_t * int_w / 1e9
-
-    if stiff_qty > 0 and stiff_vol > 0:
-        stiff_wt = stiff_vol * 7.85
-        values["stiffeners_vol_formula"] = f"${stiff_vol / stiff_qty:.6f}\\text{{ m}}^3 \\times {stiff_qty} = {stiff_vol:.5f}\\text{{ m}}^3$"
-        values["stiffeners_qty"] = str(stiff_qty)
-        values["stiffeners_vol_total"] = f"{stiff_vol:.2f}"
-        values["stiffeners_wt_single"] = f"{stiff_wt / stiff_qty:.4f}"
-        values["stiffeners_wt_total"] = f"{stiff_wt:.2f}"
-    return values
-
-
-def ch7_quantities(input_dict, chart_paths=None):
-    input_dict = {**_ch7_quantity_fallbacks(input_dict),
-                  **{k: v for k, v in input_dict.items() if not _is_blank(v)}}
+def ch7_quantities(input_dict, output_dict=None, chart_paths=None):
+    if chart_paths is None and isinstance(output_dict, dict) and (
+            "steel" in output_dict or "concrete_rebar" in output_dict):
+        chart_paths, output_dict = output_dict, None
+    input_dict = {**input_dict, **ch7_derived_quantities(input_dict, output_dict or {})}
     chart_paths = chart_paths or {}
     chart_figures = ""
     if chart_paths:

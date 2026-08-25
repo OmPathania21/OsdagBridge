@@ -126,7 +126,7 @@ from .chap3 import ch3_loads
 from .chap4 import ch4_analysis
 from .chap5 import ch5_design_checks
 from .chap6 import ch6_drawings
-from .chap7 import ch7_quantities
+from .chap7 import ch7_derived_quantities, ch7_quantities
 from .chap8 import ch8_design_log
 from .chap9 import references
 
@@ -896,6 +896,7 @@ def generate_report(payload, request):
             # Compute and inject quantities for Chapter 7
             quantities = calculate_material_quantities(payload.inputs, payload.output_dict)
             payload.inputs.update(quantities)
+            payload.inputs.update(ch7_derived_quantities(payload.inputs, payload.output_dict))
             quantity_chart_paths = ReportChartGenerator(tmp_assets).generate_material_quantity_charts(payload.inputs)
 
             # ── Assemble LaTeX document (fig_paths now has tmp_dir paths) ──
@@ -928,7 +929,7 @@ def generate_report(payload, request):
                 if 'drawings' in secs and payload.options.include_figures:
                     doc_parts.append(ch6_drawings(fig_paths))
 
-                doc_parts.append(ch7_quantities(payload.inputs, quantity_chart_paths))
+                doc_parts.append(ch7_quantities(payload.inputs, payload.output_dict, quantity_chart_paths))
 
                 mode = str(payload.inputs.get(KEY_DESIGN_MODE, "Optimized")).strip().lower()
                 is_custom = mode in {"custom", "customized"}
