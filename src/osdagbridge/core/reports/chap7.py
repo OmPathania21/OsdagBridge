@@ -54,6 +54,10 @@ def _wrap_multiply(value):
     return text.replace(r"\times", r"\allowbreak{}\times\allowbreak{}").replace("×", times).replace(" x ", f" {times} ")
 
 
+def _qty_header(text):
+    return r"\parbox[t][1.75cm][c]{\linewidth}{\centering " + text + "}"
+
+
 def _angle_area_m2(input_dict, base_key):
     designation = _first_value(input_dict, base_key)
     if not designation:
@@ -167,7 +171,10 @@ def ch7_quantities(input_dict, chart_paths=None):
 \label{ch:material-takeoff}
 """ + render_report_table(
         "Bill of Materials for Superstructure", rows,
-        headers=["S.N.", "Item Description", "Volume", "Quantity", "Total Volume", "Weight (T)", "Total Weight (T)"],
+        header_rows=[[_qty_header("S.N."), _qty_header(r"Item\\Description"),
+                      _qty_header("Volume"), _qty_header("Quantity"),
+                      _qty_header(r"Total\\Volume\\(m$^3$)"),
+                      _qty_header(r"Weight\\(T)"), _qty_header(r"Total\\Weight\\(T)")]],
         widths=[1.0, 3.8, 2.5, 2.1, 1.8, 1.7, 1.8],
         align=["C", "L", "C", "C", "C", "C", "C"],
         longtable=True, escape=False) + chart_figures
