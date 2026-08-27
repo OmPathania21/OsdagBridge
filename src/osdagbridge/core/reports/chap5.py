@@ -1384,30 +1384,19 @@ Governing spacing $= \min(S_{L1}, S_{L2}, S_R)$.}
 The reinforced concrete deck slab is designed per IRC~112:2011 (flexure, shear, crack width) and IRC~22:2014 (composite construction). Wheel loads are distributed using Pigeaud's method. The deck is checked for flexure in the transverse and longitudinal directions, punching shear, one-way (beam) shear, crack width, and reinforcement detailing.
 
 \vspace{1em}
-\begin{longtable}{|L{5.5cm}|p{10.0cm}|}
-\caption{\textbf{Deck Slab --- Loading and Geometry}}
-\hline
-\textnormal{Effective Span of Deck Slab, $l_{eff}$} & """ + _dkf(KEY_DD_SPAN, nd=0, scale=1000.0) + r""" mm (girder spacing, c/c) \\[6pt]
-\hline
-\textnormal{Deck Thickness, $t_s$} & """ + _render_value(bridge.input_dict, KEY_TS_DECK_THICKNESS) + r""" mm \\[6pt]
-\hline
-\textnormal{Clear Cover (IRC 112 Cl. 15.2)} & Top """ + _render_value(bridge.input_dict, KEY_DS_TOP_CLEAR_COVER) + r""" / Bottom """ + _render_value(bridge.input_dict, KEY_DS_BOTTOM_CLEAR_COVER) + r""" mm \\[6pt]
-\hline
-\textnormal{Concrete Grade (IRC 112 Cl. 6.4)} & """ + _render_value(bridge.input_dict, KEY_DECK_CONCRETE_GRADE_BASIC) + r""" ($f_{ck}$ = """ + _render_value(bridge.input_dict, KEY_MATERIAL_DECK_FCK) + r""" MPa, $f_{ctm}$ = """ + _render_value(bridge.input_dict, KEY_MATERIAL_DECK_FCTM) + r""" MPa) \\[6pt]
-\hline
-\textnormal{Reinforcement Grade (IRC 112 Cl. 6.2)} & """ + _render_value(bridge.input_dict, KEY_DS_REINF_MATERIAL) + r""" ($f_y$ = """ + _dkf(KEY_DD_FY, nd=0) + r""" MPa) \\[6pt]
-\hline
-\textnormal{Dead Load per Unit Area, $w_{DL}$} & """ + _dkf(KEY_DD_WDL, nd=2) + r""" kN/m² (slab self-weight) \\[6pt]
-\hline
-\textnormal{IRC 6 Wheel Load (Class A / 70R)} & """ + _dkf(KEY_DD_WHEEL_LOAD, nd=1) + r""" kN \\[6pt]
-\hline
-\textnormal{Tyre Contact Width (IRC 6 Annex~A)} & """ + _dkf(KEY_DD_TYRE_WIDTH, nd=0, scale=1000.0) + r""" mm (transverse) \\[6pt]
-\hline
-\textnormal{Impact Factor (IRC 6 Cl. 208.2)} & """ + _dkf(KEY_DD_IMPACT_FACTOR, nd=3) + r""" \\[6pt]
-\hline
-\textnormal{Governing Live Load Case} & """ + _dkf(KEY_DD_VEHICLE) + r""" \\[6pt]
-\hline
-\end{longtable}
+""" + render_report_table(
+    "Deck Slab --- Loading and Geometry",
+    [[r"Effective Span of Deck Slab, $l_{eff}$", _dkf(KEY_DD_SPAN, nd=0, scale=1000.0) + r" mm (girder spacing, c/c)"],
+     [r"Deck Thickness, $t_s$", _render_value(bridge.input_dict, KEY_TS_DECK_THICKNESS) + r" mm"],
+     [r"Clear Cover (IRC 112 Cl. 15.2)", r"Top " + _render_value(bridge.input_dict, KEY_DS_TOP_CLEAR_COVER) + r" / Bottom " + _render_value(bridge.input_dict, KEY_DS_BOTTOM_CLEAR_COVER) + r" mm"],
+     [r"Concrete Grade (IRC 112 Cl. 6.4)", _render_value(bridge.input_dict, KEY_DECK_CONCRETE_GRADE_BASIC) + r" ($f_{ck}$ = " + _render_value(bridge.input_dict, KEY_MATERIAL_DECK_FCK) + r" MPa, $f_{ctm}$ = " + _render_value(bridge.input_dict, KEY_MATERIAL_DECK_FCTM) + r" MPa)"],
+     [r"Reinforcement Grade (IRC 112 Cl. 6.2)", _render_value(bridge.input_dict, KEY_DS_REINF_MATERIAL) + r" ($f_y$ = " + _dkf(KEY_DD_FY, nd=0) + r" MPa)"],
+     [r"Dead Load per Unit Area, $w_{DL}$", _dkf(KEY_DD_WDL, nd=2) + r" kN/m² (slab self-weight)"],
+     [r"IRC 6 Wheel Load (Class A / 70R)", _dkf(KEY_DD_WHEEL_LOAD, nd=1) + r" kN"],
+     [r"Tyre Contact Width (IRC 6 Annex~A)", _dkf(KEY_DD_TYRE_WIDTH, nd=0, scale=1000.0) + r" mm (transverse)"],
+     [r"Impact Factor (IRC 6 Cl. 208.2)", _dkf(KEY_DD_IMPACT_FACTOR, nd=3)],
+     [r"Governing Live Load Case", _dkf(KEY_DD_VEHICLE)]],
+    widths=[1, 1], align=["L", "L"], longtable=True, escape=False) + r"""
 
 \vspace{1em}
 """ + render_report_table(
