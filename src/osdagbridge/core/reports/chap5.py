@@ -1359,15 +1359,11 @@ Governing spacing $= \min(S_{L1}, S_{L2}, S_R)$.}
 
 \vspace{1em}
 
-\begin{longtable}{|L{3.0cm}|>{\arraybackslash}p{7.5cm}|C{4.0cm}|}
-\caption{\textbf{Longitudinal Shear Calculation (IRC 22 Cl.606.4.1)}}
-\hline
-\textbf{Parameter} &
-\textbf{Expression} &
-\textbf{Value} \\[6pt]
-\hline
-""" + t515a_content + r"""
-\end{longtable}
+""" + render_report_table(
+    "Longitudinal Shear Calculation (IRC 22 Cl.606.4.1)", [],
+    headers=["parameter", "expression", "value"],
+    widths=[3.0, 7.5, 4.0], align=["L", "L", "C"],
+    longtable=True, escape=False, body_latex=t515a_content) + r"""
 
 \vspace{1em}
 """ + render_report_table(
