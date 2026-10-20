@@ -1066,12 +1066,16 @@ class BridgeGrillageModel:
 
         The IRC6_2017 vehicle geometries define ``wheel_loads`` with the ``t``
         unit constant (tonne → N), so the sum is in N and converted to kN here.
+        The Special Vehicle geometry is the exception: its ``wheel_loads`` are
+        already in kN, so its ``total_load_kN`` is used directly.
         """
         try:
             if vehicle_type == 'ClassA':
                 return float(sum(IRC6_2017.cl_204_1_ClassA_vehicle()['wheel_loads'])) / kN
             elif vehicle_type == 'Class70R':
                 return float(sum(IRC6_2017.cl_204_1_Class70R_vehicle_wheel()['wheel_loads'])) / kN
+            elif vehicle_type == 'SV':
+                return float(IRC6_2017.cl_204_5_1_special_vehicle()['total_load_kN'])
         except Exception:
             pass
         return 0.0
@@ -1918,7 +1922,8 @@ class BridgeGrillageModel:
         Return the full axle-span length (m) for a vehicle type by reading the
         last axle position from the IRC6_2017 local geometry.
 
-        Class70R last axle ≈ 15.12 m, ClassA last axle ≈ 20.30 m.
+        Class70R last axle ≈ 15.12 m, ClassA last axle ≈ 20.30 m,
+        SV last axle ≈ 38.46 m.
         Falls back to 25.0 m for unknown types.
         """
         try:
@@ -1926,6 +1931,8 @@ class BridgeGrillageModel:
                 data = IRC6_2017.cl_204_1_Class70R_vehicle_wheel()
             elif vehicle_type == 'ClassA':
                 data = IRC6_2017.cl_204_1_ClassA_vehicle()
+            elif vehicle_type == 'SV':
+                data = IRC6_2017.cl_204_5_1_special_vehicle()
             elif vehicle_type == 'Fatigue':
                 # IRC:6-2017 Cl.204.6 fatigue truck: axles at 0, 4.5, 5.9 m
                 # (matches ospgrillage LoadModel.create_fatigue_vehicle()).

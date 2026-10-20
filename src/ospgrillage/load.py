@@ -1600,6 +1600,8 @@ class LoadModel:
             return self.create_class70r_vehicle()
         elif self.model_type == "FATIGUE":
             return self.create_fatigue_vehicle()
+        elif self.model_type == "SV":
+            return self.create_special_vehicle()
 
     def create_m1600_vehicle(self, gap):
         """
